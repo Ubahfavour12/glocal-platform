@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens — UI Plan §1 "Design Language"
+ * Dark premium command-center. One amber accent, used only for agent
+ * actions and highlights. Mono face for data labels and metric chips.
+ */
+@theme {
+  --color-surface: #0c0c0d;
+  --color-surface-raised: #141416;
+  --color-surface-overlay: #1c1c1f;
+  --color-card: #faf8f5;
+  --color-card-muted: #f5f3ef;
+
+  --color-ink: #ededee;
+  --color-ink-muted: #9b9ba1;
+  --color-ink-faint: #5c5c63;
+  --color-ink-on-card: #17171a;
+  --color-ink-on-card-muted: #6b6b70;
+
+  --color-accent: #b45309;
+  --color-accent-bright: #d97706;
+  --color-accent-soft: rgba(180, 83, 9, 0.13);
+
+  --color-positive: #4ade80;
+  --color-negative: #f87171;
+  --color-line: #26262a;
+  --color-line-soft: #1a1a1d;
+
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --radius-card: 0.875rem;
+}
+
+body {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Mono data label — the "onboarding completion / 100% completed" register */
+.datalabel {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+  color: var(--color-ink-muted);
+}
+
+::selection {
+  background: var(--color-accent);
+  color: #fff;
+}
