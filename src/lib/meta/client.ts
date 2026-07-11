@@ -133,6 +133,43 @@ export async function createPausedCampaign(
   return { campaignId: data.id };
 }
 
+/**
+ * Step 4: create an ad set — PAUSED, macro-geo targeting ONLY (Creative-Led
+ * Targeting, Blueprint §4.4: the agent never touches demographics). Budget in
+ * USD minor units, already clamped by the guardrails before reaching here.
+ * Proven live: ad set 52561219529444 ($10/day, GB) on 2026-07-11.
+ */
+export async function createPausedAdSet(
+  cfg: MetaConfig,
+  adAccountId: string,
+  params: {
+    name: string;
+    campaignId: string;
+    dailyBudgetUsdMinor: number;
+    countries: string[];
+    optimizationGoal?: "LINK_CLICKS" | "OFFSITE_CONVERSIONS" | "LEAD_GENERATION";
+  },
+): Promise<{ adSetId: string }> {
+  const data = await graph<{ id: string }>(
+    `${adAccountId}/adsets`,
+    {
+      method: "POST",
+      params: {
+        name: params.name,
+        campaign_id: params.campaignId,
+        status: "PAUSED",
+        daily_budget: String(params.dailyBudgetUsdMinor),
+        billing_event: "IMPRESSIONS",
+        optimization_goal: params.optimizationGoal ?? "LINK_CLICKS",
+        bid_strategy: "LOWEST_COST_WITHOUT_CAP",
+        targeting: JSON.stringify({ geo_locations: { countries: params.countries } }),
+      },
+    },
+    cfg.accessToken,
+  );
+  return { adSetId: data.id };
+}
+
 export async function listCampaigns(
   cfg: MetaConfig,
   adAccountId: string,
