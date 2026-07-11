@@ -37,3 +37,14 @@ USER ACTION REQUIRED (Dev Plan week-1 filings — cannot be done by the agent):
 Meta Business verification + Marketing API app, TikTok Business Center API,
 Google Ads developer token, Stripe + Flutterwave onboarding, Apple/Google
 developer accounts, Metricool + Higgsfield + YouTube Data API keys.
+
+## 2026-07-11 — Auth + database live (Task #2 complete)
+
+- Supabase project "marketing-platform" created (eu-west-2) via the connected
+  integration; core schema migration applied to the cloud; RLS verified live.
+- Magic-link auth end-to-end: /login (signInWithOtp) → /auth/callback
+  (code exchange, new users → /onboarding, returning → /today).
+- Onboarding finish inserts a real `businesses` row for signed-in users;
+  demo mode (localStorage) still works without a session.
+- Outstanding: user to copy the service-role key from the dashboard into
+  .env.local (needed by orchestrator jobs in Slice B, not before).
