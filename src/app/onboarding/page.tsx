@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { screenCategory } from "@/lib/compliance/categories";
 import {
   MIN_DAILY_BUDGET_USD_MINOR,
@@ -54,9 +55,8 @@ export default function OnboardingPage() {
           ? goal !== null
           : true;
 
-  function finish() {
-    // Supabase insert lands with auth wiring; demo mode persists locally so
-    // the dashboard can reflect the answers.
+  async function finish() {
+    // Local copy first so the dashboard reflects answers even in demo mode.
     try {
       localStorage.setItem(
         "onboarding",
@@ -64,6 +64,22 @@ export default function OnboardingPage() {
       );
     } catch {
       // storage unavailable — proceed anyway
+    }
+
+    // Signed-in users get a real business row (RLS scopes it to them).
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      const supabase = createClient();
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData.user) {
+        await supabase.from("businesses").insert({
+          owner_id: userData.user.id,
+          name: name.trim(),
+          category: category.trim(),
+          goal,
+          service_geo: { raw: geo.trim() },
+          daily_budget_usd_minor: dailyMinor,
+        });
+      }
     }
     router.push("/today");
   }
