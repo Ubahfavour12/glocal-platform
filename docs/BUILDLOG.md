@@ -64,3 +64,21 @@ developer accounts, Metricool + Higgsfield + YouTube Data API keys.
 - Live FX engine (earlier commit): keyless provider + 3% buffer + /api/fx.
 - Remaining for full Task #3 close: Stripe/Flutterwave webhooks (blocked on
   user's PSP accounts → legal entity), service-role key paste.
+
+## 2026-07-11 — Meta No-Link pipeline PROVEN LIVE (Task #4 underway)
+
+- User completed Meta ladder: 2FA, two Business Portfolios (staging
+  1700924244465585 / production 1007610768736319), developer app
+  "GG Platform Dev" (1905331716812155), 60-day token with ads_management +
+  ads_read + business_management. Account standing verified clean.
+- PROVEN VIA API against STAGING: created child ad account
+  act_1396784098962857 → assigned business user → created PAUSED campaign
+  52561218382244 (OUTCOME_TRAFFIC). The core No-Link mechanism works on
+  dev tier, day one.
+- src/lib/meta/client.ts captures the proven sequence as typed functions;
+  campaigns are always born PAUSED, enabling is a separate gated call;
+  module verified live (listCampaigns returns the test campaign).
+- Next for Task #4: Facebook Page per business (Meta doesn't allow page
+  creation via API — the customer-branded page gets created via Business
+  Suite UI or during onboarding flow), ad set + creative + ad chain, then
+  wire provisioning to onboarding.
