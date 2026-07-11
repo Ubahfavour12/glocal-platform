@@ -48,3 +48,19 @@ developer accounts, Metricool + Higgsfield + YouTube Data API keys.
   demo mode (localStorage) still works without a session.
 - Outstanding: user to copy the service-role key from the dashboard into
   .env.local (needed by orchestrator jobs in Slice B, not before).
+
+## 2026-07-11 — Wallet goes live (Task #3 core)
+
+- Migration 0002 applied to cloud: wallet_balances view (RLS-safe),
+  ensure_wallet, record_dev_topup (capped $200/call, $1,000 lifetime,
+  dropped before launch), record_spend (atomic spend+markup, row-locked,
+  never-negative, service-role only).
+- Wallet page reads the signed-in user's real balance, runway, and last 10
+  ledger entries; Add-funds buttons work end-to-end through the capped dev
+  path. Signed-out remains preview mode.
+- /api/jobs/reconcile: CRON_SECRET-guarded daily integrity job (negative
+  balances, sign/kind mismatches) writing to audit_log; PSP and ad-network
+  comparison phases activate when those connect.
+- Live FX engine (earlier commit): keyless provider + 3% buffer + /api/fx.
+- Remaining for full Task #3 close: Stripe/Flutterwave webhooks (blocked on
+  user's PSP accounts → legal entity), service-role key paste.
