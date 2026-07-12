@@ -1,0 +1,67 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createCheckout } from "@/lib/payments/flutterwave";
+import { effectiveRate, localCostForUsd } from "@/lib/money/fx";
+import { fetchUsdRate } from "@/lib/money/rates";
+import { createClient } from "@/lib/supabase/server";
+
+/**
+ * UF-2 step 2: signed-in owner requests a top-up of X USD → we quote the
+ * final local price at the buffered rate and hand back Flutterwave's hosted
+ * checkout link. The quoted fx rate travels in meta so the confirm step
+ * credits at exactly the quoted rate.
+ */
+export async function POST(req: NextRequest) {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) {
+    return NextResponse.json({ error: "sign in first" }, { status: 401 });
+  }
+
+  const body = (await req.json().catch(() => null)) as
+    | { business_id?: string; usd_minor?: number }
+    | null;
+  if (!body?.business_id || !Number.isInteger(body.usd_minor) || body.usd_minor! < 1000) {
+    return NextResponse.json(
+      { error: "business_id and usd_minor >= 1000 ($10 minimum) required" },
+      { status: 400 },
+    );
+  }
+
+  // RLS guarantees this only finds the caller's own business.
+  const { data: business } = await supabase
+    .from("businesses")
+    .select("id, name")
+    .eq("id", body.business_id)
+    .maybeSingle();
+  if (!business) {
+    return NextResponse.json({ error: "business not found" }, { status: 404 });
+  }
+
+  try {
+    const snapshot = await fetchUsdRate("NGN");
+    const rate = effectiveRate(snapshot);
+    const localMinor = localCostForUsd(body.usd_minor!, snapshot);
+    const txRef = `topup-${business.id.slice(0, 8)}-${Date.now()}`;
+    const origin = req.nextUrl.origin;
+
+    const { link } = await createCheckout({
+      txRef,
+      amountLocalMinor: localMinor,
+      currency: "NGN",
+      customerEmail: userData.user.email ?? "customer@platform.app",
+      customerName: business.name,
+      redirectUrl: `${origin}/api/wallet/confirm`,
+      meta: { business_id: business.id, usd_minor: body.usd_minor!, fx_rate: rate },
+    });
+
+    return NextResponse.json({
+      link,
+      quoted: { usd_minor: body.usd_minor, local_minor: localMinor, currency: "NGN", rate },
+    });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "checkout failed" },
+      { status: 502 },
+    );
+  }
+}

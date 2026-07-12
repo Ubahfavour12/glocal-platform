@@ -101,3 +101,24 @@ developer accounts, Metricool + Higgsfield + YouTube Data API keys.
   grant error) despite correct app/scopes — Meta sandboxes are effectively
   deprecated. Not worth further time.
 - Tokens: main 60-day token expires 2026-09-09; sandbox-page token unused.
+
+## 2026-07-12 — COMPANY FOUND + Flutterwave live in test mode (Task #3 nearly closed)
+
+- Game-changer: user already owns UBAHGRID SERVICE LTD (RC 8566798, ACTIVE,
+  inc. 19 Jun 2025, TIN 33298804-0001, SCUML SC251516852, user = sole
+  director, 75%). UK Ltd plan DROPPED — deferred to "only if Stripe needed".
+- Designer contract amended: "the Company" explicitly excludes UBAHGRID;
+  designer's 10% attaches to the Product (and a future product company),
+  UBAHGRID acts as operator only.
+- Flutterwave merchant created (test mode, NGN/USD/GBP/EUR balances); test
+  secret key proven by creating a real hosted checkout link.
+- Migration 0003 applied: record_psp_topup (service-role only, idempotent
+  on psp_ref — double webhooks can never double-credit).
+- Full checkout flow built: /api/wallet/checkout (auth'd, quotes NGN at
+  buffered rate, meta carries quoted rate) → Flutterwave hosted page →
+  /api/wallet/confirm (verifies via FW API, never trusts query params,
+  credits floor-rounded) + /api/webhooks/flutterwave (verif-hash gated,
+  re-verifies, same psp_ref = idempotent with confirm). Wallet UI has real
+  "Pay with card (₦)" alongside capped dev buttons. 86 tests green.
+- Remaining Task #3: compliance approval for LIVE keys (user uploads docs);
+  webhook hash config + Vercel env vars when deploying payments.
