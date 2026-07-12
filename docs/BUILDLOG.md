@@ -82,3 +82,22 @@ developer accounts, Metricool + Higgsfield + YouTube Data API keys.
   creation via API — the customer-branded page gets created via Business
   Suite UI or during onboarding flow), ad set + creative + ad chain, then
   wire provisioning to onboarding.
+
+## 2026-07-12 — Task #4 code-complete; app Live; platform deployed publicly
+
+- Deployed to Vercel production (user-run CLI):
+  https://gg-platform-favours-projects-c39118ad.vercel.app — landing,
+  privacy policy, dashboard, and the Smart Link redirect all verified live
+  (production /l/demo issues real click IDs).
+- Meta app 1905331716812155 switched to LIVE (privacy URL requirement met by
+  the deployed /privacy page). NOTE: a duplicate app 2002638317043972 exists
+  — ignore, delete later.
+- Chain proven on the real child account: creative 902931766182353 created
+  (image + page 1225546887308248 + tracked smart link). The final ad object
+  is blocked ONLY by "no payment method" (error 1359188) — by design, this
+  account cannot spend. Final link completes at dogfooding when a payment
+  method is added.
+- Sandbox route abandoned: act_4469742386688526 rejects all tokens (owner
+  grant error) despite correct app/scopes — Meta sandboxes are effectively
+  deprecated. Not worth further time.
+- Tokens: main 60-day token expires 2026-09-09; sandbox-page token unused.
