@@ -135,3 +135,19 @@ developer accounts, Metricool + Higgsfield + YouTube Data API keys.
   runs; removed before launch. Auth guards verified (401 unauth). 88 tests.
 - Meta business verification parked (task #9): not offered standalone; triggers
   via Advanced Access request at launch prep. Not blocking.
+
+## 2026-07-13 — THE AI BRAIN IS LIVE (Slice B)
+
+- Anthropic key funded ($8) + wired (spend-capped). src/lib/ai/anthropic.ts:
+  fetch client, model tiers (haiku cheap / sonnet-5 smart), defensive JSON
+  parser (handles fences + prose-wrapped JSON). temperature omitted (sonnet-5
+  rejects it).
+- Concept engine (src/lib/research/concepts.ts): viral ads + product brief ->
+  Claude writes ranked scripted ad concepts (hook/storyboard/copy/cta/source
+  pattern). Cents each, no render. PROVEN LIVE on Gormup Gates wines: real
+  scarcity-angle wine ad with WhatsApp CTA.
+- LLM compliance layer (src/lib/compliance/llm.ts): plugs into runGateway as
+  llmScan, can only make stricter. PROVEN LIVE: blocked a 500k/week income
+  claim, passed a clean concept.
+- Live smoke test (LIVE_AI=1 gated, skipped in CI so no cost): scrape ->
+  concepts -> gateway, all assertions green. 93 tests + 1 live-skipped.
