@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 /** Web navigation — UI Plan §2.1. */
 const NAV = [
   { href: "/today", label: "Today" },
+  { href: "/approve", label: "Approve" },
   { href: "/duel", label: "The Duel" },
   { href: "/pipeline", label: "Pipeline" },
   { href: "/organic", label: "Organic" },

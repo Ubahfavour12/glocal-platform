@@ -122,3 +122,16 @@ developer accounts, Metricool + Higgsfield + YouTube Data API keys.
   "Pay with card (₦)" alongside capped dev buttons. 86 tests green.
 - Remaining Task #3: compliance approval for LIVE keys (user uploads docs);
   webhook hash config + Vercel env vars when deploying payments.
+
+## 2026-07-13 — Approval card: the evening gate (Slice B)
+
+- Migration 0004: respond_to_approval (owner-only, audits approval_*).
+- ApprovalPlanPayload contract (stable serialisable shape for approvals.payload).
+- /approve tab + ApprovalCard: yesterday's scoreboard (AgentNote), budget
+  split bar (champion % visual), two challenger cards (hook/copy/budget/media
+  slot), agent commentary, Approve / Regenerate actions → /api/approvals/respond.
+- Empty state when no awaiting plan. Sidebar gains "Approve".
+- Dev seed route (/api/dev/seed-plan) to demo the card before live nightly
+  runs; removed before launch. Auth guards verified (401 unauth). 88 tests.
+- Meta business verification parked (task #9): not offered standalone; triggers
+  via Advanced Access request at launch prep. Not blocking.
