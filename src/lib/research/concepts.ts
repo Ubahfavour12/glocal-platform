@@ -42,6 +42,8 @@ export async function generateConcepts(
   product: ProductBrief,
   viral: ViralVideo[],
   count = 10,
+  /** Winner traits + fatigue directives from traits.buildTraitGuidance (evolution loop). */
+  traitGuidance = "",
 ): Promise<AdConcept[]> {
   const patterns = viral.slice(0, 15).map((v, i) =>
     `${i + 1}. "${v.title}" (${v.channelTitle}, ${Math.round(v.viralityScore).toLocaleString()} views/day)`,
@@ -55,7 +57,7 @@ Notes: ${product.description ?? "n/a"}
 
 TOP VIRAL ADS IN THIS SPACE (ranked by views/day):
 ${patterns.join("\n")}
-
+${traitGuidance ? `\nACCOUNT LEARNING (from this business's own A/B results):\n${traitGuidance}\n` : ""}
 TASK
 Produce ${count} distinct ad concepts for this product, each adapting the structure of the viral ads above. Rank them 1..${count}, best first.
 

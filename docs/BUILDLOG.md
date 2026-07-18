@@ -151,3 +151,22 @@ developer accounts, Metricool + Higgsfield + YouTube Data API keys.
   claim, passed a clean concept.
 - Live smoke test (LIVE_AI=1 gated, skipped in CI so no cost): scrape ->
   concepts -> gateway, all assertions green. 93 tests + 1 live-skipped.
+
+## 2026-07-13 - Evolution loop locked + built (Slice C begins)
+
+Three decisions locked after Day-3 logic discussion:
+1. Day-3 verdict logic = three scenarios (champion defends / challenger
+   dethrones / NO VERDICT YET when thresholds unmet - duel continues; most
+   common at $10/day). Already enforced by verdict engine; now official.
+2. Winner-trait extraction (src/lib/research/traits.ts): after each verdict,
+   Claude extracts transferable traits (hook style, angle, pacing, why it
+   won) -> buildTraitGuidance() -> injected into generateConcepts via new
+   traitGuidance param. Evolution, not random mutation. ~1 cent per verdict.
+3. Fatigue detection (src/lib/verdicts/fatigue.ts): METRIC-driven, not
+   calendar - CTR decay >25% from reign peak OR frequency >2.5, plus day-10
+   hard backstop. Trigger = style_refresh directive: champion keeps crown,
+   next challengers forced style-divergent. Rejected the fixed 5-day timer
+   (misfires at both budget extremes). updatePeakCtr ratchet for journal.
+Pricing note locked earlier same day: no structurally losing customer type
+remains (render-only-for-funded-campaigns rule); doc 08-Pricing-Model.docx.
+107 tests green.
