@@ -232,3 +232,20 @@ Migration 0006 (ad_code + code_source on conversions, record_sale SECURITY
 DEFINER fn) APPLIED to cloud. /api/sales/record is the mark-as-sold API.
 173 tests green. Also today: Supabase free-tier auto-pause discovered and
 resolved (restore is free; wait for ACTIVE_HEALTHY before reading).
+
+## 2026-07-21 — Design locked: sales confirmation is optional, rides the
+## approval card, and payment links are the endgame
+
+- The autonomous loop NEVER depends on mark-as-sold: it runs entirely on
+  auto-arriving platform metrics; duels degrade to CPCI without sales data.
+- UX rule: mark-as-sold lives ON the evening approval card ("Yesterday's
+  ads started N chats — did any become sales?"), inside the one daily habit
+  the product already asks for. Never a separate screen or ritual. It
+  doubles as the seller's sales book (most SMBs keep none).
+- v2 endgame: platform-generated payment links (Flutterwave/Paystack) sent
+  in the WhatsApp chat. Buyer pays -> webhook verifies amount + attribution
+  with zero taps -> fully automatic ROAS for WhatsApp sellers. Reuses the
+  existing wallet webhook plumbing and conversions table.
+- Ladder: chats (automatic) -> mark-as-sold (10 seconds, existing habit) ->
+  payment links (fully automatic). Every rung optional; the machine runs at
+  every rung.
