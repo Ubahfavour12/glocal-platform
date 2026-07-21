@@ -18,6 +18,7 @@
 
 import { clampBudgetIncrease, personaSplit, type PersonaMode } from "@/lib/guardrails/budget";
 import { decideVerdict, type CandidateMetrics, type Verdict } from "@/lib/verdicts/verdict";
+import { checkFatigue, type FatigueInput, type StyleDirective } from "@/lib/verdicts/fatigue";
 import { runGateway, type CreativeInput, type GatewayResult } from "@/lib/compliance/gateway";
 
 // ---------- domain types ----------
@@ -62,6 +63,8 @@ export interface NightlyPlan {
   businessId: string;
   planDate: string; // YYYY-MM-DD
   verdict: Verdict | null;
+  /** "style_refresh" when the champion shows fatigue — tomorrow's concepts must diverge in style. */
+  styleDirective: StyleDirective;
   championBudgetUsdMinor: number;
   challengers: PlanChallenger[];
   /** Human-readable agent commentary for the approval card. */
@@ -74,6 +77,8 @@ export interface NightlyPlan {
 export interface OrchestratorAdapters {
   /** Open A/B test candidates with their windowed metrics. */
   getOpenTestCandidates(businessId: string): Promise<CandidateMetrics[]>;
+  /** Champion reign state for fatigue detection — null when no champion yet. */
+  getChampionState?(businessId: string): Promise<FatigueInput | null>;
   /** Next unrendered concepts, best rank first. */
   getNextConcepts(businessId: string, count: number): Promise<Concept[]>;
   /** Higgsfield render — absent until the key lands. */
@@ -112,6 +117,22 @@ export async function runNightly(
     );
   }
 
+  // 1b. FATIGUE — metric-driven champion check; the crown stays, the style rotates.
+  let styleDirective: StyleDirective = "none";
+  if (adapters.getChampionState) {
+    const championState = await adapters.getChampionState(ctx.businessId);
+    if (championState) {
+      const fatigue = checkFatigue(championState, now);
+      if (fatigue.directive === "style_refresh") {
+        styleDirective = "style_refresh";
+        await adapters.audit(ctx.businessId, "fatigue", fatigue);
+        commentary.push(
+          `The champion is showing fatigue (${fatigue.reasons[0]}). It keeps its crown, but tomorrow's challengers will attack from a completely different style.`,
+        );
+      }
+    }
+  }
+
   // 2. BUDGET — persona split under the hard escalation cap.
   const spendableToday = Math.min(ctx.dailyBudgetUsdMinor, ctx.walletBalanceUsdMinor);
   if (spendableToday < ctx.dailyBudgetUsdMinor) {
@@ -126,6 +147,7 @@ export async function runNightly(
       businessId: ctx.businessId,
       planDate,
       verdict,
+      styleDirective,
       championBudgetUsdMinor: 0,
       challengers: [],
       commentary,
@@ -199,6 +221,7 @@ export async function runNightly(
     businessId: ctx.businessId,
     planDate,
     verdict,
+    styleDirective,
     championBudgetUsdMinor: championBudget,
     challengers,
     commentary,
