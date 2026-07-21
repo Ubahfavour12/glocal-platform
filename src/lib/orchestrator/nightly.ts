@@ -19,6 +19,7 @@
 import { clampBudgetIncrease, personaSplit, type PersonaMode } from "@/lib/guardrails/budget";
 import { decideVerdict, type CandidateMetrics, type Verdict } from "@/lib/verdicts/verdict";
 import { checkFatigue, type FatigueInput, type StyleDirective } from "@/lib/verdicts/fatigue";
+import { computeWalletHealth } from "@/lib/money/wallet-health";
 import { runGateway, type CreativeInput, type GatewayResult } from "@/lib/compliance/gateway";
 
 // ---------- domain types ----------
@@ -141,12 +142,11 @@ export async function runNightly(
 
   // 2. BUDGET — persona split under the hard escalation cap.
   const spendableToday = Math.min(ctx.dailyBudgetUsdMinor, ctx.walletBalanceUsdMinor);
-  if (spendableToday < ctx.dailyBudgetUsdMinor) {
-    commentary.push(
-      ctx.walletBalanceUsdMinor <= 0
-        ? "Your wallet is empty — I can't plan tomorrow's ads until you add funds."
-        : "Your balance covers less than a full day — topping up keeps the learning uninterrupted.",
-    );
+  // Runway-based warning: fires early (3 days out) so the customer can top up
+  // before anything pauses. Same computation the wallet screen and notifier use.
+  const walletHealth = computeWalletHealth(ctx.walletBalanceUsdMinor, ctx.dailyBudgetUsdMinor);
+  if (walletHealth.shouldWarn) {
+    commentary.push(walletHealth.message);
   }
   if (spendableToday <= 0) {
     const plan: NightlyPlan = {

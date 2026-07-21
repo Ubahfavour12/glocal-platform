@@ -72,9 +72,9 @@ describe("runNightly — plan creation", () => {
   it("plans only what the wallet can cover", async () => {
     const { adapters } = makeAdapters();
     const plan = await runNightly(ctx({ walletBalanceUsdMinor: 500 }), adapters, now);
-    // spendable = min(1000, 500) → split of 500
+    // spendable = min(1000, 500) → split of 500; 0.5 days runway → critical warning
     expect(plan.championBudgetUsdMinor + plan.challengers.reduce((s, c) => s + c.budgetUsdMinor, 0)).toBe(500);
-    expect(plan.commentary.join(" ")).toMatch(/balance covers less/i);
+    expect(plan.commentary.join(" ")).toMatch(/runs out today/i);
   });
 
   it("empty wallet → insufficient_funds plan, nothing scheduled", async () => {
