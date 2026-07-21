@@ -12,6 +12,7 @@ import {
 const at = new Date("2026-07-21T12:00:00Z");
 const order = (over: Partial<AttributedOrder>): AttributedOrder => ({
   code: "GL-7K4",
+  codeSource: "message",
   valueUsdMinor: 10_000,
   source: "manual",
   at,
@@ -64,6 +65,21 @@ describe("validateOrder — whole orders, not single units", () => {
     expect(validateOrder(order({ valueUsdMinor: 0 }))).not.toEqual([]);
     expect(validateOrder(order({ items: [{ name: " ", qty: 1 }] }))).not.toEqual([]);
   });
+
+  it("unattributed sale (repeat customer) is VALID with no code", () => {
+    expect(validateOrder(order({ code: null, codeSource: "none" }))).toEqual([]);
+  });
+
+  it("seller-picked attribution is valid with a code", () => {
+    expect(validateOrder(order({ codeSource: "seller_pick" }))).toEqual([]);
+  });
+
+  it("rejects contradictions: none+code, message without code", () => {
+    expect(validateOrder(order({ codeSource: "none" })).join(" ")).toMatch(/must not carry/);
+    expect(validateOrder(order({ code: null, codeSource: "message" })).join(" ")).toMatch(
+      /code is missing/,
+    );
+  });
 });
 
 describe("revenueByCode", () => {
@@ -75,6 +91,15 @@ describe("revenueByCode", () => {
     ]);
     expect(m.get("A")).toBe(35_000);
     expect(m.get("B")).toBe(5_000);
+  });
+
+  it("unattributed sales never vote in duels", () => {
+    const m = revenueByCode([
+      order({ code: "A", valueUsdMinor: 10_000 }),
+      order({ code: null, codeSource: "none", valueUsdMinor: 999_999 }),
+    ]);
+    expect(m.get("A")).toBe(10_000);
+    expect(m.size).toBe(1);
   });
 });
 

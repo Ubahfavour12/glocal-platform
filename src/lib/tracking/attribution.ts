@@ -39,9 +39,20 @@ export interface OrderItem {
   unitValueUsdMinor?: number;
 }
 
+/**
+ * How the sale got tied to an ad:
+ *  - message: the buyer's first message carried the ref code (strongest)
+ *  - seller_pick: no code, but the seller identified the ad from a picker
+ *  - none: unattributed — repeat customer, direct walk-in, unknown. VALID.
+ * Unattributed sales count for totals and preference learning; they never
+ * vote in a duel. Forcing a guess would corrupt the verdict data.
+ */
+export type CodeSource = "message" | "seller_pick" | "none";
+
 export interface AttributedOrder {
-  /** smart-link code of the ad that brought this buyer */
-  code: string;
+  /** smart-link code of the ad that brought this buyer; null = unattributed */
+  code: string | null;
+  codeSource: CodeSource;
   /** FULL order total in USD minor units — every unit, every product */
   valueUsdMinor: number;
   quantity?: number;
@@ -57,7 +68,11 @@ export interface AttributedOrder {
  */
 export function validateOrder(order: AttributedOrder): string[] {
   const problems: string[] = [];
-  if (!order.code || order.code.length < 3) problems.push("missing ad reference code");
+  if (order.codeSource === "none") {
+    if (order.code !== null) problems.push("unattributed sale must not carry an ad code");
+  } else if (!order.code || order.code.length < 3) {
+    problems.push(`code source is "${order.codeSource}" but the ad reference code is missing`);
+  }
   if (!Number.isInteger(order.valueUsdMinor) || order.valueUsdMinor <= 0)
     problems.push("order value must be a positive integer in minor units");
   if (order.quantity !== undefined && (!Number.isInteger(order.quantity) || order.quantity <= 0))
@@ -76,10 +91,14 @@ export function validateOrder(order: AttributedOrder): string[] {
   return problems;
 }
 
-/** Revenue per ad code — feeds the verdict engine's revenueUsdMinor. */
+/**
+ * Revenue per ad code — feeds the verdict engine's revenueUsdMinor.
+ * Unattributed orders are EXCLUDED by design: they never vote in duels.
+ */
 export function revenueByCode(orders: readonly AttributedOrder[]): Map<string, number> {
   const out = new Map<string, number>();
   for (const o of orders) {
+    if (o.code === null) continue;
     out.set(o.code, (out.get(o.code) ?? 0) + o.valueUsdMinor);
   }
   return out;

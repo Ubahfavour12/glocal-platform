@@ -214,3 +214,21 @@ remains (render-only-for-funded-campaigns rule); doc 08-Pricing-Model.docx.
 | F. Name + brand | chosen | Glocal / useglocal.ai. Left: buy domain; designer visual brand; copy/voice pass. |
 | G. Legal | open | Lawyer review of designer contract + investor agreement; real ToS + Privacy Policy before public launch. |
 | H. Launch prep | later | 30-day dogfood on Gormup Gates wines (needs Higgsfield + small ad budget); Apple $99 + Play $25; app-store review; 4 MVP acceptance checks. |
+
+## 2026-07-21 — Attribution loopholes closed (all three)
+
+1. Buyer deletes the ref code: attribution now has three explicit sources —
+   message (code in buyer's first text), seller_pick (picker), none. "None"
+   is VALID: unattributed sales count for totals + preference learning but
+   never vote in duels. record_sale rejects contradictions and codes that
+   don't belong to the business.
+2. Sporadic mark-as-sold: consistency gate (tracking/consistency.ts) — manual
+   revenue may judge a duel only with 3+ attributed sales across 2+ days in
+   the rolling window; otherwise the duel stays on CPCI and marked sales feed
+   learning only. decideVerdict gains revenueTrusted (store revenue exempt).
+3. Repeat customers: covered by "none" — sales are never forced onto an ad.
+
+Migration 0006 (ad_code + code_source on conversions, record_sale SECURITY
+DEFINER fn) APPLIED to cloud. /api/sales/record is the mark-as-sold API.
+173 tests green. Also today: Supabase free-tier auto-pause discovered and
+resolved (restore is free; wait for ACTIVE_HEALTHY before reading).

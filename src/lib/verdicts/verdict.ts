@@ -80,7 +80,16 @@ export function isEligible(candidate: CandidateMetrics, now: Date): boolean {
  */
 export function decideVerdict(
   candidates: CandidateMetrics[],
-  opts: { storeConnected: boolean; now: Date },
+  opts: {
+    storeConnected: boolean;
+    /**
+     * Manually-reported/pixel revenue may judge (mark-as-sold passed the
+     * consistency gate — see tracking/consistency.ts). Store revenue never
+     * needs this flag; it arrives automatically and cannot be forgotten.
+     */
+    revenueTrusted?: boolean;
+    now: Date;
+  },
 ): Verdict {
   if (candidates.length < 2) {
     return { status: "pending", reason: "need at least two candidates" };
@@ -97,8 +106,9 @@ export function decideVerdict(
 
   const aggs = new Map(candidates.map((c) => [c.adId, aggregateWindow(c.daily, opts.now)]));
 
-  // Hierarchy: ROAS when a store is connected and revenue attribution exists.
-  if (opts.storeConnected) {
+  // Hierarchy: ROAS when revenue attribution is trustworthy — automatic
+  // (store connected) or manual/pixel that passed the consistency gate.
+  if (opts.storeConnected || opts.revenueTrusted === true) {
     const scores = scoreBy(aggs, (a) =>
       a.spendUsdMinor > 0 ? a.revenueUsdMinor / a.spendUsdMinor : 0,
     );
