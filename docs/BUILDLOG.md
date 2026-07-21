@@ -170,3 +170,47 @@ Three decisions locked after Day-3 logic discussion:
 Pricing note locked earlier same day: no structurally losing customer type
 remains (render-only-for-funded-campaigns rule); doc 08-Pricing-Model.docx.
 107 tests green.
+ claim; passed a clean concept.
+
+## 2026-07-13 — Evolution loop locked (commit 301bca1)
+
+- Day-3 verdict = three scenarios incl. "no verdict yet, duel continues"
+  (the most common outcome at $10/day budgets).
+- Winner-trait extraction (research/traits.ts) -> buildTraitGuidance ->
+  generateConcepts traitGuidance param. Challengers evolve from what won,
+  not random mutation.
+- Fatigue is metric-driven (verdicts/fatigue.ts): CTR decay >25% from reign
+  peak OR frequency >2.5, day-10 hard backstop -> style_refresh directive.
+  Fixed 5-day timer explicitly rejected (misfires at both budget extremes).
+
+## 2026-07-19 — Slice C core (commit f03bb28) + tracking modes
+
+- meta/insights.ts: real per-ad daily metrics from the Meta Marketing API
+  (impressions, clicks, spend, CTR, frequency, conversion intents, purchase
+  revenue) parsed into the exact shapes the verdict + fatigue engines eat.
+  The bridge from fixture-judged duels to real-number duels.
+- quarantine/rejection.ts: DISAPPROVED handling. Soft (technical) = auto-fix
+  + resubmit; hard (policy) = quarantine; unknown reasons fail safe to hard.
+  Trust Score: 3 hard strikes in a rolling 30 days freezes publishing.
+- DECISION LOCKED — not Shopify-only. tracking/modes.ts: a business connects
+  ONE of three doors and the engine judges on that door's best signal:
+  store (purchases -> ROAS), website link (smart-link clicks + landing views
+  -> CPCI), WhatsApp number (wa.me deep link, conversations started -> CPCI).
+  Phone normalisation (+/00/local-0 + country code), https enforcement,
+  hostname validation so ad clicks never point nowhere, plain-language
+  tracking explanation per mode for onboarding. 139 tests green.
+- Ops note: duplicate-folder incident resolved (user deleted stray copy,
+  renamed main folder back to `platform`); repo verified intact.
+
+## Checkpoint snapshot — 2026-07-19 (overall status)
+
+| Section | Status | What's left in it |
+|---|---|---|
+| A. The build (product code) | ~75% | Core engine proven. Left: wire live metrics + quarantine into the nightly loop; Slice D (TikTok + Google + Metricool lanes; sales tracking per mode; Strategy Studio UI; admin console); Slice E (mobile apps, billing tiers); one continuous auto-loop. |
+| B. Payments / money | ~85% | Flutterwave proven in test mode. Left: FW compliance uploads -> live keys (waits on CAC 100% amendment); Paystack second rail; payment keys to Vercel. |
+| C. Ad platforms | mostly | Meta fully proven; TikTok + Google secured. Left: TikTok dev app (needs domain); Google + TikTok lanes in code (Slice D); Meta business verification at launch prep. |
+| D. AI + tools | partial | Anthropic brain LIVE. Left: Higgsfield (video) + Metricool (posting), buy/connect at dogfood time. |
+| E. People | partial | Designer contract signing; investor-friend warm. Left: signature -> design docs -> brand/UI; written agreement when money is real. |
+| F. Name + brand | chosen | Glocal / useglocal.ai. Left: buy domain; designer visual brand; copy/voice pass. |
+| G. Legal | open | Lawyer review of designer contract + investor agreement; real ToS + Privacy Policy before public launch. |
+| H. Launch prep | later | 30-day dogfood on Gormup Gates wines (needs Higgsfield + small ad budget); Apple $99 + Play $25; app-store review; 4 MVP acceptance checks. |
