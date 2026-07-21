@@ -16,7 +16,7 @@ export default function Home() {
       </p>
       <div className="mt-10 flex items-center gap-3">
         <Link
-          href="/login"
+          href="/signup"
           className="rounded-lg bg-accent px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-accent-bright"
         >
           Get started
