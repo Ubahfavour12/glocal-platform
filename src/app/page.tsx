@@ -12,7 +12,7 @@ export default function Home() {
       <p className="mt-6 max-w-xl text-base leading-relaxed text-ink-muted">
         An AI agent studies the most viral ads in your niche, produces premium
         creatives, posts everywhere, runs the ads, and doubles down on what
-        works — every single day. No ad accounts. No pixels. No agency.
+        works, every single day. No ad accounts. No pixels. No agency.
       </p>
       <div className="mt-10 flex gap-3">
         <Link
@@ -22,7 +22,7 @@ export default function Home() {
           Open the dashboard
         </Link>
         <span className="rounded-lg border border-line px-6 py-3 text-sm text-ink-muted">
-          From $10/day ad budget
+          You set the budget, from $10 a day
         </span>
       </div>
     </div>

@@ -201,8 +201,9 @@ export default function OnboardingPage() {
         <section className="mt-4">
           <h1 className="text-2xl font-semibold tracking-tight">Set your daily budget</h1>
           <p className="mt-2 text-sm text-ink-muted">
-            The daily duel needs data to learn from — $10/day is the floor that
-            keeps verdicts honest.
+            You decide what to spend, and you can change it any time. We start
+            the floor at $10 a day, just enough for the daily test to learn
+            honestly.
           </p>
           <div className="mt-8">
             <div className="flex items-baseline justify-between">

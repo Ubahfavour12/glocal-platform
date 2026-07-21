@@ -51,7 +51,8 @@ export default function TodayPage() {
           <div className="datalabel">wallet</div>
           <div className="mt-2 font-mono text-2xl font-semibold">$0.00</div>
           <p className="mt-2 text-xs text-ink-faint">
-            Minimum to go live: 7 days of your daily budget (from $70 at $10/day).
+            To go live we hold 7 days of whatever budget you pick, so $70 if you
+            start at $10 a day.
           </p>
           <button className="mt-4 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-bright">
             Add funds
