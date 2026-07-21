@@ -12,7 +12,7 @@ const now = new Date("2026-07-12T18:00:00Z");
 
 const ctx = (over: Partial<BusinessContext> = {}): BusinessContext => ({
   businessId: "biz-1",
-  name: "GG Test Shop",
+  name: "Sample Shop",
   category: "fashion boutique",
   goal: "whatsapp",
   persona: "smart",

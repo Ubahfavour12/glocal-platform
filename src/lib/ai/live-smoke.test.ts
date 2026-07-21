@@ -20,7 +20,7 @@ describe.skipIf(!live)("live brain smoke", () => {
     expect(viral.length).toBeGreaterThan(0);
 
     const concepts = await generateConcepts(
-      { businessName: "Gormup Gates Wines", category: "wine retailer", goal: "whatsapp", description: "Spanish wines delivered in Lagos" },
+      { businessName: "Sample Wine Shop", category: "wine retailer", goal: "whatsapp", description: "Spanish wines delivered in Lagos" },
       viral,
       3,
     );

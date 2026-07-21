@@ -14,17 +14,21 @@ export default function Home() {
         creatives, posts everywhere, runs the ads, and doubles down on what
         works, every single day. No ad accounts. No pixels. No agency.
       </p>
-      <div className="mt-10 flex gap-3">
+      <div className="mt-10 flex items-center gap-3">
         <Link
-          href="/today"
+          href="/login"
           className="rounded-lg bg-accent px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-accent-bright"
         >
-          Open the dashboard
+          Get started
         </Link>
-        <span className="rounded-lg border border-line px-6 py-3 text-sm text-ink-muted">
-          You set the budget, from $10 a day
-        </span>
+        <Link
+          href="/login"
+          className="rounded-lg border border-line px-6 py-3 text-sm text-ink-muted transition-colors hover:text-ink"
+        >
+          Sign in
+        </Link>
       </div>
+      <p className="mt-5 text-sm text-ink-faint">You set the budget, from $10 a day.</p>
     </div>
   );
 }
