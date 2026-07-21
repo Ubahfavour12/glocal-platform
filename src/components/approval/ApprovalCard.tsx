@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { AgentNote } from "@/components/ui/AgentNote";
+import { SalesCheckIn } from "@/components/approval/SalesCheckIn";
 import { totalPlannedUsdMinor, type ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
 
 /**
@@ -12,9 +13,11 @@ import { totalPlannedUsdMinor, type ApprovalPlanPayload } from "@/lib/orchestrat
 export function ApprovalCard({
   approvalId,
   plan,
+  businessId,
 }: {
   approvalId: string;
   plan: ApprovalPlanPayload;
+  businessId?: string;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -46,6 +49,9 @@ export function ApprovalCard({
     <div className="mx-auto max-w-lg">
       <div className="datalabel">tomorrow&apos;s plan · {plan.planDate}</div>
       <h1 className="mt-1 text-2xl font-semibold tracking-tight">Ready for your approval</h1>
+
+      {/* yesterday's sales check-in — the ten-second optional question */}
+      {businessId && <SalesCheckIn businessId={businessId} />}
 
       {/* yesterday's scoreboard */}
       <div className="mt-6">

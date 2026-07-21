@@ -34,6 +34,8 @@ export interface BusinessContext {
   /** Yesterday's champion budget, for the escalation cap. */
   currentChampionBudgetUsdMinor: number | null;
   storeConnected: boolean;
+  /** Manual/pixel revenue passed the consistency gate (tracking/consistency.ts). */
+  revenueTrusted?: boolean;
   walletBalanceUsdMinor: number;
   countries: string[];
 }
@@ -108,7 +110,11 @@ export async function runNightly(
   const candidates = await adapters.getOpenTestCandidates(ctx.businessId);
   let verdict: Verdict | null = null;
   if (candidates.length >= 2) {
-    verdict = decideVerdict(candidates, { storeConnected: ctx.storeConnected, now });
+    verdict = decideVerdict(candidates, {
+      storeConnected: ctx.storeConnected,
+      revenueTrusted: ctx.revenueTrusted,
+      now,
+    });
     await adapters.audit(ctx.businessId, "verdict", verdict);
     commentary.push(
       verdict.status === "decided"

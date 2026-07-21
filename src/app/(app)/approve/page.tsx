@@ -13,7 +13,7 @@ export default async function ApprovePage() {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
 
-  let approval: { id: string; payload: ApprovalPlanPayload } | null = null;
+  let approval: { id: string; payload: ApprovalPlanPayload; businessId: string } | null = null;
   if (userData.user) {
     const { data: business } = await supabase
       .from("businesses")
@@ -30,7 +30,12 @@ export default async function ApprovePage() {
         .order("plan_date", { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (data) approval = { id: data.id, payload: data.payload as ApprovalPlanPayload };
+      if (data)
+        approval = {
+          id: data.id,
+          payload: data.payload as ApprovalPlanPayload,
+          businessId: business.id,
+        };
     }
   }
 
@@ -50,5 +55,11 @@ export default async function ApprovePage() {
     );
   }
 
-  return <ApprovalCard approvalId={approval.id} plan={approval.payload} />;
+  return (
+    <ApprovalCard
+      approvalId={approval.id}
+      plan={approval.payload}
+      businessId={approval.businessId}
+    />
+  );
 }

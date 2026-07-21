@@ -249,3 +249,25 @@ resolved (restore is free; wait for ACTIVE_HEALTHY before reading).
 - Ladder: chats (automatic) -> mark-as-sold (10 seconds, existing habit) ->
   payment links (fully automatic). Every rung optional; the machine runs at
   every rung.
+
+## 2026-07-21 — PHASE 1 CODE-COMPLETE: the loop runs on real numbers
+
+- live-adapters.ts: real Meta insights + OUR attributed revenue merged per ad
+  per day (overlayRevenue; a sale on a platform-silent day still counts),
+  candidates keyed by our ad ids, champion fatigue state derived from the
+  reign's insights (peak-CTR ratchet), consistency gate computed from
+  conversions. All behind injected LiveDeps; fully fixture-tested.
+- /api/jobs/nightly: the cron. CRON_SECRET auth, iterates businesses, builds
+  live context (wallet balance, store connection, champion budget, revenue
+  gate), runs runNightly, upserts the approvals row. Degrades service-by-
+  service (no ad account / Meta down / no Anthropic key => still plans from
+  the concept pool); quarantined ad accounts are skipped by fetchInsights.
+- vercel.json: nightly 19:30 UTC (20:30 Lagos evening), reconcile 03:30 UTC.
+- SalesCheckIn on the ApprovalCard: the ten-second optional question at the
+  top of the evening card ("Did any chats become sales?"), amount + optional
+  buyer-message code, walk-in/repeat = no code. One push per day, ever: the
+  existing approval push carries everything (notification design locked).
+- revenueTrusted threaded: BusinessContext -> decideVerdict.
+- 180 tests green. REMAINING for Phase 1 live: deploy to Vercel + env vars
+  (user step: npx vercel --prod; MCP deploy lacks permission), and
+  META_WEBHOOK_VERIFY_TOKEN invented at webhook subscription time.
