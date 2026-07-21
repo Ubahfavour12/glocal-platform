@@ -37,6 +37,10 @@ export default function OnboardingPage() {
   const [category, setCategory] = useState("");
   const [geo, setGeo] = useState("");
   const [mediaNames, setMediaNames] = useState<string[]>([]);
+  // Client-side previews only: the files never leave the device or get saved.
+  const [mediaPreviews, setMediaPreviews] = useState<
+    { name: string; url: string; isVideo: boolean }[]
+  >([]);
   const [goal, setGoal] = useState<Goal | null>(null);
   const [dailyUsd, setDailyUsd] = useState(10);
 
@@ -158,19 +162,42 @@ export default function OnboardingPage() {
               accept="image/*,video/*"
               multiple
               className="hidden"
-              onChange={(e) =>
-                setMediaNames(Array.from(e.target.files ?? []).slice(0, 5).map((f) => f.name))
-              }
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []).slice(0, 5);
+                mediaPreviews.forEach((p) => URL.revokeObjectURL(p.url));
+                setMediaPreviews(
+                  files.map((f) => ({
+                    name: f.name,
+                    url: URL.createObjectURL(f),
+                    isVideo: f.type.startsWith("video"),
+                  })),
+                );
+                setMediaNames(files.map((f) => f.name));
+              }}
             />
           </label>
-          {mediaNames.length > 0 && (
-            <ul className="mt-4 flex flex-col gap-1">
-              {mediaNames.map((n) => (
-                <li key={n} className="font-mono text-xs text-ink-muted">
-                  ✓ {n}
-                </li>
-              ))}
-            </ul>
+          {mediaPreviews.length > 0 && (
+            <>
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {mediaPreviews.map((m) => (
+                  <div
+                    key={m.name}
+                    className="relative aspect-square overflow-hidden rounded-lg border border-line bg-surface-overlay"
+                  >
+                    {m.isVideo ? (
+                      <video src={m.url} className="h-full w-full object-cover" muted playsInline />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={m.url} alt={m.name} className="h-full w-full object-cover" />
+                    )}
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-xs text-ink-faint">
+                Shown here so you can check them. Your files stay on your device for
+                now; nothing is uploaded.
+              </p>
+            </>
           )}
         </section>
       )}
