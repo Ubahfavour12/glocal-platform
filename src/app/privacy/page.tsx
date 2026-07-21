@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Privacy Policy — Platform",
+  title: "Privacy Policy — Glocal",
 };
 
 /**
@@ -12,16 +12,16 @@ export default function PrivacyPage() {
     <div className="mx-auto max-w-2xl px-6 py-16">
       <div className="datalabel">privacy policy</div>
       <h1 className="mt-1 text-3xl font-semibold tracking-tight">Privacy Policy</h1>
-      <p className="mt-2 text-sm text-ink-faint">Last updated: 11 July 2026</p>
+      <p className="mt-2 text-sm text-ink-faint">Last updated: 21 July 2026</p>
 
       <div className="mt-8 flex flex-col gap-6 text-sm leading-relaxed text-ink-muted">
         <section>
           <h2 className="mb-2 text-base font-semibold text-ink">Who we are</h2>
           <p>
-            We provide an AI-assisted marketing platform (working title; final
-            trading name to be announced) that helps businesses create,
-            publish, and advertise content across social and advertising
-            platforms. This policy explains what we collect and why. Contact:
+            Glocal (glocal.ai) is an AI marketing platform operated by UBAHGRID
+            SERVICE LTD (RC 8566798). It helps businesses create, publish, and
+            advertise content across social and advertising platforms. This
+            policy explains what we collect and why. Contact:
             ubahfavour15@gmail.com.
           </p>
         </section>
@@ -39,6 +39,22 @@ export default function PrivacyPage() {
             ad link we operate, we record anonymous technical data (click
             identifiers, device type) to measure campaign results. We do not
             build profiles of ad viewers.
+          </p>
+        </section>
+
+        <section>
+          <h2 className="mb-2 text-base font-semibold text-ink">How we use your data</h2>
+          <p>
+            Everything you give us is used for one purpose: to run your own
+            advertising better. Your category tells us which ads to study and
+            which safety rules apply; your goal, photos, area, and budget shape
+            what we make, where it runs, and how much we test; your sales and
+            performance data teach the agent what works for you. The longer you
+            use Glocal, the smarter your own agent gets. <strong className="text-ink">What
+            we never do:</strong> we never sell your data, never use one
+            business&apos;s data to help another, and never train a shared model
+            that a competitor could benefit from. Your data serves your business
+            alone.
           </p>
         </section>
 
