@@ -42,7 +42,11 @@ export default function OnboardingPage() {
     { name: string; url: string; isVideo: boolean }[]
   >([]);
   const [goal, setGoal] = useState<Goal | null>(null);
+  const [destination, setDestination] = useState("");
   const [dailyUsd, setDailyUsd] = useState(10);
+
+  // The door the agent's ads send buyers through (tracking/modes.ts).
+  const connectionMode = goal === "whatsapp" ? "whatsapp" : "website";
 
   const screen = useMemo(() => screenCategory(category), [category]);
   const dailyMinor = Math.max(Math.round(dailyUsd * 100), MIN_DAILY_BUDGET_USD_MINOR);
@@ -56,7 +60,7 @@ export default function OnboardingPage() {
       : step === 1
         ? mediaNames.length > 0
         : step === 2
-          ? goal !== null
+          ? goal !== null && destination.trim().length > 2
           : true;
 
   async function finish() {
@@ -82,6 +86,8 @@ export default function OnboardingPage() {
           goal,
           service_geo: { raw: geo.trim() },
           daily_budget_usd_minor: dailyMinor,
+          connection_mode: connectionMode,
+          destination: destination.trim(),
         });
         // Wake the agent: the first concept batch builds in the background
         // (Phase 2.1); the nightly run tops the pipeline up to the target.
@@ -224,6 +230,30 @@ export default function OnboardingPage() {
               </button>
             ))}
           </div>
+
+          {goal && (
+            <div className="mt-6">
+              <label className="text-sm text-ink">
+                {goal === "whatsapp"
+                  ? "Your WhatsApp number (with country code)"
+                  : "Your website or product link"}
+              </label>
+              <input
+                type={goal === "whatsapp" ? "tel" : "url"}
+                value={destination}
+                onChange={(e) => setDestination(e.target.value)}
+                placeholder={
+                  goal === "whatsapp" ? "+234 913 371 2092" : "https://yourshop.com"
+                }
+                className="mt-2 w-full rounded-lg border border-line bg-surface-raised px-4 py-3 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+              />
+              <p className="mt-2 text-xs text-ink-faint">
+                {goal === "whatsapp"
+                  ? "Every ad opens a WhatsApp chat with you. Buyers arrive with a tag so you know which ad they came from."
+                  : "Every ad links here through our tracked link, so the agent can see which ads actually send people to you."}
+              </p>
+            </div>
+          )}
         </section>
       )}
 
