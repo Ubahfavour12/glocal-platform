@@ -5,10 +5,12 @@ import { buildLiveAdapters, type LiveDeps } from "@/lib/orchestrator/live-adapte
 import { fetchAdInsights, type AdDayMetrics } from "@/lib/meta/insights";
 import { metaConfigFromEnv } from "@/lib/meta/client";
 import { llmGatewayScan } from "@/lib/compliance/llm";
+import { buildPipelineBatch } from "@/lib/research/pipeline";
+import { livePipelineDeps } from "@/lib/research/pipeline-live";
 import type { ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
 import type { PersonaMode } from "@/lib/guardrails/budget";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 /**
  * The nightly run — Vercel cron (see vercel.json), CRON_SECRET auth like
@@ -61,6 +63,15 @@ interface BizRow {
 }
 
 async function runForBusiness(supabase: Supa, biz: BizRow, now: Date): Promise<NightlyPlan> {
+  // Phase 2.1: keep the concept pipeline topped up toward the target.
+  // Short-circuits when full; research failures degrade inside the builder
+  // and must never break the night's plan.
+  try {
+    await buildPipelineBatch(livePipelineDeps(supabase), biz.id);
+  } catch {
+    /* plan continues on the existing pool */
+  }
+
   // ---- context pieces ----
   const [{ data: wallet }, { data: store }, { data: champAd }] = await Promise.all([
     supabase

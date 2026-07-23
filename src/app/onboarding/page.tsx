@@ -83,6 +83,9 @@ export default function OnboardingPage() {
           service_geo: { raw: geo.trim() },
           daily_budget_usd_minor: dailyMinor,
         });
+        // Wake the agent: the first concept batch builds in the background
+        // (Phase 2.1); the nightly run tops the pipeline up to the target.
+        fetch("/api/pipeline/build", { method: "POST", keepalive: true }).catch(() => {});
       }
     }
     router.push("/today");

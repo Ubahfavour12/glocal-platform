@@ -44,6 +44,8 @@ export async function generateConcepts(
   count = 10,
   /** Winner traits + fatigue directives from traits.buildTraitGuidance (evolution loop). */
   traitGuidance = "",
+  /** Hooks already in this business's pipeline — batches must not repeat them. */
+  avoidHooks: string[] = [],
 ): Promise<AdConcept[]> {
   const patterns = viral.slice(0, 15).map((v, i) =>
     `${i + 1}. "${v.title}" (${v.channelTitle}, ${Math.round(v.viralityScore).toLocaleString()} views/day)`,
@@ -57,7 +59,14 @@ Notes: ${product.description ?? "n/a"}
 
 TOP VIRAL ADS IN THIS SPACE (ranked by views/day):
 ${patterns.join("\n")}
-${traitGuidance ? `\nACCOUNT LEARNING (from this business's own A/B results):\n${traitGuidance}\n` : ""}
+${traitGuidance ? `\nACCOUNT LEARNING (from this business's own A/B results):\n${traitGuidance}\n` : ""}${
+    avoidHooks.length
+      ? `\nALREADY IN THE PIPELINE (do not reuse or closely repeat these hooks):\n${avoidHooks
+          .slice(0, 40)
+          .map((h) => `- ${h}`)
+          .join("\n")}\n`
+      : ""
+  }
 TASK
 Produce ${count} distinct ad concepts for this product, each adapting the structure of the viral ads above. Rank them 1..${count}, best first.
 
