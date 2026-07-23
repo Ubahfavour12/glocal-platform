@@ -7,6 +7,7 @@ import { metaConfigFromEnv } from "@/lib/meta/client";
 import { llmGatewayScan } from "@/lib/compliance/llm";
 import { buildPipelineBatch } from "@/lib/research/pipeline";
 import { livePipelineDeps } from "@/lib/research/pipeline-live";
+import { renderCreativeLive } from "@/lib/creative/render-live";
 import type { ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
 import type { PersonaMode } from "@/lib/guardrails/budget";
 
@@ -129,6 +130,9 @@ async function runForBusiness(supabase: Supa, biz: BizRow, now: Date): Promise<N
         }));
       },
       llmGatewayScan: process.env.ANTHROPIC_API_KEY ? llmGatewayScan : undefined,
+      // Render lane (Phase 2.3): dormant until the Higgsfield key + a stored
+      // source image exist; otherwise challengers launch as link ads.
+      renderCreative: process.env.HIGGSFIELD_API_KEY ? renderCreativeLive(supabase) : undefined,
       savePlan: async (p) => {
         const payload: ApprovalPlanPayload = {
           planDate: p.planDate,
