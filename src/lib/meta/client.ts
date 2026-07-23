@@ -170,6 +170,89 @@ export async function createPausedAdSet(
   return { adSetId: data.id };
 }
 
+export type CallToAction = "SHOP_NOW" | "SIGN_UP" | "CONTACT_US" | "LEARN_MORE";
+
+/** Map the business goal to the ad's call-to-action button. */
+export function ctaForGoal(goal: "sales" | "leads" | "whatsapp" | "visits"): CallToAction {
+  switch (goal) {
+    case "sales":
+      return "SHOP_NOW";
+    case "leads":
+      return "SIGN_UP";
+    case "whatsapp":
+      return "CONTACT_US";
+    case "visits":
+      return "LEARN_MORE";
+  }
+}
+
+/**
+ * Step 5: create a link-ad creative. The link is ALWAYS our smart link, so
+ * every click is tracked platform-side regardless of the ad network
+ * (proven live: creative 902931766182353 on 2026-07-12). imageUrl is
+ * optional until the rendering lane is active — Meta accepts link ads
+ * without an explicit image (it pulls from the page/link preview).
+ */
+export async function createLinkAdCreative(
+  cfg: MetaConfig,
+  adAccountId: string,
+  params: {
+    name: string;
+    pageId: string;
+    link: string; // the smart link URL
+    message: string; // primary text (the concept's copy)
+    cta: CallToAction;
+    imageUrl?: string;
+  },
+): Promise<{ creativeId: string }> {
+  const linkData: Record<string, unknown> = {
+    link: params.link,
+    message: params.message,
+    call_to_action: { type: params.cta, value: { link: params.link } },
+  };
+  if (params.imageUrl) linkData.picture = params.imageUrl;
+
+  const data = await graph<{ id: string }>(
+    `${adAccountId}/adcreatives`,
+    {
+      method: "POST",
+      params: {
+        name: params.name,
+        object_story_spec: JSON.stringify({ page_id: params.pageId, link_data: linkData }),
+      },
+    },
+    cfg.accessToken,
+  );
+  return { creativeId: data.id };
+}
+
+/**
+ * Step 6: create the ad itself — PAUSED, like everything else. This is the
+ * final object; on an account without a payment method Meta rejects it
+ * (error 1359188), which the launcher records as "awaiting payment method"
+ * rather than a failure. Completes at dogfooding.
+ */
+export async function createPausedAd(
+  cfg: MetaConfig,
+  adAccountId: string,
+  params: { name: string; adSetId: string; creativeId: string },
+): Promise<{ adId: string }> {
+  const data = await graph<{ id: string }>(
+    `${adAccountId}/ads`,
+    {
+      method: "POST",
+      params: {
+        name: params.name,
+        adset_id: params.adSetId,
+        creative: JSON.stringify({ creative_id: params.creativeId }),
+        status: "PAUSED",
+      },
+    },
+    cfg.accessToken,
+  );
+  return { adId: data.id };
+}
+
 export async function listCampaigns(
   cfg: MetaConfig,
   adAccountId: string,
