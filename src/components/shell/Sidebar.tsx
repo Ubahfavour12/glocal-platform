@@ -22,7 +22,7 @@ export function Sidebar() {
     <aside className="flex w-56 shrink-0 flex-col border-r border-line-soft bg-surface">
       <div className="px-5 pb-6 pt-6">
         <div className="font-mono text-sm font-semibold tracking-wide text-ink">
-          platform<span className="text-accent-bright">.</span>
+          glocal<span className="text-accent-bright">.</span>
         </div>
         <div className="datalabel mt-1">autonomous marketing</div>
       </div>

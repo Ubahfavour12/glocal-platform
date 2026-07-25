@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { SettingsForm } from "@/components/settings/SettingsForm";
 import { PixelCard } from "@/components/settings/PixelCard";
 import { MediaUpload } from "@/components/settings/MediaUpload";
+import { ConnectShopify } from "@/components/settings/ConnectShopify";
 
 export const dynamic = "force-dynamic";
 
@@ -37,13 +38,13 @@ export default async function SettingsPage() {
   const [walletRes, socialRes, storeRes, mediaRes] = await Promise.all([
     supabase.from("wallet_balances").select("balance_usd_minor").eq("business_id", bizId).maybeSingle(),
     supabase.from("social_connections").select("network, display_name").eq("business_id", bizId).eq("status", "active"),
-    supabase.from("store_connections").select("id, platform").eq("business_id", bizId).maybeSingle(),
+    supabase.from("store_connections").select("id, provider, status").eq("business_id", bizId).eq("status", "active").maybeSingle(),
     supabase.from("media_assets").select("public_url, kind").eq("business_id", bizId).order("created_at", { ascending: false }).limit(12),
   ]);
 
   const balanceUsdMinor = Number(walletRes.data?.balance_usd_minor ?? 0);
   const socials = (socialRes.data ?? []) as { network: string; display_name: string | null }[];
-  const store = storeRes.data as { platform: string } | null;
+  const store = storeRes.data as { provider: string } | null;
   const media = ((mediaRes.data ?? []) as { public_url: string; kind: string }[]).map((m) => ({
     publicUrl: m.public_url,
     kind: m.kind,
@@ -91,26 +92,7 @@ export default async function SettingsPage() {
         </div>
 
         {/* Store connection */}
-        <div className="rounded-card border border-line bg-surface-raised p-5">
-          <div className="datalabel">store connection</div>
-          {store ? (
-            <p className="mt-2 text-sm text-ink">
-              {store.platform} connected — sales sync automatically for true return on spend.
-            </p>
-          ) : (
-            <>
-              <p className="mt-2 text-sm text-ink-muted">
-                Connect Shopify for automatic sales tracking — one click, zero code.
-              </p>
-              <a
-                href="/api/oauth/shopify/start"
-                className="mt-4 inline-block rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-bright"
-              >
-                Connect Shopify
-              </a>
-            </>
-          )}
-        </div>
+        <ConnectShopify connected={store ? store.provider : null} />
 
         <MediaUpload businessId={bizId} existing={media} />
         <PixelCard businessId={bizId} origin={origin} />
