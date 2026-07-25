@@ -8,6 +8,7 @@ import {
   MIN_DAILY_BUDGET_USD_MINOR,
   minFirstDepositUsdMinor,
 } from "@/lib/money/ledger";
+import { currencyForCountry, listCountries } from "@/lib/money/currency";
 
 /**
  * Quick-Start onboarding — UF-1 / PRD F-01.
@@ -35,7 +36,10 @@ export default function OnboardingPage() {
 
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
+  const [country, setCountry] = useState("NG");
   const [geo, setGeo] = useState("");
+
+  const local = currencyForCountry(country); // secondary display currency
   const [mediaNames, setMediaNames] = useState<string[]>([]);
   // Client-side previews only: the files never leave the device or get saved.
   const [mediaPreviews, setMediaPreviews] = useState<
@@ -56,7 +60,7 @@ export default function OnboardingPage() {
 
   const canNext =
     step === 0
-      ? name.trim().length > 1 && category.trim().length > 1 && geo.trim().length > 1 && screen !== "blocked"
+      ? name.trim().length > 1 && category.trim().length > 1 && country.trim().length === 2 && geo.trim().length > 1 && screen !== "blocked"
       : step === 1
         ? mediaNames.length > 0
         : step === 2
@@ -88,6 +92,8 @@ export default function OnboardingPage() {
           daily_budget_usd_minor: dailyMinor,
           connection_mode: connectionMode,
           destination: destination.trim(),
+          country,
+          currency: local.currency, // local display currency; USD stays canonical
         });
         // Wake the agent: the first concept batch builds in the background
         // (Phase 2.1); the nightly run tops the pipeline up to the target.
@@ -141,6 +147,23 @@ export default function OnboardingPage() {
               placeholder="Where do you serve? (city or countries)"
               className="rounded-lg border border-line bg-surface-raised px-4 py-3 text-sm placeholder:text-ink-faint focus:border-accent focus:outline-none"
             />
+            <div>
+              <label className="datalabel">your country</label>
+              <select
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-line bg-surface-raised px-4 py-3 text-sm text-ink focus:border-accent focus:outline-none"
+              >
+                {listCountries().map((c) => (
+                  <option key={c.country} value={c.country}>
+                    {c.countryName} ({c.symbol} {c.currency})
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-ink-faint">
+                Prices show in USD with a {local.symbol} {local.currency} equivalent for you.
+              </p>
+            </div>
           </div>
           {screen === "blocked" && category.trim().length > 1 && (
             <p className="mt-3 text-sm text-negative">
