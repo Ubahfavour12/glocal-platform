@@ -1,17 +1,16 @@
 /**
- * Live organic posting — binds the posting orchestration to Metricool and
- * Supabase (social_connections + journal). Dormant until the Metricool key
- * and a connected, active brand exist; otherwise it no-ops cleanly.
+ * Live organic posting — now runs on OUR Meta integration (direct OAuth),
+ * not a paid middleman. Uses the page/IG tokens the connect flow stored in
+ * social_connections to publish via the Graph API. Dormant until the customer
+ * has connected a Facebook/Instagram account; otherwise a clean skip.
+ *
+ * (Metricool remains available as a dogfood shortcut but is no longer the
+ * default path — this is the durable, $0-per-account answer.)
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  metricoolConfigFromEnv,
-  normalizeNetworks,
-  schedulePost,
-  type MetricoolConfig,
-  type SocialNetwork,
-} from "@/lib/metricool/client";
+import { normalizeNetworks, type SocialNetwork } from "@/lib/metricool/client";
+import { publishToFacebook, publishToInstagram } from "@/lib/meta/publish";
 import {
   scheduleOrganic,
   type PostCandidate,
@@ -21,29 +20,30 @@ import {
 
 const DAILY_ORGANIC_LIMIT = 1;
 
-interface ConnectedBrand {
-  brandRef: string;
-  networks: SocialNetwork[];
+interface MetaConnection {
+  network: SocialNetwork;
+  accountId: string;
+  token: string;
 }
 
-/** The business's active Metricool brand + its connected networks, if any. */
-async function getConnectedBrand(
+async function getMetaConnections(
   supabase: SupabaseClient,
   businessId: string,
-): Promise<ConnectedBrand | null> {
+): Promise<MetaConnection[]> {
   const { data } = await supabase
     .from("social_connections")
-    .select("network, metricool_brand_ref, status")
+    .select("network, platform_account_id, access_token, status, provider")
     .eq("business_id", businessId)
+    .eq("provider", "meta")
     .eq("status", "active");
-  if (!data || data.length === 0) return null;
-  const brandRef = data.find((r) => r.metricool_brand_ref)?.metricool_brand_ref as
-    | string
-    | undefined;
-  if (!brandRef) return null;
-  const networks = normalizeNetworks(data.map((r) => r.network as string));
-  if (networks.length === 0) return null;
-  return { brandRef, networks };
+  return (data ?? [])
+    .filter((r) => r.platform_account_id && r.access_token)
+    .map((r) => ({
+      network: r.network as SocialNetwork,
+      accountId: r.platform_account_id as string,
+      token: r.access_token as string,
+    }))
+    .filter((c) => c.network === "facebook" || c.network === "instagram");
 }
 
 async function countPostedToday(supabase: SupabaseClient, businessId: string): Promise<number> {
@@ -59,30 +59,42 @@ async function countPostedToday(supabase: SupabaseClient, businessId: string): P
   return count ?? 0;
 }
 
-/**
- * Schedule the business's organic post(s) for today from the given candidates.
- * Returns a summary; the "no brand / no key" cases are treated as a clean skip.
- */
 export async function scheduleOrganicForBusiness(
   supabase: SupabaseClient,
   businessId: string,
   candidates: PostCandidate[],
   now: Date = new Date(),
 ): Promise<PostingSummary | { skipped: string }> {
-  let cfg: MetricoolConfig;
-  try {
-    cfg = metricoolConfigFromEnv();
-  } catch {
-    return { skipped: "metricool_not_configured" };
-  }
-  const brand = await getConnectedBrand(supabase, businessId);
-  if (!brand) return { skipped: "no_active_brand" };
+  const connections = await getMetaConnections(supabase, businessId);
+  if (connections.length === 0) return { skipped: "no_connected_account" };
 
+  const networks = normalizeNetworks(connections.map((c) => c.network));
   const postedToday = await countPostedToday(supabase, businessId);
 
   const deps: PostingDeps = {
-    schedule: (post, publishAtIso) =>
-      schedulePost(cfg, brand.brandRef, post, publishAtIso),
+    // Publish immediately to each connected network; return a combined id.
+    schedule: async (post) => {
+      const ids: string[] = [];
+      for (const conn of connections) {
+        if (!networks.includes(conn.network)) continue;
+        if (conn.network === "facebook") {
+          const { postId } = await publishToFacebook(conn.accountId, conn.token, {
+            message: post.text,
+            imageUrl: post.mediaUrls[0],
+          });
+          ids.push(`fb:${postId}`);
+        } else if (conn.network === "instagram" && post.mediaUrls[0]) {
+          // Instagram needs an image; a text-only post skips it.
+          const { postId } = await publishToInstagram(conn.accountId, conn.token, {
+            caption: post.text,
+            imageUrl: post.mediaUrls[0],
+          });
+          ids.push(`ig:${postId}`);
+        }
+      }
+      if (ids.length === 0) throw new Error("no publishable network for this post");
+      return { postId: ids.join(",") };
+    },
     record: async (bizId, scheduled) => {
       await supabase.from("journal_entries").insert({
         business_id: bizId,
@@ -108,7 +120,7 @@ export async function scheduleOrganicForBusiness(
   return scheduleOrganic(
     businessId,
     candidates,
-    { networks: brand.networks, postedToday, dailyLimit: DAILY_ORGANIC_LIMIT },
+    { networks, postedToday, dailyLimit: DAILY_ORGANIC_LIMIT },
     deps,
     now,
   );

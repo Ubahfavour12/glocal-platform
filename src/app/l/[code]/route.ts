@@ -91,6 +91,7 @@ async function logClick(
       smart_link_id: smartLinkId,
       platform_click_id: event.platformClickId,
       user_agent: event.userAgent?.slice(0, 300) ?? null,
+      app_cid: event.clickId, // pixel matches a later purchase back via this
     });
   } catch {
     // click logging must never break the redirect path
