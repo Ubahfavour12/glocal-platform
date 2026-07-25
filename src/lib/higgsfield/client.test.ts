@@ -86,4 +86,16 @@ describe("parseRenderStatus", () => {
   it("unknown status defaults to processing (keep polling, never crash)", () => {
     expect(parseRenderStatus({ id: "j", status: "who_knows" }).state).toBe("processing");
   });
+
+  it("real Higgsfield shape: request_id + nsfw + video_url", () => {
+    expect(parseRenderStatus({ request_id: "req_1", status: "in_progress" })).toMatchObject({
+      jobId: "req_1",
+      state: "processing",
+    });
+    const nsfw = parseRenderStatus({ request_id: "r", status: "nsfw" });
+    expect(nsfw.state).toBe("failed");
+    expect(nsfw.error).toMatch(/unsafe/i);
+    const done = parseRenderStatus({ request_id: "r", status: "completed", video_url: "https://cdn/v.mp4" });
+    expect(done).toMatchObject({ state: "done", mediaUrl: "https://cdn/v.mp4" });
+  });
 });

@@ -133,7 +133,11 @@ async function runForBusiness(supabase: Supa, biz: BizRow, now: Date): Promise<N
       llmGatewayScan: process.env.ANTHROPIC_API_KEY ? llmGatewayScan : undefined,
       // Render lane (Phase 2.3): dormant until the Higgsfield key + a stored
       // source image exist; otherwise challengers launch as link ads.
-      renderCreative: process.env.HIGGSFIELD_API_KEY ? renderCreativeLive(supabase) : undefined,
+      renderCreative:
+        process.env.HIGGSFIELD_CREDENTIALS ||
+        (process.env.HIGGSFIELD_API_KEY && process.env.HIGGSFIELD_API_SECRET)
+          ? renderCreativeLive(supabase)
+          : undefined,
       savePlan: async (p) => {
         const payload: ApprovalPlanPayload = {
           planDate: p.planDate,
