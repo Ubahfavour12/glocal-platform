@@ -8,6 +8,7 @@ import { llmGatewayScan } from "@/lib/compliance/llm";
 import { buildPipelineBatch } from "@/lib/research/pipeline";
 import { livePipelineDeps } from "@/lib/research/pipeline-live";
 import { renderCreativeLive } from "@/lib/creative/render-live";
+import { scheduleOrganicForBusiness } from "@/lib/organic/posting-live";
 import type { ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
 import type { PersonaMode } from "@/lib/guardrails/budget";
 
@@ -173,6 +174,23 @@ async function runForBusiness(supabase: Supa, biz: BizRow, now: Date): Promise<N
     },
     now,
   );
+
+  // Organic posting lane (Phase 2.4): schedule a calm daily post from the
+  // plan's content. Dormant unless Metricool + a connected brand exist; a
+  // failure here never affects the ad plan.
+  try {
+    const candidates = plan.challengers.map((c) => ({
+      conceptId: c.concept.id,
+      text: c.concept.copy,
+      mediaUrls: c.creative?.mediaUrl ? [c.creative.mediaUrl] : [],
+    }));
+    if (candidates.length > 0) {
+      await scheduleOrganicForBusiness(supabase, biz.id, candidates, now);
+    }
+  } catch {
+    /* organic is best-effort */
+  }
+
   return plan;
 }
 
