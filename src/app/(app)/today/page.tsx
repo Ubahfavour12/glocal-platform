@@ -7,6 +7,7 @@ import { currencyForCountry } from "@/lib/money/currency";
 import { fmtDual, fmtRoas, fmtUsd } from "@/lib/money/format";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Today" };
 
 const PIPELINE_TARGET = 50;
 

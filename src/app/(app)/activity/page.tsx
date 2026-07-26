@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { describeActivity, relativeTime, type RawEntry } from "@/lib/dashboard/activity";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Activity" };
 
 export default async function ActivityPage() {
   const supabase = await createClient();

@@ -53,3 +53,24 @@ body {
   background: var(--color-accent);
   color: #fff;
 }
+
+/* Keyboard focus ring — visible only for keyboard users, never on mouse click.
+ * One consistent amber ring across every interactive element (a11y + polish). */
+:focus-visible {
+  outline: 2px solid var(--color-accent-bright);
+  outline-offset: 2px;
+  border-radius: 0.375rem;
+}
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Respect reduced-motion preferences for the app's transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

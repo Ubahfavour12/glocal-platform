@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { relativeTime } from "@/lib/dashboard/activity";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "The Duel" };
 
 export default async function DuelPage() {
   const supabase = await createClient();

@@ -1,3 +1,5 @@
+export const metadata = { title: "Strategy Studio" };
+
 export default function StudioPage() {
   return (
     <div className="mx-auto max-w-5xl">

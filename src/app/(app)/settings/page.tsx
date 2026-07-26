@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
@@ -5,8 +6,10 @@ import { SettingsForm } from "@/components/settings/SettingsForm";
 import { PixelCard } from "@/components/settings/PixelCard";
 import { MediaUpload } from "@/components/settings/MediaUpload";
 import { ConnectShopify } from "@/components/settings/ConnectShopify";
+import { ConnectFlash } from "@/components/settings/ConnectFlash";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Settings" };
 
 type Goal = "sales" | "leads" | "whatsapp" | "visits";
 type Persona = "conservative" | "smart" | "aggressive";
@@ -56,6 +59,10 @@ export default async function SettingsPage() {
       <h1 className="mt-1 text-2xl font-semibold tracking-tight">Your account</h1>
 
       <div className="mt-6 flex flex-col gap-4">
+        <Suspense fallback={null}>
+          <ConnectFlash />
+        </Suspense>
+
         <SettingsForm
           initial={{
             dailyBudgetUsdMinor: business.daily_budget_usd_minor as number,

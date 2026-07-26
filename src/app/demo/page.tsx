@@ -10,7 +10,7 @@ import { MetricChip } from "@/components/ui/MetricChip";
  * and no wallet. Shareable before signup. All data here is hardcoded fiction.
  */
 export const metadata: Metadata = {
-  title: "See it in action — Glocal",
+  title: "See it in action",
   description: "A live look at an autonomous ad account, running on its own.",
 };
 

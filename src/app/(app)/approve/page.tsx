@@ -3,6 +3,7 @@ import type { ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
+export const metadata = { title: "Approve" };
 
 /**
  * The Approve tab — shows the latest awaiting plan for the signed-in user's

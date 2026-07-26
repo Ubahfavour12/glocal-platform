@@ -13,7 +13,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Platform — Autonomous Marketing",
+  title: {
+    default: "Glocal — Autonomous Marketing",
+    template: "%s · Glocal",
+  },
   description:
     "Upload a product photo, fund a wallet, approve once a day. The agent does the rest.",
 };

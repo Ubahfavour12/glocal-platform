@@ -5,6 +5,7 @@ import { fetchUsdRate } from "@/lib/money/rates";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic"; // balance must always be current
+export const metadata = { title: "Wallet" };
 
 interface LedgerRow {
   kind: string;
