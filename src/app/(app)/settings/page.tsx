@@ -42,18 +42,13 @@ export default async function SettingsPage() {
     supabase.from("wallet_balances").select("balance_usd_minor").eq("business_id", bizId).maybeSingle(),
     supabase.from("social_connections").select("network, display_name").eq("business_id", bizId).eq("status", "active"),
     supabase.from("store_connections").select("id, provider, status").eq("business_id", bizId).eq("status", "active").maybeSingle(),
-    supabase.from("media_assets").select("id, storage_path, public_url, kind").eq("business_id", bizId).order("created_at", { ascending: false }).limit(12),
+    supabase.from("media_assets").select("id", { count: "exact", head: true }).eq("business_id", bizId),
   ]);
 
   const balanceUsdMinor = Number(walletRes.data?.balance_usd_minor ?? 0);
   const socials = (socialRes.data ?? []) as { network: string; display_name: string | null }[];
   const store = storeRes.data as { provider: string } | null;
-  const media = ((mediaRes.data ?? []) as { id: string; storage_path: string; public_url: string; kind: string }[]).map((m) => ({
-    id: m.id,
-    storagePath: m.storage_path,
-    publicUrl: m.public_url,
-    kind: m.kind,
-  }));
+  const mediaCount = mediaRes.count ?? 0;
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -78,13 +73,12 @@ export default async function SettingsPage() {
         {/* Connect socials */}
         <div className="rounded-card border border-line bg-surface-raised p-5">
           <div className="datalabel">social accounts</div>
-          {socials.length === 0 ? (
-            <p className="mt-2 text-sm text-ink-muted">
-              Connect Facebook or Instagram once and the agent posts organically alongside your ads —
-              no dashboards, no you-in-the-middle.
-            </p>
-          ) : (
-            <div className="mt-2 flex flex-wrap gap-2">
+          <p className="mt-2 text-sm text-ink-muted">
+            Connect once and the agent posts organically alongside your ads. No dashboards, no
+            you-in-the-middle.
+          </p>
+          {socials.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
               {socials.map((s, i) => (
                 <span key={i} className="rounded-full bg-surface-overlay px-3 py-1 text-xs text-ink">
                   {s.network} · {s.display_name ?? "connected"}
@@ -92,18 +86,30 @@ export default async function SettingsPage() {
               ))}
             </div>
           )}
-          <a
-            href="/api/oauth/meta/start"
-            className="mt-4 inline-block rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-bright"
-          >
-            {socials.length === 0 ? "Connect Facebook / Instagram" : "Connect another account"}
-          </a>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <a
+              href="/api/oauth/meta/start"
+              className="inline-block rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-bright"
+            >
+              Connect Facebook
+            </a>
+            <a
+              href="/api/oauth/instagram/start"
+              className="inline-block rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink transition-colors hover:border-accent"
+            >
+              Connect Instagram
+            </a>
+          </div>
+          <p className="mt-2 text-xs text-ink-faint">
+            Facebook also connects an Instagram that&apos;s linked to your Page. If your Instagram is a
+            separate account, use Connect Instagram.
+          </p>
         </div>
 
         {/* Store connection */}
         <ConnectShopify connected={store ? store.provider : null} />
 
-        <MediaUpload businessId={bizId} existing={media} />
+        <MediaUpload businessId={bizId} existingCount={mediaCount} />
         <PixelCard businessId={bizId} origin={origin} />
       </div>
 
