@@ -39,14 +39,14 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // True USD value (plain market rate, no buffer — this is a sale, not a top-up).
+    // True USD value (plain market rate, no buffer, this is a sale, not a top-up).
     let usdMinor = parsed.amountMinor;
     if (parsed.currency !== "USD") {
       try {
         const snap = await fetchUsdRate(parsed.currency);
         usdMinor = Math.round(parsed.amountMinor / snap.rate);
       } catch {
-        // Can't value it safely — skip rather than record a wrong number.
+        // Can't value it safely, skip rather than record a wrong number.
         return NextResponse.json({ ok: false, reason: "fx_unavailable" }, { status: 202 });
       }
     }

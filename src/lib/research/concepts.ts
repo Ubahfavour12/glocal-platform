@@ -32,6 +32,8 @@ Rules:
 - Adapt the pattern (hook type, pacing, emotional angle, CTA style), not the words.
 - Never write deceptive or unrealistic claims (no "make X in Y days", no guaranteed results, no medical cures). These get accounts banned.
 - Hooks must earn the first 3 seconds. CTAs must match the business goal.
+- Write like a real person. Never use em-dashes or en-dashes; use commas, periods, or separate sentences instead.
+- Never leave bracket placeholders like [category] or [business]. If you don't have a specific detail, use the actual product/category words from the brief or write around it naturally.
 - Output STRICT JSON only, no prose.`;
 
 /**

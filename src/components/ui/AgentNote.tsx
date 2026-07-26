@@ -1,5 +1,5 @@
 /**
- * The agent speaking in first person, plain language — UI Plan §1.
+ * The agent speaking in first person, plain language, UI Plan §1.
  * Amber accent is reserved for agent actions and highlights.
  */
 export function AgentNote({ children, time }: { children: React.ReactNode; time?: string }) {

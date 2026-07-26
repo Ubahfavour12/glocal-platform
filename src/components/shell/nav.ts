@@ -1,4 +1,4 @@
-/** Shared navigation — one source of truth for the desktop sidebar and the mobile drawer. */
+/** Shared navigation, one source of truth for the desktop sidebar and the mobile drawer. */
 export const NAV = [
   { href: "/today", label: "Today" },
   { href: "/approve", label: "Approve" },

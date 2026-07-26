@@ -4,7 +4,7 @@ import { useState } from "react";
 
 /**
  * Mark-as-sold, riding the evening approval card (design locked 2026-07-21):
- * one optional ten-second question inside the existing daily habit — never a
+ * one optional ten-second question inside the existing daily habit, never a
  * separate screen, never a nag. Skipping keeps the duel on chat-counting;
  * steady logging upgrades it to real-revenue judging.
  */
@@ -73,7 +73,7 @@ export function SalesCheckIn({ businessId }: { businessId: string }) {
             </button>
           </div>
           <p className="mt-2 text-xs text-ink-faint">
-            Optional — but when you log sales steadily, I optimise for money instead of chats.
+            Optional, but when you log sales steadily, I optimise for money instead of chats.
           </p>
         </>
       )}
@@ -81,7 +81,7 @@ export function SalesCheckIn({ businessId }: { businessId: string }) {
       {mode === "form" && (
         <div className="mt-3 grid gap-2">
           <label className="text-xs text-ink-muted">
-            Order total (USD) — the whole order, every item
+            Order total (USD), the whole order, every item
             <input
               type="number"
               min="0"
@@ -125,7 +125,7 @@ export function SalesCheckIn({ businessId }: { businessId: string }) {
       {mode === "done" && (
         <>
           <p className="mt-2 text-sm text-ink">
-            Saved — {logged} sale{logged === 1 ? "" : "s"} logged. Every one makes tomorrow&apos;s
+            Saved, {logged} sale{logged === 1 ? "" : "s"} logged. Every one makes tomorrow&apos;s
             budget smarter.
           </p>
           <div className="mt-3 flex gap-2">

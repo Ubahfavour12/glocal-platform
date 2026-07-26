@@ -7,7 +7,7 @@ import { SalesCheckIn } from "@/components/approval/SalesCheckIn";
 import { totalPlannedUsdMinor, type ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
 
 /**
- * The evening approval card — Blueprint §2.2 / UF-4. The single human moment
+ * The evening approval card, Blueprint §2.2 / UF-4. The single human moment
  * in the daily loop: the customer sees tomorrow's plan and taps once.
  */
 export function ApprovalCard({
@@ -50,7 +50,7 @@ export function ApprovalCard({
       <div className="datalabel">tomorrow&apos;s plan · {plan.planDate}</div>
       <h1 className="mt-1 text-2xl font-semibold tracking-tight">Ready for your approval</h1>
 
-      {/* yesterday's sales check-in — the ten-second optional question */}
+      {/* yesterday's sales check-in, the ten-second optional question */}
       {businessId && <SalesCheckIn businessId={businessId} />}
 
       {/* yesterday's scoreboard */}
@@ -107,7 +107,7 @@ export function ApprovalCard({
         <section className="mt-4 flex flex-col gap-2">
           {plan.commentary.map((line, i) => (
             <p key={i} className="text-xs leading-relaxed text-ink-muted">
-              — {line}
+             , {line}
             </p>
           ))}
         </section>

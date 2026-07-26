@@ -39,7 +39,7 @@ export async function POST() {
       {
         conceptId: "seed-b",
         hook: "POV: you found the shop everyone's talking about",
-        copy: "Message us on WhatsApp — we reply in minutes.",
+        copy: "Message us on WhatsApp, we reply in minutes.",
         budgetUsdMinor: 150,
       },
     ],
@@ -48,7 +48,7 @@ export async function POST() {
       "Both challengers passed the compliance check on the first try.",
     ],
     scoreboard: {
-      note: "This is your first plan — no duel to judge yet. Tomorrow starts the clock.",
+      note: "This is your first plan, no duel to judge yet. Tomorrow starts the clock.",
     },
   };
 

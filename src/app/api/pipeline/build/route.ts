@@ -6,7 +6,7 @@ import { livePipelineDeps } from "@/lib/research/pipeline-live";
 export const maxDuration = 60;
 
 /**
- * Phase 2.1 — the agent comes alive after signup. Fired (fire-and-forget) by
+ * Phase 2.1, the agent comes alive after signup. Fired (fire-and-forget) by
  * onboarding: researches the niche and writes the first concept batch for the
  * signed-in user's business. The nightly cron tops the pool up to the target.
  * Idempotent: a full pipeline short-circuits, so repeat calls are harmless.

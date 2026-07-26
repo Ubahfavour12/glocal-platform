@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Approve" };
 
 /**
- * The Approve tab — shows the latest awaiting plan for the signed-in user's
+ * The Approve tab, shows the latest awaiting plan for the signed-in user's
  * business, or an empty state. This is the mobile app's center tab (UI Plan
  * §2.2): approval-first.
  */
@@ -48,7 +48,7 @@ export default async function ApprovePage() {
         <div className="mt-8 rounded-card border border-line bg-surface-raised p-8 text-center">
           <p className="text-sm text-ink-muted">
             Each evening, once your campaigns are running, tomorrow&apos;s plan
-            appears here — two fresh challenger ads and a budget split — waiting
+            appears here, two fresh challenger ads and a budget split, waiting
             for one tap.
           </p>
         </div>

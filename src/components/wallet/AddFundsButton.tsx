@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 /**
- * Wallet funding — UF-2. Two paths:
+ * Wallet funding, UF-2. Two paths:
  *  - "Pay with card": real Flutterwave hosted checkout (test-mode until the
  *    merchant account goes live). The final ₦ price is quoted before redirect.
  *  - Dev top-up buttons: capped test credits, removed before launch.

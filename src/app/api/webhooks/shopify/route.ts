@@ -7,7 +7,7 @@ import { fetchUsdRate } from "@/lib/money/rates";
  * Shopify orders/create webhook. Shopify posts every new order here; we verify
  * it against the connected shop's secret, value it in USD, best-effort attribute
  * it back to the ad (via our click id on the order), and record a verified
- * conversion (source "store"). Never errors back at Shopify — a non-2xx makes
+ * conversion (source "store"). Never errors back at Shopify, a non-2xx makes
  * Shopify retry and eventually disable the webhook.
  */
 export async function POST(req: NextRequest) {

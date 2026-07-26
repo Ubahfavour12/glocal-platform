@@ -9,7 +9,7 @@ import type { ConnectionMode } from "@/lib/tracking/modes";
 export const maxDuration = 300;
 
 /**
- * Morning launcher cron — Phase 2.2. CRON_SECRET auth, runs after the evening
+ * Morning launcher cron, Phase 2.2. CRON_SECRET auth, runs after the evening
  * approvals. For every APPROVED, not-yet-launched plan it builds the real Meta
  * ad objects (all PAUSED) and mints each ad's smart link. Businesses without a
  * provisioned Meta child account are skipped as "awaiting_provisioning"

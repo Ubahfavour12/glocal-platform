@@ -12,7 +12,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 const META: Record<string, string> = {
   success: "Facebook / Instagram connected. The agent can now post organically alongside your ads.",
-  unconfigured: "Social connect isn't switched on yet — the Meta app keys are still pending.",
+  unconfigured: "Social connect isn't switched on yet, the Meta app keys are still pending.",
   no_pages: "No Facebook Page was found on that account. Create or pick a Page, then connect again.",
   no_business: "Finish onboarding first, then connect your accounts.",
   state_mismatch: "That connect link expired. Please try connecting again.",
@@ -21,9 +21,9 @@ const META: Record<string, string> = {
 
 const SHOPIFY: Record<string, string> = {
   success: "Shopify connected. Your sales now sync automatically for true return on spend.",
-  unconfigured: "Shopify connect isn't switched on yet — the Partner-app keys are still pending.",
+  unconfigured: "Shopify connect isn't switched on yet, the Partner-app keys are still pending.",
   bad_shop: "That doesn't look like a valid .myshopify.com store. Check the address and try again.",
-  shop_mismatch: "The store didn't match — please start the connection again.",
+  shop_mismatch: "The store didn't match, please start the connection again.",
   bad_hmac: "We couldn't verify the response from Shopify. Please try again.",
   state_mismatch: "That connect link expired. Please try connecting again.",
   exchange_failed: "We couldn't finish connecting with Shopify. Please try again.",

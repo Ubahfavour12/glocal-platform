@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
  * Email-link landing (UF-1), server-side (SSR) compatible.
  *
  * The default Supabase email template uses the implicit flow, which delivers
- * the session in the URL fragment — unreadable by a server route, so it can
+ * the session in the URL fragment, unreadable by a server route, so it can
  * never sign the user in. The email templates therefore point HERE with a
  * `token_hash` + `type`, which we verify server-side (verifyOtp). A `?code=`
  * (OAuth/PKCE) is exchanged as a fallback.

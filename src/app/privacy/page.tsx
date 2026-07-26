@@ -1,9 +1,9 @@
 export const metadata = {
-  title: "Privacy Policy — Glocal",
+  title: "Privacy Policy, Glocal",
 };
 
 /**
- * Privacy policy v1 — working draft for the pre-launch period (required by
+ * Privacy policy v1, working draft for the pre-launch period (required by
  * ad-platform app review). Replaced by counsel-reviewed policy before public
  * launch (Dev Plan launch checklist).
  */

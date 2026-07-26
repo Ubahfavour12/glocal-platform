@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 
 /**
- * Daily reconciliation — Blueprint §5, PRD F-02 acceptance:
+ * Daily reconciliation, Blueprint §5, PRD F-02 acceptance:
  * "ledger reconciles to the cent". Runs as a cron (Vercel cron or Supabase
  * scheduled function) with CRON_SECRET auth.
  *
- * Phase 1 (now): internal integrity — no negative balances, no sign/kind
+ * Phase 1 (now): internal integrity, no negative balances, no sign/kind
  * mismatches, dev-topup caps respected.
  * Phase 2 (with PSPs): compare topup/refund sums against Stripe/Flutterwave
  * settlement records. Phase 3 (with ads live): compare ad_spend against
@@ -55,8 +55,8 @@ export async function GET(req: NextRequest) {
     ran_at: new Date().toISOString(),
     wallets_checked: balances?.length ?? 0,
     issues,
-    psp_comparison: "pending — Stripe/Flutterwave not connected",
-    ad_network_comparison: "pending — ads not live",
+    psp_comparison: "pending, Stripe/Flutterwave not connected",
+    ad_network_comparison: "pending, ads not live",
   };
 
   await supabase.from("audit_log").insert({

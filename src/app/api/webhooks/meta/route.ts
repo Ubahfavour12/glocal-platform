@@ -4,7 +4,7 @@ import { handleRejection, type Strike } from "@/lib/quarantine/rejection";
 import { createServiceClient } from "@/lib/supabase/server";
 
 /**
- * Meta webhook — ad review events (Blueprint §6.2 post-rejection loop).
+ * Meta webhook, ad review events (Blueprint §6.2 post-rejection loop).
  * GET  = subscription handshake (hub.challenge echo, gated by verify token).
  * POST = signed change notifications; DISAPPROVED ads flow through
  *        classifyRejection → strike accounting → quarantine, all recorded.

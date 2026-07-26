@@ -4,7 +4,7 @@ import { validateOrder, type AttributedOrder, type CodeSource } from "@/lib/trac
 
 /**
  * Mark-as-sold (UF-6 sales confirmation). The seller records one WHOLE order:
- * full total, optional quantity + items, and how it ties to an ad — the ref
+ * full total, optional quantity + items, and how it ties to an ad, the ref
  * code from the buyer's message, a seller-picked ad, or "none" (repeat
  * customer / direct buyer; valid and never forced onto an ad). Ownership and
  * code validity are enforced inside the record_sale database function.

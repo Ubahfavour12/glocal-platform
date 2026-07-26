@@ -6,7 +6,7 @@ import { MetricChip } from "@/components/ui/MetricChip";
 /**
  * Public "take a tour" demo (Phase 3, decision D1). A read-only sample account
  * showing exactly what the dashboard looks like once the agent is running —
- * believable numbers, a live duel, verified sales, real activity — with no auth
+ * believable numbers, a live duel, verified sales, real activity, with no auth
  * and no wallet. Shareable before signup. All data here is hardcoded fiction.
  */
 export const metadata: Metadata = {
@@ -21,7 +21,7 @@ const DUEL = [
 ];
 
 const ACTIVITY = [
-  { text: "Judged yesterday's duel — Challenger A dethroned the champion", time: "2h" },
+  { text: "Judged yesterday's duel, Challenger A dethroned the champion", time: "2h" },
   { text: "Launched today's two challengers on Meta", time: "5h" },
   { text: "Rendered new creatives from your product photo", time: "6h" },
   { text: "Added 6 fresh concepts to your pipeline", time: "9h" },
@@ -35,7 +35,7 @@ export default function DemoPage() {
       {/* Demo banner */}
       <div className="border-b border-line bg-accent-soft px-6 py-2.5 text-center text-sm text-ink">
         <span className="datalabel text-accent-bright">demo</span>{" "}
-        <span className="ml-2">Sample account — this is what your dashboard looks like once the agent is running.</span>
+        <span className="ml-2">Sample account, this is what your dashboard looks like once the agent is running.</span>
       </div>
 
       <div className="mx-auto max-w-5xl px-6 py-10">
@@ -63,7 +63,7 @@ export default function DemoPage() {
 
         <section className="mt-6">
           <AgentNote time="2h">
-            Good news — Challenger A just beat your champion on return on spend, so I&apos;ve crowned it
+            Good news, Challenger A just beat your champion on return on spend, so I&apos;ve crowned it
             and lined up two fresh challengers for tonight. You don&apos;t need to do anything.
           </AgentNote>
         </section>
@@ -131,7 +131,7 @@ export default function DemoPage() {
           </div>
           <p className="mt-3 text-sm text-ink-muted">
             50 scripted concepts ready, reverse-engineered from the best-performing ads in skincare.
-            Only the two entering each day&apos;s duel get rendered — you always see what&apos;s coming next.
+            Only the two entering each day&apos;s duel get rendered, you always see what&apos;s coming next.
           </p>
         </div>
 
@@ -152,7 +152,7 @@ export default function DemoPage() {
           <h2 className="text-xl font-semibold tracking-tight">This runs while you run your business.</h2>
           <p className="mx-auto mt-2 max-w-md text-sm text-ink-muted">
             Set a budget once. The agent researches, writes, launches, tests, and doubles down on what
-            sells — and shows you every move in plain language.
+            sells, and shows you every move in plain language.
           </p>
           <div className="mt-5 flex items-center justify-center gap-3">
             <Link

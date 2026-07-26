@@ -12,23 +12,25 @@ export interface CountryCurrency {
   /** ISO 4217 */
   currency: string;
   symbol: string;
+  /** International dialling code, e.g. "+234" (used for phone-field hints). */
+  dialCode: string;
 }
 
 // First-market + common signup countries. Extend freely; unknown -> USD.
 const COUNTRIES: CountryCurrency[] = [
-  { country: "NG", countryName: "Nigeria", currency: "NGN", symbol: "₦" },
-  { country: "GH", countryName: "Ghana", currency: "GHS", symbol: "₵" },
-  { country: "KE", countryName: "Kenya", currency: "KES", symbol: "KSh" },
-  { country: "ZA", countryName: "South Africa", currency: "ZAR", symbol: "R" },
-  { country: "UG", countryName: "Uganda", currency: "UGX", symbol: "USh" },
-  { country: "TZ", countryName: "Tanzania", currency: "TZS", symbol: "TSh" },
-  { country: "EG", countryName: "Egypt", currency: "EGP", symbol: "E£" },
-  { country: "US", countryName: "United States", currency: "USD", symbol: "$" },
-  { country: "GB", countryName: "United Kingdom", currency: "GBP", symbol: "£" },
-  { country: "CA", countryName: "Canada", currency: "CAD", symbol: "C$" },
-  { country: "EU", countryName: "Eurozone", currency: "EUR", symbol: "€" },
-  { country: "IN", countryName: "India", currency: "INR", symbol: "₹" },
-  { country: "AE", countryName: "United Arab Emirates", currency: "AED", symbol: "د.إ" },
+  { country: "NG", countryName: "Nigeria", currency: "NGN", symbol: "₦", dialCode: "+234" },
+  { country: "GH", countryName: "Ghana", currency: "GHS", symbol: "₵", dialCode: "+233" },
+  { country: "KE", countryName: "Kenya", currency: "KES", symbol: "KSh", dialCode: "+254" },
+  { country: "ZA", countryName: "South Africa", currency: "ZAR", symbol: "R", dialCode: "+27" },
+  { country: "UG", countryName: "Uganda", currency: "UGX", symbol: "USh", dialCode: "+256" },
+  { country: "TZ", countryName: "Tanzania", currency: "TZS", symbol: "TSh", dialCode: "+255" },
+  { country: "EG", countryName: "Egypt", currency: "EGP", symbol: "E£", dialCode: "+20" },
+  { country: "US", countryName: "United States", currency: "USD", symbol: "$", dialCode: "+1" },
+  { country: "GB", countryName: "United Kingdom", currency: "GBP", symbol: "£", dialCode: "+44" },
+  { country: "CA", countryName: "Canada", currency: "CAD", symbol: "C$", dialCode: "+1" },
+  { country: "EU", countryName: "Eurozone", currency: "EUR", symbol: "€", dialCode: "+" },
+  { country: "IN", countryName: "India", currency: "INR", symbol: "₹", dialCode: "+91" },
+  { country: "AE", countryName: "United Arab Emirates", currency: "AED", symbol: "د.إ", dialCode: "+971" },
 ];
 
 export const DEFAULT_COUNTRY: CountryCurrency = {
@@ -36,6 +38,7 @@ export const DEFAULT_COUNTRY: CountryCurrency = {
   countryName: "United States",
   currency: "USD",
   symbol: "$",
+  dialCode: "+1",
 };
 
 /** Alphabetical country list for the onboarding selector. */
@@ -48,4 +51,9 @@ export function currencyForCountry(code: string | null | undefined): CountryCurr
   if (!code) return DEFAULT_COUNTRY;
   const c = COUNTRIES.find((x) => x.country === code.trim().toUpperCase());
   return c ?? DEFAULT_COUNTRY;
+}
+
+/** International dialling code for a country, e.g. "+234"; unknown -> "+". */
+export function dialCodeForCountry(code: string | null | undefined): string {
+  return currencyForCountry(code).dialCode;
 }

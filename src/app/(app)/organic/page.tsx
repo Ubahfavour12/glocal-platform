@@ -71,7 +71,7 @@ export default async function OrganicPage() {
         <div className="datalabel">scheduled &amp; posted</div>
         {posts.length === 0 ? (
           <p className="mt-3 text-sm text-ink-faint">
-            Nothing scheduled yet — the agent posts once a day once you&apos;re connected and live.
+            Nothing scheduled yet, the agent posts once a day once you&apos;re connected and live.
           </p>
         ) : (
           <ul className="mt-3 flex flex-col gap-2">

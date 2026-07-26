@@ -8,10 +8,10 @@ import {
   MIN_DAILY_BUDGET_USD_MINOR,
   minFirstDepositUsdMinor,
 } from "@/lib/money/ledger";
-import { currencyForCountry, listCountries } from "@/lib/money/currency";
+import { currencyForCountry, dialCodeForCountry, listCountries } from "@/lib/money/currency";
 
 /**
- * Quick-Start onboarding — UF-1 / PRD F-01.
+ * Quick-Start onboarding, UF-1 / PRD F-01.
  * Four steps, under two minutes: basics → media → goal → budget.
  * The agent infers everything else; the Strategy Studio holds the deep flow.
  */
@@ -40,6 +40,7 @@ export default function OnboardingPage() {
   const [geo, setGeo] = useState("");
 
   const local = currencyForCountry(country); // secondary display currency
+  const dial = dialCodeForCountry(country); // phone-field hint for their country
   const [mediaNames, setMediaNames] = useState<string[]>([]);
   // Client-side previews only: the files never leave the device or get saved.
   const [mediaPreviews, setMediaPreviews] = useState<
@@ -75,7 +76,7 @@ export default function OnboardingPage() {
         JSON.stringify({ name, category, geo, goal, dailyUsd, mediaNames, screen }),
       );
     } catch {
-      // storage unavailable — proceed anyway
+      // storage unavailable, proceed anyway
     }
 
     // Signed-in users get a real business row (RLS scopes it to them).
@@ -103,11 +104,19 @@ export default function OnboardingPage() {
     router.push("/today");
   }
 
+  function removeMedia(name: string) {
+    const target = mediaPreviews.find((p) => p.name === name);
+    if (target) URL.revokeObjectURL(target.url);
+    const next = mediaPreviews.filter((p) => p.name !== name);
+    setMediaPreviews(next);
+    setMediaNames(next.map((p) => p.name));
+  }
+
   const pct = Math.round(((step + 1) / STEPS.length) * 100);
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-xl flex-col px-6 py-12">
-      {/* progress — the mono register from the prototype */}
+      {/* progress, the mono register from the prototype */}
       <div className="mb-10">
         <div className="flex items-center justify-between">
           <span className="datalabel">onboarding completion</span>
@@ -122,7 +131,7 @@ export default function OnboardingPage() {
       </div>
 
       <div className="datalabel">
-        step {step + 1} of {STEPS.length} — {STEPS[step].toLowerCase()}
+        step {step + 1} of {STEPS.length}, {STEPS[step].toLowerCase()}
       </div>
 
       {step === 0 && (
@@ -167,12 +176,12 @@ export default function OnboardingPage() {
           </div>
           {screen === "blocked" && category.trim().length > 1 && (
             <p className="mt-3 text-sm text-negative">
-              Sorry — this category can&apos;t be advertised through the platform.
+              Sorry, this category can&apos;t be advertised through the platform.
             </p>
           )}
           {screen === "restricted" && (
             <p className="mt-3 text-sm text-ink-muted">
-              This category has special advertising rules — the agent will apply
+              This category has special advertising rules, the agent will apply
               extra compliance checks to every creative.
             </p>
           )}
@@ -186,25 +195,46 @@ export default function OnboardingPage() {
             1–5 photos or videos. The agent studies them and the most viral ads
             in your niche to build your creative pipeline.
           </p>
-          <label className="mt-6 flex cursor-pointer flex-col items-center justify-center rounded-card border border-dashed border-line bg-surface-raised px-6 py-10 text-center transition-colors hover:border-accent">
-            <span className="text-sm text-ink-muted">Tap to add photos or videos</span>
-            <span className="datalabel mt-1">jpg · png · mp4 — up to 5 files</span>
+          <label
+            className={`mt-6 flex flex-col items-center justify-center rounded-card border border-dashed px-6 py-10 text-center transition-colors ${
+              mediaPreviews.length >= 5
+                ? "pointer-events-none border-line bg-surface opacity-50"
+                : "cursor-pointer border-line bg-surface-raised hover:border-accent"
+            }`}
+          >
+            <span className="text-sm text-ink-muted">
+              {mediaPreviews.length >= 5 ? "Maximum reached (5 files)" : "Tap to add photos or videos"}
+            </span>
+            <span className="datalabel mt-1">
+              {mediaPreviews.length > 0
+                ? `${mediaPreviews.length} of 5 added`
+                : "jpg · png · mp4, up to 5 files"}
+            </span>
             <input
               type="file"
               accept="image/*,video/*"
               multiple
               className="hidden"
               onChange={(e) => {
-                const files = Array.from(e.target.files ?? []).slice(0, 5);
-                mediaPreviews.forEach((p) => URL.revokeObjectURL(p.url));
-                setMediaPreviews(
-                  files.map((f) => ({
+                const picked = Array.from(e.target.files ?? []);
+                e.target.value = ""; // let the same file be re-picked after removal
+                if (picked.length === 0) return;
+                // Append, don't replace: keep what's there and top up to 5.
+                const remaining = 5 - mediaPreviews.length;
+                if (remaining <= 0) return;
+                const have = new Set(mediaPreviews.map((p) => p.name));
+                const additions = picked
+                  .filter((f) => !have.has(f.name))
+                  .slice(0, remaining)
+                  .map((f) => ({
                     name: f.name,
                     url: URL.createObjectURL(f),
                     isVideo: f.type.startsWith("video"),
-                  })),
-                );
-                setMediaNames(files.map((f) => f.name));
+                  }));
+                if (additions.length === 0) return;
+                const next = [...mediaPreviews, ...additions];
+                setMediaPreviews(next);
+                setMediaNames(next.map((p) => p.name));
               }}
             />
           </label>
@@ -214,7 +244,7 @@ export default function OnboardingPage() {
                 {mediaPreviews.map((m) => (
                   <div
                     key={m.name}
-                    className="relative aspect-square overflow-hidden rounded-lg border border-line bg-surface-overlay"
+                    className="group relative aspect-square overflow-hidden rounded-lg border border-line bg-surface-overlay"
                   >
                     {m.isVideo ? (
                       <video src={m.url} className="h-full w-full object-cover" muted playsInline />
@@ -222,6 +252,14 @@ export default function OnboardingPage() {
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={m.url} alt={m.name} className="h-full w-full object-cover" />
                     )}
+                    <button
+                      type="button"
+                      onClick={() => removeMedia(m.name)}
+                      aria-label={`Remove ${m.name}`}
+                      className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-xs text-white transition-colors hover:bg-black/80"
+                    >
+                      ✕
+                    </button>
                   </div>
                 ))}
               </div>
@@ -241,7 +279,17 @@ export default function OnboardingPage() {
             {GOALS.map((g) => (
               <button
                 key={g.id}
-                onClick={() => setGoal(g.id)}
+                onClick={() => {
+                  setGoal(g.id);
+                  // Start the WhatsApp field with their country's dial code so
+                  // they just append the rest; don't clobber a typed value.
+                  setDestination((d) => {
+                    const t = d.trim();
+                    if (g.id === "whatsapp" && t === "") return `${dial} `;
+                    if (g.id !== "whatsapp" && t === dial) return "";
+                    return d;
+                  });
+                }}
                 className={`rounded-card border px-5 py-4 text-left transition-colors ${
                   goal === g.id
                     ? "border-accent bg-accent-soft"
@@ -265,9 +313,7 @@ export default function OnboardingPage() {
                 type={goal === "whatsapp" ? "tel" : "url"}
                 value={destination}
                 onChange={(e) => setDestination(e.target.value)}
-                placeholder={
-                  goal === "whatsapp" ? "+234 913 371 2092" : "https://yourshop.com"
-                }
+                placeholder={goal === "whatsapp" ? dial : "https://yourshop.com"}
                 className="mt-2 w-full rounded-lg border border-line bg-surface-raised px-4 py-3 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
               />
               <p className="mt-2 text-xs text-ink-faint">
@@ -304,7 +350,7 @@ export default function OnboardingPage() {
             />
           </div>
           <div className="mt-6 rounded-card border border-line bg-surface-raised p-5">
-            <div className="datalabel">first deposit — 7 days of runway</div>
+            <div className="datalabel">first deposit, 7 days of runway</div>
             <div className="mt-2 font-mono text-xl font-semibold">
               ${depositUsd.toFixed(2)}
             </div>

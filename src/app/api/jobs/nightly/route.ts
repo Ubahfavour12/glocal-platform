@@ -15,7 +15,7 @@ import type { PersonaMode } from "@/lib/guardrails/budget";
 export const maxDuration = 300;
 
 /**
- * The nightly run — Vercel cron (see vercel.json), CRON_SECRET auth like
+ * The nightly run, Vercel cron (see vercel.json), CRON_SECRET auth like
  * reconcile. For every business: live metrics (when a Meta child account
  * exists) -> verdict + fatigue -> plan -> gateway -> approvals row awaiting
  * the evening tap. Businesses without live ads still get a plan from their

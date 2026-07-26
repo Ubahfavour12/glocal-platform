@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { currencyForCountry, DEFAULT_COUNTRY, listCountries } from "./currency";
+import { currencyForCountry, dialCodeForCountry, DEFAULT_COUNTRY, listCountries } from "./currency";
 
 describe("currencyForCountry", () => {
   it("maps known countries to their local currency + symbol", () => {
@@ -12,6 +12,18 @@ describe("currencyForCountry", () => {
     expect(currencyForCountry("ZZ")).toEqual(DEFAULT_COUNTRY);
     expect(currencyForCountry(null)).toEqual(DEFAULT_COUNTRY);
     expect(currencyForCountry("")).toEqual(DEFAULT_COUNTRY);
+  });
+});
+
+describe("dialCodeForCountry", () => {
+  it("returns the country's dialling code", () => {
+    expect(dialCodeForCountry("NG")).toBe("+234");
+    expect(dialCodeForCountry("gb")).toBe("+44");
+    expect(dialCodeForCountry("US")).toBe("+1");
+  });
+  it("falls back to the default country's code for unknown/empty", () => {
+    expect(dialCodeForCountry("ZZ")).toBe(DEFAULT_COUNTRY.dialCode);
+    expect(dialCodeForCountry(null)).toBe(DEFAULT_COUNTRY.dialCode);
   });
 });
 

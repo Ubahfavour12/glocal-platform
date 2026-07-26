@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Glocal — Autonomous Marketing",
+    default: "Glocal, Autonomous Marketing",
     template: "%s · Glocal",
   },
   description:

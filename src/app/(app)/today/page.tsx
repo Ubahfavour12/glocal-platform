@@ -86,10 +86,10 @@ export default async function TodayPage() {
   }
 
   const agentLine = awaiting
-    ? `Tomorrow's plan is ready — review the two new ads and approve when you're happy.`
+    ? `Tomorrow's plan is ready, review the two new ads and approve when you're happy.`
     : pipelineCount > 0
       ? `Your pipeline has ${pipelineCount} concepts. Fund your wallet and I'll launch the first duel this evening.`
-      : `I'm ready when you are. Fund your wallet and upload a product photo — I'll study the top ads in your niche and have tomorrow's first two waiting for approval.`;
+      : `I'm ready when you are. Fund your wallet and upload a product photo, I'll study the top ads in your niche and have tomorrow's first two waiting for approval.`;
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -126,7 +126,7 @@ export default async function TodayPage() {
           <p className="mt-3 text-sm text-ink-muted">
             {duelRunning
               ? "A duel is running: your champion and two challengers are competing. Open it for the live scoreboard."
-              : "No test running yet. Once you're live, your champion and two fresh challengers compete here every day — judged after 24 hours and 5,000 impressions."}
+              : "No test running yet. Once you're live, your champion and two fresh challengers compete here every day, judged after 24 hours and 5,000 impressions."}
           </p>
         </Link>
 
@@ -156,7 +156,7 @@ export default async function TodayPage() {
         <p className="mt-3 text-sm text-ink-muted">
           {pipelineCount === 0
             ? "After onboarding, the research agent reverse-engineers the most viral ads in your niche into 50 ranked, scripted concepts."
-            : `${pipelineCount} scripted concepts ready. Only the two entering each day's duel are rendered — you always see what's coming next.`}
+            : `${pipelineCount} scripted concepts ready. Only the two entering each day's duel are rendered, you always see what's coming next.`}
         </p>
       </Link>
     </div>

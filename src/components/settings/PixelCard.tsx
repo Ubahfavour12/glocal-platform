@@ -4,7 +4,7 @@ import { useState } from "react";
 import { pixelSnippet } from "@/lib/tracking/pixel";
 
 /**
- * Website tracking pixel — the one line a customer pastes into their site's
+ * Website tracking pixel, the one line a customer pastes into their site's
  * header so we can attribute purchases back to the exact ad. Shopify sellers
  * connect instead (one click); this is for every other website.
  */

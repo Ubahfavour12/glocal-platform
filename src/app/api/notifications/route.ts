@@ -5,7 +5,7 @@ import { describeActivity, relativeTime, type RawEntry } from "@/lib/dashboard/a
 /**
  * Recent agent activity for the in-app notification bell (Phase 3). Reuses the
  * same journal feed as /activity, mapped to plain-language lines. RLS-scoped to
- * the signed-in owner's business — the bell is a read-only convenience.
+ * the signed-in owner's business, the bell is a read-only convenience.
  */
 export const dynamic = "force-dynamic";
 

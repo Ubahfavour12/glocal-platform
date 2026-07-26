@@ -4,7 +4,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 
 /**
  * UF-2 step 3: Flutterwave redirects the customer here after checkout with
- * ?status&tx_ref&transaction_id. Query params are UNTRUSTED — we verify the
+ * ?status&tx_ref&transaction_id. Query params are UNTRUSTED, we verify the
  * transaction against Flutterwave's API, then credit the ledger via the
  * idempotent record_psp_topup. The customer lands back on /wallet either way.
  */

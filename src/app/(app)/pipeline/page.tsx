@@ -14,6 +14,11 @@ interface ConceptRow {
   rendered: boolean;
 }
 
+/** Strip the AI "tells" from generated copy: em/en dashes read as machine-written. */
+function clean(text: string | null | undefined): string {
+  return (text ?? "").replace(/\s*[—–]\s*/g, ", ").trim();
+}
+
 export default async function PipelinePage() {
   const supabase = await createClient();
   const { data: business } = await supabase
@@ -33,57 +38,93 @@ export default async function PipelinePage() {
       ) as ConceptRow[]
     : [];
 
+  const renderedCount = concepts.filter((c) => c.rendered).length;
+
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-4xl">
       <div className="datalabel">pipeline</div>
-      <div className="flex items-baseline justify-between">
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Concepts, ranked</h1>
-        <span className="datalabel">{concepts.length} / 50</span>
+      <div className="flex items-end justify-between">
+        <div>
+          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Concepts, ranked</h1>
+          <p className="mt-1 text-sm text-ink-muted">
+            Your best-fit ad ideas, reverse-engineered from what&apos;s winning in your niche.
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="font-mono text-2xl font-semibold text-ink">{concepts.length}</div>
+          <div className="datalabel">of 50 · {renderedCount} rendered</div>
+        </div>
       </div>
 
       {concepts.length === 0 ? (
         <div className="mt-8 rounded-card border border-line bg-surface-raised p-8 text-center">
-          <p className="text-sm text-ink-muted">
-            Your concept library builds here right after onboarding — the research agent
-            reverse-engineers the most viral ads in your niche into 50 ranked, scripted concepts.
-            Each card shows the hook, storyboard beats, and whether it has been rendered for a duel.
+          <p className="mx-auto max-w-md text-sm text-ink-muted">
+            Your concept library builds here right after onboarding. The research agent studies the
+            most viral ads in your niche and turns them into 50 ranked, scripted ideas. Only the two
+            entering each day&apos;s test get rendered, so you always see what&apos;s coming next.
           </p>
         </div>
       ) : (
-        <div className="mt-6 grid gap-3">
-          {concepts.map((c) => (
-            <div key={c.id} className="rounded-card border border-line bg-surface-raised p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-sm text-ink-faint">#{c.rank}</span>
-                  <p className="text-sm font-medium text-ink">{c.hook}</p>
+        <div className="mt-6 flex flex-col gap-3">
+          {concepts.map((c) => {
+            const beats = (c.storyboard ?? []).filter(Boolean);
+            return (
+              <article
+                key={c.id}
+                className="rounded-card border border-line bg-surface-raised p-5 transition-colors hover:border-ink-faint"
+              >
+                <div className="flex items-start gap-4">
+                  {/* rank medallion, accent for the top three */}
+                  <div
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-mono text-sm font-semibold ${
+                      c.rank <= 3 ? "bg-accent text-white" : "bg-surface-overlay text-ink-muted"
+                    }`}
+                  >
+                    {c.rank}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <h3 className="text-[15px] font-semibold leading-snug text-ink">{clean(c.hook)}</h3>
+                      <span
+                        className={`mt-0.5 shrink-0 rounded-full px-2.5 py-0.5 text-[11px] ${
+                          c.rendered
+                            ? "bg-accent-soft text-accent-bright"
+                            : "bg-surface-overlay text-ink-faint"
+                        }`}
+                      >
+                        {c.rendered ? "rendered" : "scripted"}
+                      </span>
+                    </div>
+
+                    {c.copy_angle && (
+                      <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{clean(c.copy_angle)}</p>
+                    )}
+
+                    {beats.length > 0 && (
+                      <ol className="mt-4 flex flex-col gap-2 border-l border-line pl-4">
+                        {beats.map((beat, i) => (
+                          <li key={i} className="flex gap-2 text-xs leading-relaxed text-ink-muted">
+                            <span className="datalabel shrink-0 pt-0.5">shot {i + 1}</span>
+                            <span>{clean(beat)}</span>
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+
+                    <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                      <span className="rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-accent-bright">
+                        {clean(c.cta)}
+                      </span>
+                      {c.source_pattern && (
+                        <span className="text-xs text-ink-faint">Borrows {clean(c.source_pattern)}</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] ${
-                    c.rendered
-                      ? "bg-accent-soft text-accent-bright"
-                      : "bg-surface-overlay text-ink-faint"
-                  }`}
-                >
-                  {c.rendered ? "rendered" : "scripted"}
-                </span>
-              </div>
-              <p className="mt-2 text-xs text-ink-muted">{c.copy_angle}</p>
-              {c.storyboard && c.storyboard.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {c.storyboard.slice(0, 4).map((beat, i) => (
-                    <span key={i} className="rounded bg-surface-overlay px-2 py-0.5 text-[11px] text-ink-faint">
-                      {beat}
-                    </span>
-                  ))}
-                </div>
-              )}
-              <div className="mt-2 flex items-center gap-3 text-[11px] text-ink-faint">
-                <span className="font-mono">CTA: {c.cta}</span>
-                {c.source_pattern && <span>· borrows: {c.source_pattern}</span>}
-              </div>
-            </div>
-          ))}
+              </article>
+            );
+          })}
         </div>
       )}
     </div>

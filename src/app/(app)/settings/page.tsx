@@ -42,13 +42,15 @@ export default async function SettingsPage() {
     supabase.from("wallet_balances").select("balance_usd_minor").eq("business_id", bizId).maybeSingle(),
     supabase.from("social_connections").select("network, display_name").eq("business_id", bizId).eq("status", "active"),
     supabase.from("store_connections").select("id, provider, status").eq("business_id", bizId).eq("status", "active").maybeSingle(),
-    supabase.from("media_assets").select("public_url, kind").eq("business_id", bizId).order("created_at", { ascending: false }).limit(12),
+    supabase.from("media_assets").select("id, storage_path, public_url, kind").eq("business_id", bizId).order("created_at", { ascending: false }).limit(12),
   ]);
 
   const balanceUsdMinor = Number(walletRes.data?.balance_usd_minor ?? 0);
   const socials = (socialRes.data ?? []) as { network: string; display_name: string | null }[];
   const store = storeRes.data as { provider: string } | null;
-  const media = ((mediaRes.data ?? []) as { public_url: string; kind: string }[]).map((m) => ({
+  const media = ((mediaRes.data ?? []) as { id: string; storage_path: string; public_url: string; kind: string }[]).map((m) => ({
+    id: m.id,
+    storagePath: m.storage_path,
     publicUrl: m.public_url,
     kind: m.kind,
   }));

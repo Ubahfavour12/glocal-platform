@@ -85,7 +85,7 @@ export default async function DuelPage() {
       <section className="mt-6">
         <div className="datalabel">verdict history</div>
         {verdicts.length === 0 ? (
-          <p className="mt-3 text-sm text-ink-faint">No verdicts yet — they appear as duels resolve.</p>
+          <p className="mt-3 text-sm text-ink-faint">No verdicts yet, they appear as duels resolve.</p>
         ) : (
           <ul className="mt-3 flex flex-col">
             {verdicts.map((v, i) => (

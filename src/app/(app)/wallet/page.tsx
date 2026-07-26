@@ -80,7 +80,7 @@ export default async function WalletPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="datalabel">wallet{wallet ? ` — ${wallet.business.name}` : ""}</div>
+      <div className="datalabel">wallet{wallet ? `, ${wallet.business.name}` : ""}</div>
       <h1 className="mt-1 text-2xl font-semibold tracking-tight">Balance &amp; runway</h1>
 
       <section className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-3">
@@ -134,7 +134,7 @@ export default async function WalletPage() {
           </ul>
         ) : (
           <p className="mt-3 text-sm text-ink-muted">
-            Every top-up, ad spend, fee, and refund appears here — append-only,
+            Every top-up, ad spend, fee, and refund appears here, append-only,
             reconciled daily to the cent. Unspent balance is refundable anytime;
             money delivered to ad networks is not.
           </p>

@@ -15,9 +15,9 @@ const GOALS: { id: Goal; label: string }[] = [
 ];
 
 const PERSONAS: { id: Persona; label: string; blurb: string }[] = [
-  { id: "conservative", label: "Conservative", blurb: "80% to the champion — steady, low variance" },
-  { id: "smart", label: "Smart", blurb: "70/30 — the balanced default" },
-  { id: "aggressive", label: "Aggressive", blurb: "60% champion — tests harder, faster learning" },
+  { id: "conservative", label: "Conservative", blurb: "80% to the champion, steady, low variance" },
+  { id: "smart", label: "Smart", blurb: "70/30, the balanced default" },
+  { id: "aggressive", label: "Aggressive", blurb: "60% champion, tests harder, faster learning" },
 ];
 
 export function SettingsForm({

@@ -7,7 +7,7 @@ import {
 import { createServiceClient } from "@/lib/supabase/server";
 
 /**
- * Flutterwave webhook — the reliability layer on top of redirect-confirm
+ * Flutterwave webhook, the reliability layer on top of redirect-confirm
  * (TRD: webhook ingestion service). Even if the customer closes the browser
  * before redirecting, the credit still lands.
  *

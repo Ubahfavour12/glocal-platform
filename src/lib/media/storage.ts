@@ -30,6 +30,7 @@ export interface MediaAsset {
   id: string;
   publicUrl: string;
   kind: "image" | "video";
+  storagePath: string;
 }
 
 /** Upload one file (client-side) and index it. RLS scopes media_assets to the owner. */
@@ -56,7 +57,18 @@ export async function uploadProductMedia(
     .single();
   if (error) throw new Error(error.message);
 
-  return { id: data.id as string, publicUrl, kind };
+  return { id: data.id as string, publicUrl, kind, storagePath: path };
+}
+
+/** Remove one asset: delete the file, then its index row (RLS-scoped to owner). */
+export async function deleteProductMedia(
+  supabase: SupabaseClient,
+  assetId: string,
+  storagePath: string,
+): Promise<void> {
+  await supabase.storage.from(MEDIA_BUCKET).remove([storagePath]);
+  const { error } = await supabase.from("media_assets").delete().eq("id", assetId);
+  if (error) throw new Error(error.message);
 }
 
 /** The render source: the most recent image the business uploaded, if any. */

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV } from "./nav";
 
-/** Web navigation — UI Plan §2.1. Desktop-only; the mobile drawer mirrors it. */
+/** Web navigation, UI Plan §2.1. Desktop-only; the mobile drawer mirrors it. */
 export function Sidebar() {
   const pathname = usePathname();
   return (

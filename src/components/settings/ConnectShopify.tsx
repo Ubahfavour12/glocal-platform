@@ -15,7 +15,7 @@ export function ConnectShopify({ connected }: { connected: string | null }) {
       <div className="rounded-card border border-line bg-surface-raised p-5">
         <div className="datalabel">store connection</div>
         <p className="mt-2 text-sm text-ink">
-          {connected} connected — sales sync automatically for true return on spend.
+          {connected} connected, sales sync automatically for true return on spend.
         </p>
       </div>
     );
@@ -31,7 +31,7 @@ export function ConnectShopify({ connected }: { connected: string | null }) {
     <div className="rounded-card border border-line bg-surface-raised p-5">
       <div className="datalabel">store connection</div>
       <p className="mt-2 text-sm text-ink-muted">
-        On Shopify? Connect once for automatic sales tracking — one click, zero code.
+        On Shopify? Connect once for automatic sales tracking, one click, zero code.
       </p>
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
         <input

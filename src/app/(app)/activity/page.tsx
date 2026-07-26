@@ -32,7 +32,7 @@ export default async function ActivityPage() {
       {entries.length === 0 ? (
         <div className="mt-8 rounded-card border border-line bg-surface-raised p-8 text-center">
           <p className="text-sm text-ink-muted">
-            The full audit trail lands here — every launch, pause, budget move, compliance scan, and
+            The full audit trail lands here, every launch, pause, budget move, compliance scan, and
             verdict, in plain language, within a minute of it happening. Nothing yet; finish
             onboarding and the agent starts working tonight.
           </p>

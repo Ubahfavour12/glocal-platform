@@ -3,13 +3,13 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { buildWhatsappPrefill } from "@/lib/tracking/attribution";
 
 /**
- * Smart Link redirect — TRD §3.4, DB-backed as of Phase 2.2.
+ * Smart Link redirect, TRD §3.4, DB-backed as of Phase 2.2.
  * Every ad points here. One indexed lookup resolves the destination, the
  * click is logged fire-and-forget, and the visitor is redirected instantly.
  *
  * WhatsApp destinations carry the ad's REF CODE in the prefilled first
  * message (attribution.buildWhatsappPrefill), which is how a later sale is
- * tied back to the exact ad. Performance budget: ≤150ms p95 — the redirect
+ * tied back to the exact ad. Performance budget: ≤150ms p95, the redirect
  * never waits on the write.
  */
 

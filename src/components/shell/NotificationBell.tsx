@@ -14,7 +14,7 @@ const SEEN_KEY = "glocal:notif:seen";
 /**
  * In-app notification bell (Phase 3). Reads the agent's recent activity from
  * /api/notifications and shows a dot when there's something newer than what the
- * owner last saw. Deliberately lightweight — the full trail lives on /activity.
+ * owner last saw. Deliberately lightweight, the full trail lives on /activity.
  */
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
