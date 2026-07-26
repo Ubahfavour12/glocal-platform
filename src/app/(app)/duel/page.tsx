@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { relativeTime } from "@/lib/dashboard/activity";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "The Duel" };
@@ -41,13 +42,17 @@ export default async function DuelPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="datalabel">the duel</div>
-      <h1 className="mt-1 text-2xl font-semibold tracking-tight">Champion vs challengers</h1>
+      <PageHeader
+        label="the duel"
+        title="Champion vs challengers"
+        subtitle="Two fresh challengers take on your champion every day. A winner is declared only after 24 hours and 5,000 impressions."
+        stat={test ? { value: String(1 + Math.max(2, challengerCount)), caption: "ads in the ring" } : undefined}
+      />
 
       {!test ? (
         <div className="mt-8 rounded-card border border-line bg-surface-raised p-8 text-center">
-          <p className="text-sm text-ink-muted">
-            No test running yet. The daily A/B duel appears here once your first campaign is live:
+          <p className="mx-auto max-w-md text-sm text-ink-muted">
+            No test running yet. The daily duel appears here once your first campaign is live:
             threshold progress, the rolling 3-day window, and the agent&apos;s verdict history.
           </p>
         </div>
@@ -56,28 +61,33 @@ export default async function DuelPage() {
           <div className="flex items-center justify-between">
             <span className="datalabel">today&apos;s duel · {test.test_date}</span>
             <span
-              className={`rounded-full px-2 py-0.5 text-[11px] ${
+              className={`rounded-full px-2.5 py-0.5 text-[11px] ${
                 test.status === "decided" ? "bg-accent-soft text-accent-bright" : "bg-surface-overlay text-ink-muted"
               }`}
             >
               {test.status === "decided" ? "verdict in" : "running"}
             </span>
           </div>
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            <div className="rounded-lg border border-accent/40 bg-accent-soft/30 p-3 text-center">
-              <div className="datalabel">champion</div>
-              <div className="mt-1 text-sm text-ink">{test.champion_ad_id ? "defending" : "first run"}</div>
+          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="rounded-lg border border-accent bg-accent-soft p-4">
+              <div className="flex items-center gap-2">
+                <span className="text-accent-bright">♛</span>
+                <div className="datalabel text-accent-bright">champion</div>
+              </div>
+              <div className="mt-2 text-sm font-medium text-ink">
+                {test.champion_ad_id ? "Defending the crown" : "First run"}
+              </div>
             </div>
             {Array.from({ length: Math.max(2, challengerCount) }).map((_, i) => (
-              <div key={i} className="rounded-lg border border-line bg-surface-overlay/40 p-3 text-center">
+              <div key={i} className="rounded-lg border border-line bg-surface-overlay/40 p-4">
                 <div className="datalabel">challenger {String.fromCharCode(65 + i)}</div>
-                <div className="mt-1 text-sm text-ink-muted">{i < challengerCount ? "in the ring" : "—"}</div>
+                <div className="mt-2 text-sm text-ink-muted">{i < challengerCount ? "In the ring" : "Warming up"}</div>
               </div>
             ))}
           </div>
-          <p className="mt-4 text-xs text-ink-faint">
-            A winner is only declared after 24 hours and 5,000 impressions per ad, judged over a
-            rolling 3-day window (revenue → cost per conversation → engagement).
+          <p className="mt-4 text-xs leading-relaxed text-ink-faint">
+            Judged over a rolling 3-day window: revenue first, then cost per conversation, then
+            engagement. The winner becomes tomorrow&apos;s champion.
           </p>
         </section>
       )}
@@ -89,10 +99,14 @@ export default async function DuelPage() {
         ) : (
           <ul className="mt-3 flex flex-col">
             {verdicts.map((v, i) => (
-              <li key={i} className="flex items-center justify-between border-b border-line py-2.5 last:border-0">
-                <span className="text-sm text-ink">
-                  Winner declared on <span className="font-mono text-ink-muted">{v.metric_used.toUpperCase()}</span>
-                </span>
+              <li key={i} className="flex items-center justify-between border-b border-line py-3 last:border-0">
+                <div className="flex items-center gap-3">
+                  <span className="text-accent-bright">♛</span>
+                  <span className="text-sm text-ink">
+                    Winner declared on{" "}
+                    <span className="font-mono text-ink-muted">{v.metric_used.toUpperCase()}</span>
+                  </span>
+                </div>
                 <span className="font-mono text-xs text-ink-faint">{relativeTime(v.decided_at)}</span>
               </li>
             ))}

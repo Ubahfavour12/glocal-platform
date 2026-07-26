@@ -7,6 +7,7 @@ import { PixelCard } from "@/components/settings/PixelCard";
 import { MediaUpload } from "@/components/settings/MediaUpload";
 import { ConnectShopify } from "@/components/settings/ConnectShopify";
 import { ConnectFlash } from "@/components/settings/ConnectFlash";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Settings" };
@@ -52,8 +53,11 @@ export default async function SettingsPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="datalabel">settings</div>
-      <h1 className="mt-1 text-2xl font-semibold tracking-tight">Your account</h1>
+      <PageHeader
+        label="settings"
+        title="Your account"
+        subtitle="Set your budget and goal, connect your accounts, and feed the agent your product photos."
+      />
 
       <div className="mt-6 flex flex-col gap-4">
         <Suspense fallback={null}>

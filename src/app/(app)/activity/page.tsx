@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { describeActivity, relativeTime, type RawEntry } from "@/lib/dashboard/activity";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Activity" };
@@ -26,8 +27,11 @@ export default async function ActivityPage() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <div className="datalabel">activity</div>
-      <h1 className="mt-1 text-2xl font-semibold tracking-tight">Everything the agent did</h1>
+      <PageHeader
+        label="activity"
+        title="Everything the agent did"
+        subtitle="Every launch, pause, budget move, compliance scan, and verdict, in plain language."
+      />
 
       {entries.length === 0 ? (
         <div className="mt-8 rounded-card border border-line bg-surface-raised p-8 text-center">

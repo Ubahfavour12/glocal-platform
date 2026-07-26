@@ -1,5 +1,6 @@
 import { AddFundsButton } from "@/components/wallet/AddFundsButton";
 import { MetricChip } from "@/components/ui/MetricChip";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { effectiveRate } from "@/lib/money/fx";
 import { fetchUsdRate } from "@/lib/money/rates";
 import { createClient } from "@/lib/supabase/server";
@@ -80,8 +81,12 @@ export default async function WalletPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="datalabel">wallet{wallet ? `, ${wallet.business.name}` : ""}</div>
-      <h1 className="mt-1 text-2xl font-semibold tracking-tight">Balance &amp; runway</h1>
+      <PageHeader
+        label={`wallet${wallet ? ` · ${wallet.business.name}` : ""}`}
+        title="Balance & runway"
+        subtitle="USD is the anchor for every number. Top up any time; unspent balance is always refundable."
+        stat={{ value: `$${(balanceMinor / 100).toFixed(2)}`, caption: `${runway} days of runway` }}
+      />
 
       <section className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-3">
         <MetricChip label="balance" value={`$${(balanceMinor / 100).toFixed(2)}`} />

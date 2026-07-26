@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { relativeTime } from "@/lib/dashboard/activity";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Organic" };
@@ -41,8 +42,12 @@ export default async function OrganicPage() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <div className="datalabel">organic</div>
-      <h1 className="mt-1 text-2xl font-semibold tracking-tight">Posting calendar</h1>
+      <PageHeader
+        label="organic"
+        title="Posting calendar"
+        subtitle="The agent posts organically alongside your paid ads, once a day, on the accounts you connect."
+        stat={{ value: String(posts.length), caption: "posts logged" }}
+      />
 
       <section className="mt-6 rounded-card border border-line bg-surface-raised p-5">
         <div className="datalabel">connected accounts</div>

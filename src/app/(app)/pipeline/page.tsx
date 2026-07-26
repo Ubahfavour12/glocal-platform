@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Pipeline" };
@@ -42,19 +43,12 @@ export default async function PipelinePage() {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <div className="datalabel">pipeline</div>
-      <div className="flex items-end justify-between">
-        <div>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Concepts, ranked</h1>
-          <p className="mt-1 text-sm text-ink-muted">
-            Your best-fit ad ideas, reverse-engineered from what&apos;s winning in your niche.
-          </p>
-        </div>
-        <div className="text-right">
-          <div className="font-mono text-2xl font-semibold text-ink">{concepts.length}</div>
-          <div className="datalabel">of 50 · {renderedCount} rendered</div>
-        </div>
-      </div>
+      <PageHeader
+        label="pipeline"
+        title="Concepts, ranked"
+        subtitle="Your best-fit ad ideas, reverse-engineered from what's winning in your niche."
+        stat={{ value: String(concepts.length), caption: `of 50 · ${renderedCount} rendered` }}
+      />
 
       {concepts.length === 0 ? (
         <div className="mt-8 rounded-card border border-line bg-surface-raised p-8 text-center">
