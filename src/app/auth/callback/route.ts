@@ -24,12 +24,26 @@ export async function GET(request: Request) {
   const supabase = await createClient();
   let authed = false;
 
-  if (tokenHash && type) {
-    const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
-    authed = !error;
-  } else if (code) {
+  if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     authed = !error;
+  } else if (tokenHash) {
+    // A NEW signup's link carries a "signup" token; a returning user's carries
+    // "magiclink"/"email". If the template's ?type= doesn't match the token's
+    // real type, verifyOtp rejects it and the user gets bounced to /login.
+    // Try the declared type first, then fall back across the email OTP types so
+    // both new and returning links work regardless of what ?type= says.
+    const candidates: EmailOtpType[] = [];
+    for (const t of [type, "email", "signup", "magiclink"] as (EmailOtpType | null)[]) {
+      if (t && !candidates.includes(t)) candidates.push(t);
+    }
+    for (const t of candidates) {
+      const { error } = await supabase.auth.verifyOtp({ type: t, token_hash: tokenHash });
+      if (!error) {
+        authed = true;
+        break;
+      }
+    }
   }
 
   if (!authed) {
