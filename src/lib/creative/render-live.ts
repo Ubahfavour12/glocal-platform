@@ -19,6 +19,7 @@ import {
   persistRenderedCreative,
 } from "@/lib/media/storage";
 import { promptFromConcept, renderConcepts, type RenderDeps } from "./render";
+import { asPlan, planAllowsRender, type PlanState } from "@/lib/billing/plan";
 
 interface OrchestratorConcept {
   id: string;
@@ -44,6 +45,19 @@ export function renderCreativeLive(supabase: SupabaseClient) {
 
     const sourceImageUrl = await getSourceImageUrl(supabase, businessId);
     if (!sourceImageUrl) return empty; // no product photo stored yet
+
+    // Freemium gate: free tier gets exactly one render, then it's blocked until
+    // they upgrade. Paid is unlimited. (Phase 4 — dormant with Higgsfield.)
+    const { data: biz } = await supabase
+      .from("businesses")
+      .select("plan, free_render_used")
+      .eq("id", businessId)
+      .maybeSingle();
+    const planState: PlanState = {
+      plan: asPlan(biz?.plan as string | null),
+      freeRenderUsed: Boolean(biz?.free_render_used),
+    };
+    if (!planAllowsRender(planState)) return empty; // free preview used up -> paywall
 
     const { data: sub } = await supabase
       .from("subscriptions")
@@ -72,6 +86,10 @@ export function renderCreativeLive(supabase: SupabaseClient) {
     );
 
     const rendered = summary.rendered[0];
+    // Spend the free tier's one render once it actually lands.
+    if (rendered && planState.plan === "free" && !planState.freeRenderUsed) {
+      await supabase.from("businesses").update({ free_render_used: true }).eq("id", businessId);
+    }
     return rendered ? { conceptId: concept.id, mediaUrl: rendered.mediaUrl, copy: concept.copy } : empty;
   };
 }

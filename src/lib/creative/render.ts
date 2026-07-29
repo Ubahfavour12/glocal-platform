@@ -118,9 +118,20 @@ export async function renderConcepts(
   return summary;
 }
 
-/** Whether the business can render at all today (quota + a source image). */
-export function canRenderToday(quota: QuotaState, sourceImageUrl: string | null): boolean {
-  return canRender(quota) && !!sourceImageUrl && /^https?:\/\//i.test(sourceImageUrl);
+/**
+ * Whether the business can render at all today: daily quota + a source image +
+ * (freemium) the plan still allows a render. `planAllowsRender` defaults to true
+ * so paid/ungated callers are unaffected; the free tier passes `false` once its
+ * one preview render is used, and the render lane stops there.
+ */
+export function canRenderToday(
+  quota: QuotaState,
+  sourceImageUrl: string | null,
+  planAllowsRender = true,
+): boolean {
+  return (
+    planAllowsRender && canRender(quota) && !!sourceImageUrl && /^https?:\/\//i.test(sourceImageUrl)
+  );
 }
 
 /** Build the render prompt from a concept's hook + storyboard beats. */

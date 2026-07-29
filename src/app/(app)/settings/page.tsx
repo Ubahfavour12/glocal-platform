@@ -8,6 +8,8 @@ import { MediaUpload } from "@/components/settings/MediaUpload";
 import { ConnectShopify } from "@/components/settings/ConnectShopify";
 import { ConnectFlash } from "@/components/settings/ConnectFlash";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PlanCard } from "@/components/billing/PlanCard";
+import { asPlan } from "@/lib/billing/plan";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Settings" };
@@ -19,7 +21,7 @@ export default async function SettingsPage() {
   const supabase = await createClient();
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, daily_budget_usd_minor, goal, persona, full_auto")
+    .select("id, daily_budget_usd_minor, goal, persona, full_auto, plan, free_render_used")
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -63,6 +65,13 @@ export default async function SettingsPage() {
         <Suspense fallback={null}>
           <ConnectFlash />
         </Suspense>
+
+        <PlanCard
+          state={{
+            plan: asPlan(business.plan as string | null),
+            freeRenderUsed: Boolean(business.free_render_used),
+          }}
+        />
 
         <SettingsForm
           initial={{
