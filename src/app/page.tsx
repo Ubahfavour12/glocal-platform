@@ -22,18 +22,13 @@ export default function Home() {
           Get started
         </Link>
         <Link
-          href="/demo"
+          href="/login"
           className="rounded-lg border border-line px-6 py-3 text-sm text-ink-muted transition-colors hover:text-ink"
         >
-          See it in action
-        </Link>
-      </div>
-      <p className="mt-5 text-sm text-ink-faint">
-        You set the budget, from $10 a day.{" "}
-        <Link href="/login" className="underline hover:text-ink-muted">
           Sign in
         </Link>
-      </p>
+      </div>
+      <p className="mt-5 text-sm text-ink-faint">You set the budget, from $10 a day.</p>
     </div>
   );
 }

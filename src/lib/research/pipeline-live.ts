@@ -8,20 +8,26 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { scrapeNiche } from "./youtube";
 import { generateConcepts, type ProductBrief } from "./concepts";
 import type { PipelineDeps } from "./pipeline";
+import { buildStrategyContext } from "@/lib/studio/profile";
+import type { StudioAnswers } from "@/lib/studio/questions";
 
 export function livePipelineDeps(supabase: SupabaseClient): PipelineDeps {
   return {
     async getBusiness(businessId) {
       const { data } = await supabase
         .from("businesses")
-        .select("name, category, goal")
+        .select("name, category, goal, strategy_profile")
         .eq("id", businessId)
         .maybeSingle();
       if (!data) return null;
+      // The Strategy Studio deep brief (if filled) becomes the concept prompt's
+      // notes, so the agent writes sharper, more specific ads.
+      const strategy = buildStrategyContext(data.strategy_profile as StudioAnswers | null);
       return {
         businessName: data.name,
         category: data.category,
         goal: data.goal,
+        description: strategy || undefined,
       } as ProductBrief;
     },
 
