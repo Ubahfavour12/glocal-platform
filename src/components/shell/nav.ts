@@ -6,6 +6,7 @@ export const NAV = [
   { href: "/pipeline", label: "Pipeline" },
   { href: "/organic", label: "Organic" },
   { href: "/wallet", label: "Wallet" },
+  { href: "/upgrade", label: "Upgrade" },
   { href: "/studio", label: "Strategy Studio" },
   { href: "/activity", label: "Activity" },
   { href: "/settings", label: "Settings" },

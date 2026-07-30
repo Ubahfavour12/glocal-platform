@@ -20,9 +20,13 @@ export interface PlanState {
   freeRenderUsed: boolean;
 }
 
-/** Normalise a raw DB value into a Plan (defends against nulls / stray strings). */
+/**
+ * Normalise a raw DB value into the free/paid render-gate. Any non-free plan
+ * (the tiers "starter"/"growth"/"scale", or a bare "paid") counts as paid; the
+ * specific tier is read separately where pricing/features matter.
+ */
 export function asPlan(raw: string | null | undefined): Plan {
-  return raw === "paid" ? "paid" : "free";
+  return raw && raw !== "free" ? "paid" : "free";
 }
 
 export function isPaid(s: PlanState): boolean {

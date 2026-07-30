@@ -37,14 +37,14 @@ export function PlanCard({ state }: { state: PlanState }) {
             <li>✕ Video renders, more renders, launching real ads</li>
           </ul>
           <Link
-            href="/wallet"
+            href="/upgrade"
             className="mt-4 inline-block rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-bright"
           >
-            Upgrade to the full plan
+            See plans & upgrade
           </Link>
           <p className="mt-2 text-xs text-ink-faint">
-            Upgrading opens once payments go live. It unlocks video, unlimited renders, and running
-            your ads for real.
+            Compare Starter, Growth, and Scale — pick the one that fits when you&apos;re ready to run
+            real ads.
           </p>
         </>
       )}

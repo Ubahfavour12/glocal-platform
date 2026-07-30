@@ -16,11 +16,14 @@ const freeUsed: PlanState = { plan: "free", freeRenderUsed: true };
 const paid: PlanState = { plan: "paid", freeRenderUsed: true };
 
 describe("asPlan", () => {
-  it("only 'paid' maps to paid; everything else is free", () => {
-    expect(asPlan("paid")).toBe("paid");
+  it("free/null/empty is free; any other value (tiers or 'paid') is paid", () => {
     expect(asPlan("free")).toBe("free");
     expect(asPlan(null)).toBe("free");
-    expect(asPlan("garbage")).toBe("free");
+    expect(asPlan("")).toBe("free");
+    expect(asPlan("paid")).toBe("paid");
+    expect(asPlan("starter")).toBe("paid");
+    expect(asPlan("growth")).toBe("paid");
+    expect(asPlan("scale")).toBe("paid");
   });
 });
 
