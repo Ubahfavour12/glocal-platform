@@ -73,6 +73,24 @@ export function AddFundsButton({ businessId }: { businessId: string }) {
           {busy === "card" ? "Preparing checkout…" : "Pay with card (₦)"}
         </button>
       </div>
+
+      {/* Deposit reassurance — warm, transparent-in-principle, no fee math. */}
+      <div className="flex items-start gap-3 rounded-lg border border-line bg-surface-overlay/40 px-4 py-3">
+        <span className="mt-0.5 shrink-0 text-accent-bright">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M9 12l2 2 4-4" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+        <div>
+          <div className="text-sm font-medium text-ink">Every dollar goes into your wallet</div>
+          <p className="mt-0.5 text-xs leading-relaxed text-ink-muted">
+            Nothing is taken up front. A small service fee applies only as your ads actually run, and
+            anything you don&apos;t spend is always refundable.
+          </p>
+        </div>
+      </div>
+
       <div>
         <div className="flex gap-2">
           {[7000, 14000].map((minor) => (
