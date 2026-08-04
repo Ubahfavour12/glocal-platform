@@ -5,6 +5,9 @@ import {
   verifyTransaction,
 } from "@/lib/payments/flutterwave";
 import { createServiceClient } from "@/lib/supabase/server";
+import { activateSubscription } from "@/lib/billing/subscription";
+import { classifyCharge, subscriptionPriceUsdMinor } from "@/lib/billing/subscribe";
+import { sendReceiptForBusiness } from "@/lib/billing/receipt";
 
 /**
  * Flutterwave webhook, the reliability layer on top of redirect-confirm
@@ -30,25 +33,47 @@ export async function POST(req: NextRequest) {
 
   try {
     const txn = await verifyTransaction(String(body.data.id));
-    const businessId = txn.meta?.business_id;
-    const fxRate = Number(txn.meta?.fx_rate);
-    if (txn.status !== "successful" || !businessId || !(fxRate > 0)) {
+    if (txn.status !== "successful") {
       return NextResponse.json({ received: true, credited: false });
     }
 
-    const usdMinor = usdCreditForVerified(txn.amountLocalMinor, fxRate);
     const supabase = createServiceClient();
-    const { error } = await supabase.rpc("record_psp_topup", {
-      p_business_id: businessId,
-      p_usd_minor: usdMinor,
-      p_local_minor: txn.amountLocalMinor,
-      p_local_currency: txn.currency,
-      p_fx_rate: fxRate,
-      p_psp_ref: `flw-${txn.id}`, // same ref as confirm route → idempotent
-    });
-    if (error) throw new Error(error.message);
+    const charge = classifyCharge(txn.meta);
 
-    return NextResponse.json({ received: true, credited: true });
+    // Subscription: activate the paid tier (idempotent upsert), then receipt.
+    if (charge.kind === "subscription") {
+      const businessId = txn.meta!.business_id!;
+      await activateSubscription(supabase, businessId, charge.tier);
+      await sendReceiptForBusiness(supabase, businessId, {
+        type: "subscription",
+        tier: charge.tier,
+        amountUsdMinor: subscriptionPriceUsdMinor(charge.tier),
+      });
+      return NextResponse.json({ received: true, subscribed: true });
+    }
+
+    // Wallet top-up: credit the ledger idempotently, then receipt.
+    if (charge.kind === "topup") {
+      const businessId = txn.meta!.business_id!;
+      const fxRate = Number(txn.meta?.fx_rate);
+      if (!(fxRate > 0)) return NextResponse.json({ received: true, credited: false });
+
+      const usdMinor = usdCreditForVerified(txn.amountLocalMinor, fxRate);
+      const { error } = await supabase.rpc("record_psp_topup", {
+        p_business_id: businessId,
+        p_usd_minor: usdMinor,
+        p_local_minor: txn.amountLocalMinor,
+        p_local_currency: txn.currency,
+        p_fx_rate: fxRate,
+        p_psp_ref: `flw-${txn.id}`, // same ref as confirm route → idempotent
+      });
+      if (error) throw new Error(error.message);
+
+      await sendReceiptForBusiness(supabase, businessId, { type: "topup", amountUsdMinor: usdMinor });
+      return NextResponse.json({ received: true, credited: true });
+    }
+
+    return NextResponse.json({ received: true });
   } catch {
     // 500 → Flutterwave retries; idempotency makes retries safe
     return NextResponse.json({ error: "processing failed" }, { status: 500 });

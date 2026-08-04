@@ -1,7 +1,9 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { relativeTime } from "@/lib/dashboard/activity";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { CalendarIcon, FacebookIcon, InstagramIcon, TikTokIcon } from "@/components/ui/icons";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Organic" };
@@ -11,6 +13,14 @@ interface OrganicContent {
   networks?: string[];
   postId?: string;
   publishAt?: string;
+}
+
+function networkIcon(name: string, cls = "h-4 w-4"): ReactNode {
+  const n = name.toLowerCase();
+  if (n.includes("insta")) return <InstagramIcon className={cls} />;
+  if (n.includes("tiktok") || n.includes("tik")) return <TikTokIcon className={cls} />;
+  if (n.includes("face") || n === "fb") return <FacebookIcon className={cls} />;
+  return <CalendarIcon className={cls} />;
 }
 
 export default async function OrganicPage() {
@@ -25,7 +35,11 @@ export default async function OrganicPage() {
 
   const [connRes, postsRes] = bizId
     ? await Promise.all([
-        supabase.from("social_connections").select("network, display_name, status").eq("business_id", bizId).eq("status", "active"),
+        supabase
+          .from("social_connections")
+          .select("network, display_name, status")
+          .eq("business_id", bizId)
+          .eq("status", "active"),
         supabase
           .from("journal_entries")
           .select("content, created_at")
@@ -49,50 +63,80 @@ export default async function OrganicPage() {
         stat={{ value: String(posts.length), caption: "posts logged" }}
       />
 
-      <section className="mt-6 rounded-card border border-line bg-surface-raised p-5">
+      <section className="mt-8">
         <div className="datalabel">connected accounts</div>
         {connections.length === 0 ? (
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <p className="text-sm text-ink-muted">
-              No accounts connected yet. Connect Facebook or Instagram and the agent posts organically
-              alongside your ads.
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-4 rounded-card border border-line bg-surface-raised p-5">
+            <p className="max-w-md text-sm text-ink-muted">
+              No accounts connected yet. Connect Facebook or Instagram and the agent posts
+              organically alongside your ads.
             </p>
-            <Link href="/settings" className="shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-bright">
+            <Link
+              href="/settings"
+              className="shrink-0 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-bright"
+            >
               Connect socials
             </Link>
           </div>
         ) : (
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {connections.map((c, i) => (
-              <span key={i} className="rounded-full bg-surface-overlay px-3 py-1 text-xs text-ink">
-                {c.network} · {c.display_name ?? "connected"}
-              </span>
+              <div
+                key={i}
+                className="flex items-center gap-3 rounded-card border border-line bg-surface-raised p-4"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-overlay text-ink">
+                  {networkIcon(c.network)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm text-ink">{c.display_name ?? "Connected"}</div>
+                  <div className="datalabel">{c.network}</div>
+                </div>
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-positive" title="active" />
+              </div>
             ))}
           </div>
         )}
       </section>
 
-      <section className="mt-6">
+      <section className="mt-8">
         <div className="datalabel">scheduled &amp; posted</div>
         {posts.length === 0 ? (
           <p className="mt-3 text-sm text-ink-faint">
-            Nothing scheduled yet, the agent posts once a day once you&apos;re connected and live.
+            Nothing scheduled yet. The agent posts once a day once you&apos;re connected and live.
           </p>
         ) : (
           <ul className="mt-3 flex flex-col gap-2">
-            {posts.map((p, i) => (
-              <li key={i} className="flex items-center justify-between rounded-card border border-line bg-surface-raised p-3">
-                <div className="flex items-center gap-2">
-                  {(p.content.networks ?? []).map((n) => (
-                    <span key={n} className="rounded bg-surface-overlay px-2 py-0.5 text-[11px] text-ink-muted">
-                      {n}
-                    </span>
-                  ))}
-                  <span className="text-sm text-ink-muted">Organic post</span>
-                </div>
-                <span className="font-mono text-xs text-ink-faint">{relativeTime(p.created_at)}</span>
-              </li>
-            ))}
+            {posts.map((p, i) => {
+              const networks = p.content.networks ?? [];
+              return (
+                <li
+                  key={i}
+                  className="flex items-center justify-between rounded-card border border-line bg-surface-raised p-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex -space-x-1.5">
+                      {networks.length > 0 ? (
+                        networks.map((n) => (
+                          <span
+                            key={n}
+                            className="flex h-7 w-7 items-center justify-center rounded-full border border-line bg-surface-overlay text-ink-muted"
+                          >
+                            {networkIcon(n, "h-3.5 w-3.5")}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="flex h-7 w-7 items-center justify-center rounded-full border border-line bg-surface-overlay text-ink-muted">
+                          <CalendarIcon className="h-3.5 w-3.5" />
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-sm text-ink">Organic post</span>
+                  </div>
+                  <span className="font-mono text-xs text-ink-faint">{relativeTime(p.created_at)}</span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>

@@ -1,6 +1,15 @@
+import type { ReactNode } from "react";
 import { AddFundsButton } from "@/components/wallet/AddFundsButton";
-import { MetricChip } from "@/components/ui/MetricChip";
 import { PageHeader } from "@/components/ui/PageHeader";
+import {
+  ArrowInIcon,
+  ArrowOutIcon,
+  BoltIcon,
+  CoinsIcon,
+  ReceiptIcon,
+  RefreshIcon,
+  WalletIcon,
+} from "@/components/ui/icons";
 import { effectiveRate } from "@/lib/money/fx";
 import { fetchUsdRate } from "@/lib/money/rates";
 import { createClient } from "@/lib/supabase/server";
@@ -14,15 +23,12 @@ interface LedgerRow {
   created_at: string;
 }
 
-async function liveRateChip() {
+async function liveRate() {
   try {
     const snapshot = await fetchUsdRate("NGN");
-    return {
-      value: `₦${Math.round(effectiveRate(snapshot)).toLocaleString()}/$`,
-      hint: "Refreshed hourly · final price you pay",
-    };
+    return { value: `₦${Math.round(effectiveRate(snapshot)).toLocaleString()}/$`, ok: true };
   } catch {
-    return { value: "—", hint: "Rate temporarily unavailable" };
+    return { value: "—", ok: false };
   }
 }
 
@@ -72,12 +78,30 @@ const KIND_LABELS: Record<string, string> = {
   adjustment: "Adjustment",
 };
 
+function kindIcon(kind: string): ReactNode {
+  const cls = "h-4 w-4";
+  switch (kind) {
+    case "topup":
+    case "refund":
+      return <ArrowInIcon className={cls} />;
+    case "ad_spend":
+      return <BoltIcon className={cls} />;
+    case "markup_fee":
+      return <ReceiptIcon className={cls} />;
+    case "subscription":
+      return <WalletIcon className={cls} />;
+    default:
+      return <CoinsIcon className={cls} />;
+  }
+}
+
 export default async function WalletPage() {
-  const [fx, wallet] = await Promise.all([liveRateChip(), walletData()]);
+  const [fx, wallet] = await Promise.all([liveRate(), walletData()]);
 
   const balanceMinor = wallet?.balanceMinor ?? 0;
   const dailyMinor = wallet?.business.daily_budget_usd_minor ?? 1000;
   const runway = dailyMinor > 0 ? Math.floor(Math.max(0, balanceMinor) / dailyMinor) : 0;
+  const runwayPct = Math.min(100, (runway / 30) * 100); // visual scale to a 30-day horizon
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -85,28 +109,55 @@ export default async function WalletPage() {
         label={`wallet${wallet ? ` · ${wallet.business.name}` : ""}`}
         title="Balance & runway"
         subtitle="USD is the anchor for every number. Top up any time; unspent balance is always refundable."
-        stat={{ value: `$${(balanceMinor / 100).toFixed(2)}`, caption: `${runway} days of runway` }}
       />
 
-      <section className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-3">
-        <MetricChip label="balance" value={`$${(balanceMinor / 100).toFixed(2)}`} />
-        <MetricChip
-          label="runway"
-          value={`${runway} days`}
-          hint={`At $${(dailyMinor / 100).toFixed(0)}/day`}
-        />
-        <MetricChip label="fx rate" value={fx.value} hint={fx.hint} />
+      {/* Balance + runway hero */}
+      <section className="mt-8 grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+        <div className="rounded-card border border-line bg-surface-raised p-6">
+          <div className="flex items-center gap-2 text-ink-muted">
+            <WalletIcon className="h-4 w-4" />
+            <span className="datalabel">available balance</span>
+          </div>
+          <div className="mt-3 font-mono text-4xl font-semibold tracking-tight text-ink">
+            ${(balanceMinor / 100).toFixed(2)}
+          </div>
+
+          <div className="mt-5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-ink-muted">Runway</span>
+              <span className="font-mono text-ink-muted">
+                {runway} {runway === 1 ? "day" : "days"} at ${(dailyMinor / 100).toFixed(0)}/day
+              </span>
+            </div>
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-overlay">
+              <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${runwayPct}%` }} />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col justify-between rounded-card border border-line bg-surface-raised p-6">
+          <div>
+            <div className="flex items-center gap-2 text-ink-muted">
+              <RefreshIcon className="h-4 w-4" />
+              <span className="datalabel">live fx rate</span>
+            </div>
+            <div className="mt-3 font-mono text-2xl font-semibold text-ink">{fx.value}</div>
+            <p className="mt-1 text-xs text-ink-faint">
+              {fx.ok ? "Refreshed hourly. This is the final price you pay." : "Rate temporarily unavailable."}
+            </p>
+          </div>
+        </div>
       </section>
 
       {wallet ? (
-        <section className="mt-6 rounded-card border border-line bg-surface-raised p-5">
+        <section className="mt-4 rounded-card border border-line bg-surface-raised p-5">
           <div className="datalabel">add funds</div>
           <div className="mt-3">
             <AddFundsButton businessId={wallet.business.id} />
           </div>
         </section>
       ) : (
-        <section className="mt-6 rounded-card border border-line bg-surface-raised p-5">
+        <section className="mt-4 rounded-card border border-line bg-surface-raised p-5">
           <div className="datalabel">preview mode</div>
           <p className="mt-2 text-sm text-ink-muted">
             Sign in and finish onboarding to activate your wallet.
@@ -114,34 +165,44 @@ export default async function WalletPage() {
         </section>
       )}
 
-      <section className="mt-6 rounded-card border border-line bg-surface-raised p-5">
-        <div className="datalabel">ledger</div>
+      <section className="mt-4 rounded-card border border-line bg-surface-raised p-5">
+        <div className="flex items-center justify-between">
+          <div className="datalabel">ledger · last 10</div>
+          <a href="/statement" className="text-xs text-accent hover:text-accent-bright">
+            Full statement →
+          </a>
+        </div>
         {wallet && wallet.ledger.length > 0 ? (
           <ul className="mt-3 divide-y divide-line-soft">
-            {wallet.ledger.map((e, i) => (
-              <li key={i} className="flex items-center justify-between py-2.5">
-                <div>
-                  <span className="text-sm">{KIND_LABELS[e.kind] ?? e.kind}</span>
-                  <span className="datalabel ml-3">
-                    {new Date(e.created_at).toLocaleString()}
+            {wallet.ledger.map((e, i) => {
+              const credit = e.amount_usd_minor > 0;
+              return (
+                <li key={i} className="flex items-center justify-between py-3">
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                        credit ? "bg-accent-soft text-positive" : "bg-surface-overlay text-ink-muted"
+                      }`}
+                    >
+                      {credit ? <ArrowInIcon className="h-4 w-4" /> : kindIcon(e.kind)}
+                    </span>
+                    <div>
+                      <div className="text-sm text-ink">{KIND_LABELS[e.kind] ?? e.kind}</div>
+                      <div className="datalabel">{new Date(e.created_at).toLocaleString()}</div>
+                    </div>
+                  </div>
+                  <span className={`font-mono text-sm ${credit ? "text-positive" : "text-ink"}`}>
+                    {credit ? "+" : ""}
+                    {(e.amount_usd_minor / 100).toFixed(2)}
                   </span>
-                </div>
-                <span
-                  className={`font-mono text-sm ${
-                    e.amount_usd_minor > 0 ? "text-positive" : "text-ink"
-                  }`}
-                >
-                  {e.amount_usd_minor > 0 ? "+" : ""}
-                  {(e.amount_usd_minor / 100).toFixed(2)}
-                </span>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <p className="mt-3 text-sm text-ink-muted">
-            Every top-up, ad spend, fee, and refund appears here, append-only,
-            reconciled daily to the cent. Unspent balance is refundable anytime;
-            money delivered to ad networks is not.
+            Every top-up, ad spend, fee, and refund appears here, append-only, reconciled daily to
+            the cent. Unspent balance is refundable anytime; money delivered to ad networks is not.
           </p>
         )}
       </section>

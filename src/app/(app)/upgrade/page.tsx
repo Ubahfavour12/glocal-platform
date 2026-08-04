@@ -10,11 +10,12 @@ export default async function UpgradePage() {
   const supabase = await createClient();
   const { data: business } = await supabase
     .from("businesses")
-    .select("plan")
+    .select("id, plan")
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
 
+  const businessId = (business?.id as string) ?? undefined;
   const currentPlan = (business?.plan as string) ?? "free";
   const isFree = currentPlan === "free";
 
@@ -79,7 +80,13 @@ export default async function UpgradePage() {
                 ))}
               </ul>
 
-              <SubscribeCta tierName={tier.name} current={current} recommended={tier.recommended} />
+              <SubscribeCta
+                tierId={tier.id}
+                tierName={tier.name}
+                businessId={businessId}
+                current={current}
+                recommended={tier.recommended}
+              />
             </div>
           );
         })}

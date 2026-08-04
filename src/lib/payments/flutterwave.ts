@@ -43,8 +43,19 @@ export interface CheckoutRequest {
   customerEmail: string;
   customerName: string;
   redirectUrl: string;
-  /** carried through to verification for the USD credit computation */
-  meta: { business_id: string; usd_minor: number; fx_rate: number };
+  /** hosted-checkout title (defaults to a wallet top-up) */
+  title?: string;
+  /**
+   * Carried through to verification. Wallet top-ups carry usd_minor + fx_rate
+   * (for the credit computation); subscription charges carry purpose + tier.
+   */
+  meta: {
+    business_id: string;
+    usd_minor?: number;
+    fx_rate?: number;
+    purpose?: "subscription";
+    tier?: string;
+  };
 }
 
 /** Create a hosted checkout page; returns the URL to send the customer to. */
@@ -62,7 +73,7 @@ export async function createCheckout(req: CheckoutRequest): Promise<{ link: stri
       redirect_url: req.redirectUrl,
       customer: { email: req.customerEmail, name: req.customerName },
       meta: req.meta,
-      customizations: { title: "Wallet top-up" },
+      customizations: { title: req.title ?? "Wallet top-up" },
     }),
   });
 }
@@ -73,7 +84,9 @@ export interface VerifiedTransaction {
   status: "successful" | "failed" | string;
   amountLocalMinor: number;
   currency: string;
-  meta: { business_id?: string; usd_minor?: number; fx_rate?: number } | null;
+  meta:
+    | { business_id?: string; usd_minor?: number; fx_rate?: number; purpose?: string; tier?: string }
+    | null;
 }
 
 /** Verify a transaction by Flutterwave's numeric transaction id. */

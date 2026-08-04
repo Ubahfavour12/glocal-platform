@@ -5,6 +5,7 @@ import { liveLaunchAdapters } from "@/lib/orchestrator/launcher-live";
 import { metaConfigFromEnv, objectiveForGoal, ctaForGoal } from "@/lib/meta/client";
 import type { ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
 import type { ConnectionMode } from "@/lib/tracking/modes";
+import { asPlan, planAllowsLaunch } from "@/lib/billing/plan";
 
 export const maxDuration = 300;
 
@@ -63,10 +64,21 @@ async function launchForPlan(
 
   const { data: biz } = await supabase
     .from("businesses")
-    .select("goal, connection_mode, destination, service_geo")
+    .select("goal, connection_mode, destination, service_geo, plan")
     .eq("id", businessId)
     .maybeSingle();
   if (!biz) return "business_missing";
+
+  // Paywall: launching live ads is paid-only (the free tier is preview-render
+  // only). Free/expired plans are recorded and skipped — never launched.
+  if (!planAllowsLaunch({ plan: asPlan(biz.plan as string | null), freeRenderUsed: true })) {
+    await supabase.from("journal_entries").insert({
+      business_id: businessId,
+      entry_type: "note",
+      content: { action: "launch_skipped", reason: "awaiting_upgrade" },
+    });
+    return "awaiting_upgrade";
+  }
 
   // Requires a provisioned Meta child account + page + campaign. Absent
   // pre-dogfooding: record and skip, do not fail the run.
