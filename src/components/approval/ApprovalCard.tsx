@@ -28,16 +28,13 @@ export function ApprovalCard({
   const total = totalPlannedUsdMinor(plan);
   const championPct = total > 0 ? Math.round((plan.championBudgetUsdMinor / total) * 100) : 0;
 
-  const [notice, setNotice] = useState("");
-
-  async function respond(response: "approved" | "regenerating") {
-    setBusy(response);
+  async function approve() {
+    setBusy("approved");
     setError("");
-    setNotice("");
     const res = await fetch("/api/approvals/respond", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ approval_id: approvalId, response }),
+      body: JSON.stringify({ approval_id: approvalId, response: "approved" }),
     });
     setBusy(null);
     if (!res.ok) {
@@ -45,12 +42,32 @@ export function ApprovalCard({
       setError(data?.error ?? "could not submit");
       return;
     }
-    if (response === "regenerating") {
-      // The plan is rebuilt by the agent, not instantly in the browser. Say so
-      // plainly instead of leaving the card looking like nothing happened.
-      setNotice(
-        "Got it, I'll throw these out and write you a fresh pair. The new plan lands here this evening.",
-      );
+    router.refresh();
+  }
+
+  /**
+   * Regenerate for real: record the rejection, then rebuild the plan on demand
+   * and show the new one. Takes a while (the agent writes fresh concepts and
+   * compliance-checks them), so the button says what it is doing.
+   */
+  async function regenerate() {
+    setBusy("regenerating");
+    setError("");
+    await fetch("/api/approvals/respond", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ approval_id: approvalId, response: "regenerating" }),
+    }).catch(() => null);
+
+    const res = await fetch("/api/plan/regenerate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ business_id: businessId }),
+    });
+    setBusy(null);
+    if (!res.ok) {
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      setError(data?.error ?? "could not rebuild the plan, I'll write a fresh one this evening");
       return;
     }
     router.refresh();
@@ -131,24 +148,24 @@ export function ApprovalCard({
       <div className="mt-6 flex gap-3">
         <button
           disabled={busy !== null}
-          onClick={() => respond("approved")}
+          onClick={approve}
           className="flex-1 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-accent-bright disabled:opacity-50"
         >
           {busy === "approved" ? "Approving…" : "Approve & launch tomorrow"}
         </button>
         <button
           disabled={busy !== null}
-          onClick={() => respond("regenerating")}
+          onClick={regenerate}
           className="rounded-lg border border-line px-5 py-3 text-sm text-ink-muted transition-colors hover:text-ink disabled:opacity-50"
         >
-          {busy === "regenerating" ? "…" : "Regenerate"}
+          {busy === "regenerating" ? "Writing new ads…" : "Regenerate"}
         </button>
       </div>
       {error && <p className="mt-2 text-sm text-negative">{error}</p>}
-      {notice && (
-        <div className="mt-3 rounded-card border-l-2 border-accent bg-accent-soft px-4 py-3 text-sm text-ink">
-          {notice}
-        </div>
+      {busy === "regenerating" && (
+        <p className="mt-2 text-center text-xs text-ink-faint">
+          Throwing these out and writing you a fresh pair. This takes a moment.
+        </p>
       )}
       <p className="mt-3 text-center text-xs text-ink-faint">
         Nothing spends until you approve. Ads launch tomorrow morning, always paused first.

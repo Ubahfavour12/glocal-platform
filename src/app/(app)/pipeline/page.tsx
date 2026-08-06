@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { UseThisButton } from "@/components/pipeline/UseThisButton";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Pipeline" };
@@ -112,6 +113,11 @@ export default async function PipelinePage() {
                       </span>
                       {c.source_pattern && (
                         <span className="text-xs text-ink-faint">Borrows {clean(c.source_pattern)}</span>
+                      )}
+                      {business && !c.rendered && (
+                        <span className="ml-auto">
+                          <UseThisButton businessId={business.id as string} conceptId={c.id} />
+                        </span>
                       )}
                     </div>
                   </div>
