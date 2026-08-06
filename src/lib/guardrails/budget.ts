@@ -32,6 +32,57 @@ export function clampBudgetIncrease(
   return Math.min(proposedUsdMinor, cap);
 }
 
+/**
+ * The least a challenger can be given and still learn anything. Below this a
+ * new ad cannot gather enough impressions to reach the duel's own verdict
+ * threshold, so it would run forever without ever being judged. Starving two
+ * challengers is strictly worse than funding one properly.
+ */
+export const MIN_CHALLENGER_USD_MINOR = 300; // $3/day
+
+export interface ChallengerPlan {
+  /** How many challengers can actually be funded today (0, 1 or `desired`). */
+  count: number;
+  /** Plain-language explanation when we could not run the full duel. */
+  note: string | null;
+}
+
+/**
+ * How many challengers today's budget can genuinely support.
+ *
+ * Persona-agnostic on purpose: it works from the real challenger pool rather
+ * than fixed budget thresholds, so it stays correct if the persona shares ever
+ * change. Returns 0 when even one challenger cannot be funded — in that case
+ * the whole budget goes to the champion and the customer is told why.
+ */
+export function viableChallengerCount(
+  totalUsdMinor: number,
+  persona: PersonaMode,
+  desiredCount = 2,
+): ChallengerPlan {
+  assertPositiveMinor(totalUsdMinor, "total budget");
+  const challengerShareBps = 10_000 - PERSONA_CHAMPION_SHARE_BPS[persona];
+  const pool = Math.floor((totalUsdMinor * challengerShareBps) / 10_000);
+  const affordable = Math.floor(pool / MIN_CHALLENGER_USD_MINOR);
+  const count = Math.max(0, Math.min(desiredCount, affordable));
+
+  if (count === desiredCount) return { count, note: null };
+
+  const needForFull = Math.ceil(
+    (MIN_CHALLENGER_USD_MINOR * desiredCount * 10_000) / challengerShareBps / 100,
+  );
+  if (count === 0) {
+    return {
+      count: 0,
+      note: `Your daily budget is too small to test a new ad properly, so today everything goes to your best performer. Raise it to about $${needForFull}/day and I'll start testing ${desiredCount} new ads against it every day.`,
+    };
+  }
+  return {
+    count,
+    note: `At this budget I can test ${count} new ad${count === 1 ? "" : "s"} a day instead of ${desiredCount}, so it gets enough spend to actually prove itself. Raise to about $${needForFull}/day for the full daily test.`,
+  };
+}
+
 export interface BudgetSplit {
   championUsdMinor: number;
   /** One entry per challenger, equal split, remainder to the champion. */
@@ -49,8 +100,12 @@ export function personaSplit(
   challengerCount = 2,
 ): BudgetSplit {
   assertPositiveMinor(totalUsdMinor, "total budget");
-  if (!Number.isInteger(challengerCount) || challengerCount < 1) {
-    throw new Error("challengerCount must be a positive integer");
+  if (!Number.isInteger(challengerCount) || challengerCount < 0) {
+    throw new Error("challengerCount must be a non-negative integer");
+  }
+  // No affordable challenger today: the champion carries the whole budget.
+  if (challengerCount === 0) {
+    return { championUsdMinor: totalUsdMinor, challengerUsdMinor: [] };
   }
   const challengerShareBps = 10_000 - PERSONA_CHAMPION_SHARE_BPS[persona];
   const challengerPool = Math.floor((totalUsdMinor * challengerShareBps) / 10_000);

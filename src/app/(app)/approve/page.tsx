@@ -86,6 +86,9 @@ export default async function ApprovePage() {
           payload: data.payload as ApprovalPlanPayload,
           businessId: business.id,
         };
+        // Only ask about yesterday's sales once ads have actually run. A brand
+        // new business has nothing to attribute a sale to, so the question is
+        // noise (and the ad picker would be empty).
         sellableAds = await loadSellableAds(supabase, business.id);
       }
     }

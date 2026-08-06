@@ -16,7 +16,12 @@
  * fully testable offline and lights up service-by-service as keys arrive.
  */
 
-import { clampBudgetIncrease, personaSplit, type PersonaMode } from "@/lib/guardrails/budget";
+import {
+  clampBudgetIncrease,
+  personaSplit,
+  viableChallengerCount,
+  type PersonaMode,
+} from "@/lib/guardrails/budget";
 import { decideVerdict, type CandidateMetrics, type Verdict } from "@/lib/verdicts/verdict";
 import { checkFatigue, type FatigueInput, type StyleDirective } from "@/lib/verdicts/fatigue";
 import { computeWalletHealth } from "@/lib/money/wallet-health";
@@ -163,7 +168,13 @@ export async function runNightly(
     return plan;
   }
 
-  const split = personaSplit(spendableToday, ctx.persona, CHALLENGERS_PER_DAY);
+  // How many challengers today's budget can genuinely fund. Starving two
+  // challengers means neither reaches the verdict threshold, so we run fewer
+  // (or none) rather than testing ads that can never be judged.
+  const challengerPlan = viableChallengerCount(spendableToday, ctx.persona, CHALLENGERS_PER_DAY);
+  if (challengerPlan.note) commentary.push(challengerPlan.note);
+
+  const split = personaSplit(spendableToday, ctx.persona, challengerPlan.count);
   const championBudget =
     ctx.currentChampionBudgetUsdMinor !== null
       ? clampBudgetIncrease(ctx.currentChampionBudgetUsdMinor, split.championUsdMinor)
@@ -182,7 +193,7 @@ export async function runNightly(
   );
 
   let poolIdx = 0;
-  while (challengers.length < CHALLENGERS_PER_DAY && poolIdx < pool.length) {
+  while (challengers.length < challengerPlan.count && poolIdx < pool.length) {
     const concept = pool[poolIdx++];
     const creative = adapters.renderCreative
       ? await adapters.renderCreative(ctx.businessId, concept)
@@ -216,9 +227,9 @@ export async function runNightly(
     });
   }
 
-  if (challengers.length < CHALLENGERS_PER_DAY) {
+  if (challengers.length < challengerPlan.count) {
     commentary.push(
-      `Only ${challengers.length} of ${CHALLENGERS_PER_DAY} challenger slots filled — the concept pool needs replenishing.`,
+      `Only ${challengers.length} of ${challengerPlan.count} challenger slots filled, the concept pool needs replenishing.`,
     );
   }
 

@@ -28,9 +28,12 @@ export function ApprovalCard({
   const total = totalPlannedUsdMinor(plan);
   const championPct = total > 0 ? Math.round((plan.championBudgetUsdMinor / total) * 100) : 0;
 
+  const [notice, setNotice] = useState("");
+
   async function respond(response: "approved" | "regenerating") {
     setBusy(response);
     setError("");
+    setNotice("");
     const res = await fetch("/api/approvals/respond", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -40,6 +43,14 @@ export function ApprovalCard({
     if (!res.ok) {
       const data = (await res.json().catch(() => null)) as { error?: string } | null;
       setError(data?.error ?? "could not submit");
+      return;
+    }
+    if (response === "regenerating") {
+      // The plan is rebuilt by the agent, not instantly in the browser. Say so
+      // plainly instead of leaving the card looking like nothing happened.
+      setNotice(
+        "Got it, I'll throw these out and write you a fresh pair. The new plan lands here this evening.",
+      );
       return;
     }
     router.refresh();
@@ -52,8 +63,9 @@ export function ApprovalCard({
       <div className="datalabel">tomorrow&apos;s plan · {plan.planDate}</div>
       <h1 className="mt-1 text-2xl font-semibold tracking-tight">Ready for your approval</h1>
 
-      {/* yesterday's sales check-in, the ten-second optional question */}
-      {businessId && <SalesCheckIn businessId={businessId} ads={ads} />}
+      {/* Yesterday's sales check-in. Only shown once ads have actually run:
+          with nothing live there is no sale to attribute and nothing to pick. */}
+      {businessId && ads.length > 0 && <SalesCheckIn businessId={businessId} ads={ads} />}
 
       {/* yesterday's scoreboard */}
       <div className="mt-6">
@@ -133,8 +145,19 @@ export function ApprovalCard({
         </button>
       </div>
       {error && <p className="mt-2 text-sm text-negative">{error}</p>}
+      {notice && (
+        <div className="mt-3 rounded-card border-l-2 border-accent bg-accent-soft px-4 py-3 text-sm text-ink">
+          {notice}
+        </div>
+      )}
       <p className="mt-3 text-center text-xs text-ink-faint">
         Nothing spends until you approve. Ads launch tomorrow morning, always paused first.
+      </p>
+      <p className="mt-4 text-center text-xs text-ink-faint">
+        Want to spend more or less per day?{" "}
+        <a href="/settings" className="text-accent hover:text-accent-bright">
+          Adjust your budget
+        </a>
       </p>
     </div>
   );

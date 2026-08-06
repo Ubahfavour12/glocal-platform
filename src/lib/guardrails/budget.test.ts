@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampBudgetIncrease, personaSplit } from "./budget";
+import { clampBudgetIncrease, personaSplit, viableChallengerCount } from "./budget";
 
 describe("clampBudgetIncrease — the 30% hard cap", () => {
   it("caps increases at current × 1.30", () => {
@@ -34,7 +34,45 @@ describe("clampBudgetIncrease — the 30% hard cap", () => {
   });
 });
 
+describe("viableChallengerCount", () => {
+  it("funds two challengers once the pool covers the minimum twice", () => {
+    // smart = 30% pool. $20/day -> $6 pool -> two $3 challengers.
+    expect(viableChallengerCount(2000, "smart").count).toBe(2);
+    expect(viableChallengerCount(2000, "smart").note).toBeNull();
+  });
+
+  it("drops to one challenger rather than starving two", () => {
+    // $10/day smart -> $3 pool -> exactly one viable challenger.
+    const plan = viableChallengerCount(1000, "smart");
+    expect(plan.count).toBe(1);
+    expect(plan.note).toContain("1 new ad");
+  });
+
+  it("runs no duel at all when even one cannot be funded", () => {
+    // $10/day conservative -> 20% -> $2 pool -> below the $3 minimum.
+    const plan = viableChallengerCount(1000, "conservative");
+    expect(plan.count).toBe(0);
+    expect(plan.note).toContain("too small");
+  });
+
+  it("never returns more than the desired count", () => {
+    expect(viableChallengerCount(50_000, "aggressive").count).toBe(2);
+  });
+});
+
 describe("personaSplit", () => {
+  it("gives the whole budget to the champion when there are no challengers", () => {
+    const s = personaSplit(1000, "conservative", 0);
+    expect(s.championUsdMinor).toBe(1000);
+    expect(s.challengerUsdMinor).toEqual([]);
+  });
+
+  it("a single challenger gets the entire challenger pool", () => {
+    const s = personaSplit(1000, "smart", 1);
+    expect(s.challengerUsdMinor).toEqual([300]);
+    expect(s.championUsdMinor).toBe(700);
+  });
+
   it("Dynamic Split default: 70% champion, 30% split across challengers", () => {
     const s = personaSplit(1000, "smart", 2);
     expect(s.challengerUsdMinor).toEqual([150, 150]);
@@ -65,6 +103,7 @@ describe("personaSplit", () => {
 
   it("rejects invalid inputs", () => {
     expect(() => personaSplit(0, "smart")).toThrow();
-    expect(() => personaSplit(1000, "smart", 0)).toThrow();
+    expect(() => personaSplit(1000, "smart", -1)).toThrow();
+    expect(() => personaSplit(1000, "smart", 1.5)).toThrow();
   });
 });

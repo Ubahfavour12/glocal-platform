@@ -17,7 +17,9 @@ const ctx = (over: Partial<BusinessContext> = {}): BusinessContext => ({
   goal: "whatsapp",
   persona: "smart",
   fullAuto: false,
-  dailyBudgetUsdMinor: 1000,
+  // $20/day: the level at which a smart-persona split can fund two challengers
+  // at the $3 minimum each. Below this the planner deliberately runs fewer.
+  dailyBudgetUsdMinor: 2000,
   currentChampionBudgetUsdMinor: null,
   storeConnected: false,
   walletBalanceUsdMinor: 7000,
@@ -57,8 +59,8 @@ describe("runNightly — plan creation", () => {
     const plan = await runNightly(ctx(), adapters, now);
 
     expect(plan.status).toBe("ready_for_approval");
-    expect(plan.championBudgetUsdMinor).toBe(700);
-    expect(plan.challengers.map((c) => c.budgetUsdMinor)).toEqual([150, 150]);
+    expect(plan.championBudgetUsdMinor).toBe(1400);
+    expect(plan.challengers.map((c) => c.budgetUsdMinor)).toEqual([300, 300]);
     expect(plan.challengers.map((c) => c.concept.id)).toEqual(["c1", "c2"]);
     expect(saved).toHaveLength(1);
   });
@@ -75,6 +77,28 @@ describe("runNightly — plan creation", () => {
     // spendable = min(1000, 500) → split of 500; 0.5 days runway → critical warning
     expect(plan.championBudgetUsdMinor + plan.challengers.reduce((s, c) => s + c.budgetUsdMinor, 0)).toBe(500);
     expect(plan.commentary.join(" ")).toMatch(/runs out today/i);
+  });
+
+  it("a thin budget funds one real challenger instead of two starved ones", async () => {
+    const { adapters } = makeAdapters();
+    // $10/day smart → $3 challenger pool → exactly one viable challenger.
+    const plan = await runNightly(ctx({ dailyBudgetUsdMinor: 1000 }), adapters, now);
+    expect(plan.challengers).toHaveLength(1);
+    expect(plan.challengers[0].budgetUsdMinor).toBe(300);
+    expect(plan.commentary.join(" ")).toMatch(/1 new ad a day instead of 2/i);
+  });
+
+  it("a budget too thin to test at all puts everything on the champion", async () => {
+    const { adapters } = makeAdapters();
+    // $10/day conservative → 20% → $2 pool → below the $3 floor, so no duel.
+    const plan = await runNightly(
+      ctx({ dailyBudgetUsdMinor: 1000, persona: "conservative" }),
+      adapters,
+      now,
+    );
+    expect(plan.challengers).toHaveLength(0);
+    expect(plan.championBudgetUsdMinor).toBe(1000);
+    expect(plan.commentary.join(" ")).toMatch(/too small to test a new ad/i);
   });
 
   it("empty wallet → insufficient_funds plan, nothing scheduled", async () => {
