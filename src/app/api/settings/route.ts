@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { MIN_DAILY_BUDGET_USD_MINOR } from "@/lib/money/ledger";
+import { runForBusiness, type BizRow } from "@/lib/orchestrator/run-business";
+
+export const maxDuration = 300;
+
+/** Changing these invalidates a plan that is still waiting for approval. */
+const PLAN_AFFECTING = new Set(["daily_budget_usd_minor", "persona", "goal"]);
 
 /**
  * Update the signed-in customer's business settings (UF-7). RLS on
  * `businesses` (owner_id = auth.uid()) scopes the update; only the whitelisted
  * fields are ever written, and the budget is floored at $10/day.
+ *
+ * If the change affects tomorrow's plan (budget, persona, goal) and a plan is
+ * still awaiting approval, we rebuild it immediately. Otherwise the customer
+ * raises their budget and the card keeps showing yesterday's numbers, which
+ * reads as the app ignoring them.
  */
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -51,5 +62,41 @@ export async function POST(req: NextRequest) {
 
   const { error } = await supabase.from("businesses").update(update).eq("id", business.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  return NextResponse.json({ ok: true, updated: Object.keys(update) });
+
+  // Rebuild a pending plan so the new numbers take effect straight away.
+  let replanned = false;
+  const touchesPlan = Object.keys(update).some((k) => PLAN_AFFECTING.has(k));
+  if (touchesPlan) {
+    try {
+      const service = createServiceClient();
+      const { data: pending } = await service
+        .from("approvals")
+        .select("id")
+        .eq("business_id", business.id)
+        .eq("status", "awaiting")
+        .is("launched_at", null)
+        .maybeSingle();
+
+      if (pending) {
+        const { data: fresh } = await service
+          .from("businesses")
+          .select(
+            "id, name, category, goal, persona, full_auto, daily_budget_usd_minor, category_blocked",
+          )
+          .eq("id", business.id)
+          .maybeSingle();
+        if (fresh && !fresh.category_blocked) {
+          await runForBusiness(service, fresh as BizRow, new Date(), {
+            skipRender: true,
+            skipSideEffects: true,
+          });
+          replanned = true;
+        }
+      }
+    } catch {
+      // Settings still saved; the nightly run will pick the new numbers up.
+    }
+  }
+
+  return NextResponse.json({ ok: true, updated: Object.keys(update), replanned });
 }

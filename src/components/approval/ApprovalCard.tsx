@@ -133,12 +133,13 @@ export function ApprovalCard({
         ))}
       </section>
 
-      {/* agent commentary */}
-      {plan.commentary.length > 0 && (
+      {/* Agent commentary. The first line is already the headline note above,
+          so skip it here rather than saying the same thing twice. */}
+      {plan.commentary.length > 1 && (
         <section className="mt-4 flex flex-col gap-2">
-          {plan.commentary.map((line, i) => (
+          {plan.commentary.slice(1).map((line, i) => (
             <p key={i} className="text-xs leading-relaxed text-ink-muted">
-             , {line}
+              {line}
             </p>
           ))}
         </section>
