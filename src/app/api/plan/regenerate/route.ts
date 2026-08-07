@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { runForBusiness, type BizRow } from "@/lib/orchestrator/run-business";
+import { asPlan } from "@/lib/billing/plan";
 
 export const maxDuration = 300;
 
@@ -18,7 +19,13 @@ export const maxDuration = 300;
  * Ownership is checked with the caller's own session (RLS) before any
  * service-role work happens.
  */
-const MAX_REGENERATIONS_PER_DAY = 5;
+/**
+ * Daily regenerate allowance. Free accounts get a couple of tries (enough to
+ * feel the product); paying accounts get plenty, because at ~3 cents a rebuild
+ * the cost is noise next to a subscription. The cap exists to stop a runaway
+ * loop, not to ration a paying customer.
+ */
+const REGENERATIONS_PER_DAY = { free: 3, paid: 15 } as const;
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -37,7 +44,9 @@ export async function POST(req: NextRequest) {
   // RLS: this only finds the business when the caller owns it.
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, name, category, goal, persona, full_auto, daily_budget_usd_minor, category_blocked")
+    .select(
+      "id, name, category, goal, persona, full_auto, daily_budget_usd_minor, category_blocked, plan",
+    )
     .eq("id", body.business_id)
     .maybeSingle();
   if (!business) {
@@ -61,10 +70,17 @@ export async function POST(req: NextRequest) {
     .contains("content", { action: "plan_regenerated" })
     .gte("created_at", startOfDay.toISOString());
 
-  if ((count ?? 0) >= MAX_REGENERATIONS_PER_DAY) {
+  const planTier = asPlan(business.plan as string | null);
+  const allowance = REGENERATIONS_PER_DAY[planTier];
+
+  if ((count ?? 0) >= allowance) {
+    const upgradeHint =
+      planTier === "free"
+        ? " Upgrade for many more rewrites a day."
+        : "";
     return NextResponse.json(
       {
-        error: `You've asked for ${MAX_REGENERATIONS_PER_DAY} fresh plans today. I'll write a new one automatically this evening.`,
+        error: `You've asked for ${allowance} fresh plans today. I'll write a new one automatically this evening.${upgradeHint}`,
       },
       { status: 429 },
     );

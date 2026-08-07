@@ -3,28 +3,34 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { STUDIO_QUESTIONS, type StudioAnswers } from "@/lib/studio/questions";
-import { answeredCount } from "@/lib/studio/profile";
 
 /**
  * The deep-brief form. Text, single-choice, and multi-choice questions; saves
- * the whole set to /api/studio, which the concept engine then weights heavily.
+ * to /api/studio, which appends each answer to that question's history and
+ * weights the whole lot in the concept prompt.
+ *
+ * The fields start EMPTY and clear again after saving. This is deliberate: the
+ * form is for what is true today, not for editing yesterday's wording. What the
+ * agent already understands is shown above the form, read-only.
  */
-export function StudioForm({ initial }: { initial: StudioAnswers }) {
+export function StudioForm() {
   const router = useRouter();
-  const [answers, setAnswers] = useState<StudioAnswers>(initial);
+  const [answers, setAnswers] = useState<StudioAnswers>({});
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [savedCount, setSavedCount] = useState(0);
   const [error, setError] = useState("");
 
-  const done = answeredCount(answers);
+  const filled = Object.values(answers).filter((v) =>
+    Array.isArray(v) ? v.length > 0 : (v ?? "").trim().length > 0,
+  ).length;
 
   function setText(id: string, value: string) {
     setAnswers((a) => ({ ...a, [id]: value }));
-    setSaved(false);
+    setSavedCount(0);
   }
   function setSingle(id: string, value: string) {
     setAnswers((a) => ({ ...a, [id]: a[id] === value ? "" : value }));
-    setSaved(false);
+    setSavedCount(0);
   }
   function toggleMulti(id: string, value: string, max: number) {
     setAnswers((a) => {
@@ -36,7 +42,7 @@ export function StudioForm({ initial }: { initial: StudioAnswers }) {
           : cur;
       return { ...a, [id]: next };
     });
-    setSaved(false);
+    setSavedCount(0);
   }
 
   async function save() {
@@ -48,9 +54,12 @@ export function StudioForm({ initial }: { initial: StudioAnswers }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ answers }),
       });
-      const data = (await res.json()) as { ok: boolean; error?: string };
+      const data = (await res.json()) as { ok: boolean; error?: string; saved?: number };
       if (!data.ok) throw new Error(data.error ?? "save failed");
-      setSaved(true);
+      // Clear the form: these answers now live with the agent, and the next
+      // visit is for adding what is true then.
+      setAnswers({});
+      setSavedCount(data.saved ?? 0);
       router.refresh();
     } catch (e) {
       setError((e as Error).message);
@@ -124,16 +133,22 @@ export function StudioForm({ initial }: { initial: StudioAnswers }) {
       ))}
 
       <div className="sticky bottom-4 flex items-center justify-between rounded-card border border-line bg-surface-overlay/90 px-4 py-3 backdrop-blur">
-        <span className="datalabel">{done} / {STUDIO_QUESTIONS.length} answered</span>
+        <span className="datalabel">
+          {filled > 0 ? `${filled} to add` : "add what is true today"}
+        </span>
         <div className="flex items-center gap-3">
           {error && <span className="text-sm text-negative">{error}</span>}
-          {saved && !error && <span className="text-sm text-positive">Saved ✓</span>}
+          {savedCount > 0 && !error && (
+            <span className="text-sm text-positive">
+              Saved {savedCount} to your agent ✓
+            </span>
+          )}
           <button
             onClick={save}
-            disabled={saving}
+            disabled={saving || filled === 0}
             className="rounded-lg bg-accent px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-bright disabled:opacity-50"
           >
-            {saving ? "Saving…" : "Save brief"}
+            {saving ? "Saving…" : "Save to agent"}
           </button>
         </div>
       </div>
