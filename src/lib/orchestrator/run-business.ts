@@ -42,11 +42,7 @@ export interface RunOptions {
   preferConceptIds?: string[];
 }
 
-const renderConfigured = () =>
-  Boolean(
-    process.env.HIGGSFIELD_CREDENTIALS ||
-      (process.env.HIGGSFIELD_API_KEY && process.env.HIGGSFIELD_API_SECRET),
-  );
+const renderConfigured = () => Boolean(process.env.FAL_KEY || process.env.FAL_API_KEY);
 
 export async function runForBusiness(
   supabase: Supa,

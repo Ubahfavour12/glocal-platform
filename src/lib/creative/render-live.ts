@@ -1,18 +1,14 @@
 /**
- * Live render adapter — binds the render lane (render.ts) to Higgsfield, the
- * media store, and the subscription quota. Exposes the `renderCreative`
- * function the nightly orchestrator expects. Entirely dormant until
- * HIGGSFIELD_API_KEY is set AND the business has a stored source image; in
- * every not-ready case it returns an empty mediaUrl so the launcher simply
- * makes a link ad without a custom creative (still valid).
+ * Live render adapter — binds the render lane (render.ts) to fal.ai, the media
+ * store, and the subscription quota. Exposes the `renderCreative` function the
+ * nightly orchestrator expects. Entirely dormant until FAL_KEY is set AND the
+ * business has a stored source image; in every not-ready case it returns an
+ * empty mediaUrl so the launcher simply makes a link ad without a custom
+ * creative (still valid).
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  higgsfieldConfigFromEnv,
-  pollRender,
-  submitRender,
-} from "@/lib/higgsfield/client";
+import { falConfigFromEnv, pollRender, submitRender } from "@/lib/fal/client";
 import {
   countRendersToday,
   getSourceImageUrl,
@@ -38,7 +34,7 @@ export function renderCreativeLive(supabase: SupabaseClient) {
 
     let cfg;
     try {
-      cfg = higgsfieldConfigFromEnv();
+      cfg = falConfigFromEnv();
     } catch {
       return empty; // no key -> lane dormant
     }
@@ -47,7 +43,7 @@ export function renderCreativeLive(supabase: SupabaseClient) {
     if (!sourceImageUrl) return empty; // no product photo stored yet
 
     // Freemium gate: free tier gets exactly one render, then it's blocked until
-    // they upgrade. Paid is unlimited. (Phase 4 — dormant with Higgsfield.)
+    // they upgrade. Paid is capped by the tier's daily quota.
     const { data: biz } = await supabase
       .from("businesses")
       .select("plan, free_render_used")
@@ -70,7 +66,8 @@ export function renderCreativeLive(supabase: SupabaseClient) {
     const deps: RenderDeps = {
       submit: async (input) => ({ jobId: (await submitRender(cfg, input)).jobId }),
       poll: async (jobId) => {
-        const s = await pollRender(cfg, jobId);
+        // "image" matches the kind submitted below; fal routes status by model.
+        const s = await pollRender(cfg, jobId, "image");
         return { state: s.state, mediaUrl: s.mediaUrl, error: s.error };
       },
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
