@@ -43,7 +43,7 @@ export default async function DuelPage() {
   const ringSize = 1 + Math.max(2, challengerCount);
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-5xl 2xl:max-w-6xl">
       <PageHeader
         label="the duel"
         title="Champion vs challengers"
@@ -75,7 +75,7 @@ export default async function DuelPage() {
           </div>
 
           {/* The ring: champion on one side, challengers on the other, a vs in between */}
-          <div className="mt-5 flex flex-col items-stretch gap-3 lg:flex-row lg:items-center">
+          <div className="mt-5 flex flex-col items-stretch gap-3 md:flex-row md:items-center">
             <div className="flex-1 rounded-lg border border-accent bg-accent-soft p-5">
               <div className="flex items-center gap-2">
                 <CrownIcon className="h-4 w-4 text-accent-bright" />

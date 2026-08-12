@@ -40,3 +40,19 @@ export function classifyCharge(
 export function subscriptionTxRef(businessId: string): string {
   return `sub-${businessId.slice(0, 8)}-${Date.now()}`;
 }
+
+/**
+ * Tolerance on the paid amount, in basis points. FX rounding and PSP fees can
+ * shave a little off the converted figure, so an exact-match check would reject
+ * honest payments. 2% is wide enough for rounding and far too narrow to let a
+ * cheaper tier through: the smallest gap between tiers is Starter to Growth,
+ * which is 154%.
+ */
+const UNDERPAY_TOLERANCE_BPS = 200;
+
+/** Does the amount actually paid cover the tier being activated? */
+export function coversSubscription(paidUsdMinor: number, expectedUsdMinor: number): boolean {
+  if (!Number.isFinite(paidUsdMinor) || paidUsdMinor <= 0) return false;
+  const floor = Math.floor((expectedUsdMinor * (10_000 - UNDERPAY_TOLERANCE_BPS)) / 10_000);
+  return paidUsdMinor >= floor;
+}

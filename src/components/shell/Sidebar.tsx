@@ -8,7 +8,7 @@ import { NAV } from "./nav";
 export function Sidebar() {
   const pathname = usePathname();
   return (
-    <aside className="hidden w-56 shrink-0 flex-col border-r border-line-soft bg-surface md:flex">
+    <aside className="hidden w-56 shrink-0 flex-col border-r border-line-soft bg-surface lg:flex xl:w-64">
       <div className="px-5 pb-6 pt-6">
         <div className="font-mono text-sm font-semibold tracking-wide text-ink">
           glocal<span className="text-accent-bright">.</span>

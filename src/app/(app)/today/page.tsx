@@ -100,8 +100,8 @@ export default async function TodayPage() {
   const runwayHoldUsd = ((business.daily_budget_usd_minor as number) / 100) * 7;
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <header className="mb-8 flex items-end justify-between gap-4">
+    <div className="mx-auto max-w-5xl 2xl:max-w-6xl">
+      <header className="mb-6 flex flex-wrap items-end justify-between gap-3 sm:mb-8 sm:gap-4">
         <div>
           <div className="datalabel">today · {business.name}</div>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">
@@ -111,7 +111,7 @@ export default async function TodayPage() {
         <div className="datalabel shrink-0">{today}</div>
       </header>
 
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <MetricChip icon={<BoltIcon />} label="spend today" value={fmtDual(spendTodayUsdMinor, local)} hint={duelRunning ? "live" : "no live campaigns yet"} />
         <MetricChip icon={<CursorIcon />} label="link clicks" value={clicksToday > 0 ? clicksToday.toLocaleString() : "—"} hint="taps through your ads" />
         <MetricChip icon={<BagIcon />} label="verified sales" value={salesTodayUsdMinor > 0 ? fmtDual(salesTodayUsdMinor, local) : "—"} hint="today" />
@@ -131,7 +131,7 @@ export default async function TodayPage() {
         )}
       </section>
 
-      <section className="mt-6 grid gap-4 lg:grid-cols-2">
+      <section className="mt-6 grid gap-4 md:grid-cols-2">
         <Link href="/duel" className="group flex flex-col rounded-card border border-line bg-surface-raised p-5 transition-colors hover:border-ink-faint">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-ink-muted">

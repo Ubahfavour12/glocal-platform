@@ -16,7 +16,7 @@ export function PageHeader({
   stat?: { value: string; caption: string };
 }) {
   return (
-    <div className="flex items-end justify-between gap-4">
+    <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
       <div className="min-w-0">
         <div className="datalabel">{label}</div>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">{title}</h1>
@@ -24,7 +24,7 @@ export function PageHeader({
       </div>
       {stat && (
         <div className="shrink-0 text-right">
-          <div className="font-mono text-2xl font-semibold text-ink">{stat.value}</div>
+          <div className="font-mono text-xl font-semibold text-ink sm:text-2xl">{stat.value}</div>
           <div className="datalabel">{stat.caption}</div>
         </div>
       )}

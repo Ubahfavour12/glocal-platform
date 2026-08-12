@@ -55,7 +55,7 @@ export default async function OrganicPage() {
   const posts = (postsRes.data ?? []) as { content: OrganicContent; created_at: string }[];
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-5xl 2xl:max-w-6xl">
       <PageHeader
         label="organic"
         title="Posting calendar"

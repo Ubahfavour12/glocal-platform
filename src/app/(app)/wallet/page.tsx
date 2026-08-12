@@ -104,7 +104,7 @@ export default async function WalletPage() {
   const runwayPct = Math.min(100, (runway / 30) * 100); // visual scale to a 30-day horizon
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-5xl 2xl:max-w-6xl">
       <PageHeader
         label={`wallet${wallet ? ` · ${wallet.business.name}` : ""}`}
         title="Balance & runway"
@@ -112,7 +112,7 @@ export default async function WalletPage() {
       />
 
       {/* Balance + runway hero */}
-      <section className="mt-8 grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+      <section className="mt-8 grid gap-4 md:grid-cols-[1.4fr_1fr]">
         <div className="rounded-card border border-line bg-surface-raised p-6">
           <div className="flex items-center gap-2 text-ink-muted">
             <WalletIcon className="h-4 w-4" />

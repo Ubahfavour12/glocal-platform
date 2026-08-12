@@ -6,7 +6,11 @@ import {
 } from "@/lib/payments/flutterwave";
 import { createServiceClient } from "@/lib/supabase/server";
 import { activateSubscription } from "@/lib/billing/subscription";
-import { classifyCharge, subscriptionPriceUsdMinor } from "@/lib/billing/subscribe";
+import {
+  classifyCharge,
+  coversSubscription,
+  subscriptionPriceUsdMinor,
+} from "@/lib/billing/subscribe";
 import { sendReceiptForBusiness } from "@/lib/billing/receipt";
 
 /**
@@ -43,11 +47,32 @@ export async function POST(req: NextRequest) {
     // Subscription: activate the paid tier (idempotent upsert), then receipt.
     if (charge.kind === "subscription") {
       const businessId = txn.meta!.business_id!;
+      const expectedUsdMinor = subscriptionPriceUsdMinor(charge.tier);
+
+      // Never activate a tier on an underpayment. The tier travels in the
+      // charge's metadata, so without this check anything that could get a
+      // cheap charge tagged with an expensive tier would unlock it. The amount
+      // here comes from Flutterwave's verify API, not the webhook body.
+      const fxRate = Number(txn.meta?.fx_rate);
+      if (!(fxRate > 0)) {
+        return NextResponse.json({ received: true, subscribed: false, reason: "no rate" });
+      }
+      const paidUsdMinor = usdCreditForVerified(txn.amountLocalMinor, fxRate);
+      if (!coversSubscription(paidUsdMinor, expectedUsdMinor)) {
+        await supabase.from("audit_log").insert({
+          business_id: businessId,
+          actor: "webhook:flutterwave",
+          action: "subscription_underpaid",
+          detail: { tier: charge.tier, expectedUsdMinor, paidUsdMinor, txnId: txn.id },
+        });
+        return NextResponse.json({ received: true, subscribed: false, reason: "underpaid" });
+      }
+
       await activateSubscription(supabase, businessId, charge.tier);
       await sendReceiptForBusiness(supabase, businessId, {
         type: "subscription",
         tier: charge.tier,
-        amountUsdMinor: subscriptionPriceUsdMinor(charge.tier),
+        amountUsdMinor: expectedUsdMinor,
       });
       return NextResponse.json({ received: true, subscribed: true });
     }

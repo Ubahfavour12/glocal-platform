@@ -59,7 +59,15 @@ export async function POST(req: NextRequest) {
       customerName: business.name,
       redirectUrl: `${origin}/upgrade?subscribed=1`,
       title: "Glocal subscription",
-      meta: { business_id: business.id, purpose: "subscription", tier: body.tier },
+      // usd_minor + fx_rate travel with the charge so the webhook can verify
+      // that what was actually paid covers the tier being activated.
+      meta: {
+        business_id: business.id,
+        purpose: "subscription",
+        tier: body.tier,
+        usd_minor: usdMinor,
+        fx_rate: rate,
+      },
     });
 
     return NextResponse.json({
