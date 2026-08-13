@@ -40,6 +40,13 @@ export interface RunOptions {
   skipSideEffects?: boolean;
   /** Concept ids to put at the front of the queue (customer hand-picked). */
   preferConceptIds?: string[];
+  /**
+   * Concept ids to skip. Without this, "Regenerate" hands back the identical
+   * plan: the picker is deterministic (top-ranked unrendered concepts, in rank
+   * order), so rejecting ads the customer disliked is the only way a rebuild
+   * produces anything new.
+   */
+  excludeConceptIds?: string[];
 }
 
 const renderConfigured = () => Boolean(process.env.FAL_KEY || process.env.FAL_API_KEY);
@@ -107,14 +114,23 @@ export async function runForBusiness(
           .eq("business_id", businessId)
           .eq("rendered", false)
           .order("rank", { ascending: true })
-          .limit(count + (opts.preferConceptIds?.length ?? 0));
-        const rows = (data ?? []).map((c) => ({
-          id: c.id,
-          rank: c.rank,
-          hook: c.hook,
-          copy: c.copy_angle,
-          cta: c.cta,
-        }));
+          // Over-fetch: rejected concepts are filtered out below, and hand-picks
+          // may sit far down the ranking.
+          .limit(
+            count +
+              (opts.preferConceptIds?.length ?? 0) +
+              (opts.excludeConceptIds?.length ?? 0),
+          );
+        const excluded = new Set(opts.excludeConceptIds ?? []);
+        const rows = (data ?? [])
+          .filter((c) => !excluded.has(c.id))
+          .map((c) => ({
+            id: c.id,
+            rank: c.rank,
+            hook: c.hook,
+            copy: c.copy_angle,
+            cta: c.cta,
+          }));
         // Customer hand-picks jump the queue, in the order they chose them.
         const preferred = opts.preferConceptIds ?? [];
         if (preferred.length === 0) return rows.slice(0, count);

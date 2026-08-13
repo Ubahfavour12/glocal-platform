@@ -86,11 +86,33 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // The concepts the customer just rejected. Without excluding these the
+  // rebuild returns the identical plan, because the picker walks concepts in
+  // rank order and would simply pick the same top two again.
+  let rejected: string[] = [];
+  if (!body.concept_ids?.length) {
+    const { data: pending } = await service
+      .from("approvals")
+      .select("payload")
+      .eq("business_id", business.id)
+      .eq("status", "awaiting")
+      .order("plan_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const payload = pending?.payload as
+      | { challengers?: { conceptId?: string }[] }
+      | undefined;
+    rejected = (payload?.challengers ?? [])
+      .map((c) => c.conceptId)
+      .filter((id): id is string => typeof id === "string");
+  }
+
   try {
     const plan = await runForBusiness(service, business as BizRow, new Date(), {
       skipRender: true,
       skipSideEffects: true,
       preferConceptIds: body.concept_ids,
+      excludeConceptIds: rejected,
     });
     await service.from("journal_entries").insert({
       business_id: business.id,
