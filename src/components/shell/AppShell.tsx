@@ -5,6 +5,7 @@ import { Sidebar } from "./Sidebar";
 import { MobileNav } from "./MobileNav";
 import { NotificationBell } from "./NotificationBell";
 import { ThemeToggle } from "./ThemeToggle";
+import { AskAgent } from "@/components/agent/AskAgent";
 
 const COLLAPSE_KEY = "glocal:nav-collapsed";
 
@@ -64,6 +65,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
         <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 sm:py-8 lg:px-8 xl:px-12">{children}</main>
       </div>
+      <AskAgent />
     </div>
   );
 }
