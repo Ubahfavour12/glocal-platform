@@ -49,7 +49,15 @@ export interface RunOptions {
   excludeConceptIds?: string[];
 }
 
-const renderConfigured = () => Boolean(process.env.FAL_KEY || process.env.FAL_API_KEY);
+// Either engine being configured is enough; the render lane fails over between
+// them (see lib/creative/engine.ts).
+const renderConfigured = () =>
+  Boolean(
+    process.env.FAL_KEY ||
+      process.env.FAL_API_KEY ||
+      process.env.HIGGSFIELD_CREDENTIALS ||
+      (process.env.HIGGSFIELD_API_KEY && process.env.HIGGSFIELD_API_SECRET),
+  );
 
 export async function runForBusiness(
   supabase: Supa,

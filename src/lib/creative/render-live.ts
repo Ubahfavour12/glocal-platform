@@ -8,7 +8,14 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { falConfigFromEnv, pollRender, submitRender } from "@/lib/fal/client";
+import {
+  availableEngines,
+  falEngine,
+  higgsfieldEngine,
+  submitWithFailover,
+  type EngineName,
+  type RenderEngine,
+} from "./engine";
 import {
   countRendersToday,
   getSourceImageUrl,
@@ -32,12 +39,10 @@ export function renderCreativeLive(supabase: SupabaseClient) {
   return async (businessId: string, concept: OrchestratorConcept): Promise<RenderedForPlan> => {
     const empty: RenderedForPlan = { conceptId: concept.id, mediaUrl: "", copy: concept.copy };
 
-    let cfg;
-    try {
-      cfg = falConfigFromEnv();
-    } catch {
-      return empty; // no key -> lane dormant
-    }
+    // fal primary, Higgsfield standby. Empty when neither is configured, which
+    // leaves the lane dormant instead of throwing.
+    const engines = availableEngines(falEngine(), higgsfieldEngine());
+    if (engines.length === 0) return empty;
 
     const sourceImageUrl = await getSourceImageUrl(supabase, businessId);
     if (!sourceImageUrl) return empty; // no product photo stored yet
@@ -63,11 +68,22 @@ export function renderCreativeLive(supabase: SupabaseClient) {
     const dailyLimit = (sub?.renders_per_day as number) ?? 2;
     const usedToday = await countRendersToday(supabase, businessId);
 
+    // Whichever engine accepted the job has to be the one polled: job ids are
+    // not portable between vendors.
+    let usedEngine: RenderEngine = engines[0];
+    const failedEngines: { engine: EngineName; error: string }[] = [];
+
     const deps: RenderDeps = {
-      submit: async (input) => ({ jobId: (await submitRender(cfg, input)).jobId }),
+      submit: async (input) => {
+        const result = await submitWithFailover(engines, input);
+        if (!result) throw new Error("no render engine could be reached");
+        usedEngine = engines.find((e) => e.name === result.engine) ?? engines[0];
+        failedEngines.push(...result.failed);
+        return { jobId: result.status.jobId };
+      },
       poll: async (jobId) => {
-        // "image" matches the kind submitted below; fal routes status by model.
-        const s = await pollRender(cfg, jobId, "image");
+        // "image" matches the kind submitted below.
+        const s = await usedEngine.poll(jobId, "image");
         return { state: s.state, mediaUrl: s.mediaUrl, error: s.error };
       },
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
@@ -81,6 +97,19 @@ export function renderCreativeLive(supabase: SupabaseClient) {
       { sourceImageUrl, kind: "image", placement: "reel", quota: { usedToday, dailyLimit } },
       deps,
     );
+
+    // Record a failover so a silent vendor outage is visible in the journal
+    // rather than only showing up as a slow night.
+    if (failedEngines.length > 0) {
+      await supabase.from("journal_entries").insert({
+        business_id: businessId,
+        entry_type: "note",
+        content: {
+          action: "render_failover",
+          detail: { used: usedEngine.name, failed: failedEngines },
+        },
+      });
+    }
 
     const rendered = summary.rendered[0];
     // Spend the free tier's one render once it actually lands.
