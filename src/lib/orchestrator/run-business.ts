@@ -155,6 +155,7 @@ export async function runForBusiness(
           planDate: p.planDate,
           currency: "USD",
           championBudgetUsdMinor: p.championBudgetUsdMinor,
+          persona: biz.persona,
           challengers: p.challengers.map((c) => ({
             conceptId: c.concept.id,
             hook: c.concept.hook,

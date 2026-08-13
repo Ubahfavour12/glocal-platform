@@ -10,6 +10,13 @@ import { totalPlannedUsdMinor, type ApprovalPlanPayload } from "@/lib/orchestrat
  * The evening approval card, Blueprint §2.2 / UF-4. The single human moment
  * in the daily loop: the customer sees tomorrow's plan and taps once.
  */
+/** How each persona reads to a shop owner, rather than its internal name. */
+const PERSONA_LABEL: Record<string, string> = {
+  conservative: "playing it safe",
+  smart: "balanced",
+  aggressive: "testing hard",
+};
+
 export function ApprovalCard({
   approvalId,
   plan,
@@ -93,7 +100,10 @@ export function ApprovalCard({
       <section className="mt-6 rounded-card border border-line bg-surface-raised p-5">
         <div className="flex items-center justify-between">
           <span className="datalabel">daily budget · {money(total)}</span>
-          <span className="datalabel">{championPct}% champion</span>
+          <span className="datalabel">
+            {championPct}% champion
+            {plan.persona ? ` · ${PERSONA_LABEL[plan.persona]}` : ""}
+          </span>
         </div>
         <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-surface-overlay">
           <div className="bg-accent" style={{ width: `${championPct}%` }} />

@@ -22,6 +22,8 @@ export interface ApprovalPlanPayload {
   planDate: string;
   currency: string;
   championBudgetUsdMinor: number;
+  /** Which scaling persona produced this split, so the UI can explain it. */
+  persona?: "conservative" | "smart" | "aggressive";
   challengers: PlanChallengerPayload[];
   commentary: string[];
   scoreboard: PlanScoreboardPayload;
