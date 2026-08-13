@@ -110,10 +110,10 @@ export default async function StatementPage() {
                     }`}
                   >
                     {e.amount_usd_minor > 0 ? "+" : ""}
-                    {(e.amount_usd_minor / 100).toFixed(2)}
+                    {usd(Math.abs(e.amount_usd_minor)).replace("$", e.amount_usd_minor < 0 ? "-$" : "$")}
                   </td>
                   <td className="px-5 py-3 text-right font-mono text-ink-muted">
-                    {(e.balanceAfter / 100).toFixed(2)}
+                    {usd(e.balanceAfter)}
                   </td>
                 </tr>
               ))}

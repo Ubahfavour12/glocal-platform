@@ -17,7 +17,7 @@ export default async function StudioPage() {
   const supabase = await createClient();
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, strategy_profile")
+    .select("id, strategy_profile, plan")
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -30,6 +30,13 @@ export default async function StudioPage() {
       </div>
     );
   }
+
+  // Strategy Studio is a Growth+ feature (see lib/billing/tiers.ts). Starter and
+  // free accounts can look, so they understand what they would get, but the
+  // brief they save would not be used, so saving is disabled rather than
+  // silently ignored.
+  const tier = (business.plan as string) ?? "free";
+  const unlocked = tier === "growth" || tier === "scale";
 
   const profile = normaliseProfile(business.strategy_profile);
   const done = answeredCount(profile);
@@ -58,12 +65,29 @@ export default async function StudioPage() {
         stat={{ value: `${done}/${STUDIO_QUESTIONS.length}`, caption: "answered" }}
       />
 
-      <div className="mt-6 rounded-card border border-line bg-surface-raised p-4 text-xs text-ink-muted">
-        Everything here is optional, your quick-start answers already run the agent. Each answer you
-        add is kept and stacked on top of the last one, so the agent keeps learning how you want to be
-        seen rather than only remembering the most recent thing you typed. Come back any time and add
-        what is true today.
-      </div>
+      {unlocked ? (
+        <div className="mt-6 rounded-card border border-line bg-surface-raised p-4 text-xs text-ink-muted">
+          Everything here is optional, your quick-start answers already run the agent. Each answer you
+          add is kept and stacked on top of the last one, so the agent keeps learning how you want to
+          be seen rather than only remembering the most recent thing you typed. Come back any time and
+          add what is true today.
+        </div>
+      ) : (
+        <div className="mt-6 rounded-card border border-accent/40 bg-accent-soft p-5">
+          <div className="datalabel text-accent-bright">growth &amp; scale</div>
+          <p className="mt-2 text-sm text-ink">
+            The Strategy Studio is part of the Growth and Scale plans. Have a look around, this is the
+            deep brief that makes the agent write about your business specifically instead of your
+            category generally.
+          </p>
+          <a
+            href="/upgrade"
+            className="mt-4 inline-block rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-bright"
+          >
+            See the plans
+          </a>
+        </div>
+      )}
 
       {known.length > 0 && (
         <section className="mt-4 rounded-card border border-line bg-surface-raised p-5">
@@ -89,7 +113,7 @@ export default async function StudioPage() {
         </section>
       )}
 
-      <StudioForm />
+      {unlocked && <StudioForm />}
 
       <section className="mt-6 rounded-card border border-line bg-surface-raised p-5">
         <div className="datalabel">add photos &amp; video</div>
