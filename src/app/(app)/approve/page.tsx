@@ -64,13 +64,15 @@ export default async function ApprovePage() {
 
   let approval: { id: string; payload: ApprovalPlanPayload; businessId: string } | null = null;
   let sellableAds: SellableAd[] = [];
+  let fullAuto = false;
   if (userData.user) {
     const { data: business } = await supabase
       .from("businesses")
-      .select("id")
+      .select("id, full_auto")
       .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle();
+    fullAuto = Boolean(business?.full_auto);
     if (business) {
       const { data } = await supabase
         .from("approvals")
@@ -92,6 +94,42 @@ export default async function ApprovePage() {
         sellableAds = await loadSellableAds(supabase, business.id);
       }
     }
+  }
+
+  // Full autonomy is a different mode, not an empty one. Telling someone their
+  // plan "will appear here for approval" when they have switched approvals off
+  // is simply wrong, and it is the kind of wrongness that makes people distrust
+  // everything else on the screen.
+  if (!approval && fullAuto) {
+    return (
+      <div className="mx-auto max-w-lg">
+        <div className="datalabel">approve</div>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight">You have full autonomy on</h1>
+        <div className="mt-8 rounded-card border border-accent/40 bg-accent-soft p-6">
+          <p className="text-sm text-ink">
+            I launch each day&apos;s ads myself, without asking. Nothing waits here for a tap.
+          </p>
+          <p className="mt-3 text-sm text-ink-muted">
+            You can still see everything I did on Activity, and the daily duel on The Duel. If you
+            would rather approve each evening again, turn full autonomy off in Settings.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <a
+              href="/activity"
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-bright"
+            >
+              See what I did
+            </a>
+            <a
+              href="/settings"
+              className="rounded-lg border border-line px-4 py-2 text-sm text-ink-muted transition-colors hover:text-ink"
+            >
+              Turn approvals back on
+            </a>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (!approval) {

@@ -103,6 +103,14 @@ export default async function WalletPage() {
   const runway = dailyMinor > 0 ? Math.floor(Math.max(0, balanceMinor) / dailyMinor) : 0;
   const runwayPct = Math.min(100, (runway / 30) * 100); // visual scale to a 30-day horizon
 
+  /**
+   * The wallet emptying is the one moment the product silently stops working:
+   * ads pause, the duel cannot resolve, and nothing else on screen says so. It
+   * deserves a real state rather than a $0.00 that looks like any other number.
+   */
+  const health =
+    wallet === null ? "preview" : balanceMinor <= 0 ? "empty" : runway <= 3 ? "critical" : "ok";
+
   return (
     <div className="mx-auto max-w-5xl 2xl:max-w-6xl">
       <PageHeader
@@ -111,6 +119,30 @@ export default async function WalletPage() {
         subtitle="USD is the anchor for every number. Top up any time; unspent balance is always refundable."
       />
 
+      {health === "empty" && (
+        <section className="mt-8 rounded-card border border-negative/50 bg-negative/10 p-5">
+          <div className="datalabel text-negative">spending has stopped</div>
+          <p className="mt-2 text-sm text-ink">
+            Your balance is empty, so your ads are paused. Nothing is being spent, and nothing is
+            being lost, but no one is seeing them either.
+          </p>
+          <p className="mt-2 text-sm text-ink-muted">
+            Top up and I pick straight back up where I left off. Your champion, your test history and
+            everything I have learned are all still here.
+          </p>
+        </section>
+      )}
+
+      {health === "critical" && (
+        <section className="mt-8 rounded-card border border-accent/50 bg-accent-soft p-5">
+          <div className="datalabel text-accent-bright">running low</div>
+          <p className="mt-2 text-sm text-ink">
+            About {runway} {runway === 1 ? "day" : "days"} left at your current budget. When it hits
+            zero your ads pause, and a test that stops halfway tells you nothing.
+          </p>
+        </section>
+      )}
+
       {/* Balance + runway hero */}
       <section className="mt-8 grid gap-4 md:grid-cols-[1.4fr_1fr]">
         <div className="rounded-card border border-line bg-surface-raised p-6">
@@ -118,7 +150,11 @@ export default async function WalletPage() {
             <WalletIcon className="h-4 w-4" />
             <span className="datalabel">available balance</span>
           </div>
-          <div className="mt-3 font-mono text-4xl font-semibold tracking-tight text-ink">
+          <div
+            className={`mt-3 font-mono text-4xl font-semibold tracking-tight ${
+              health === "empty" ? "text-negative" : "text-ink"
+            }`}
+          >
             ${(balanceMinor / 100).toFixed(2)}
           </div>
 
@@ -130,7 +166,12 @@ export default async function WalletPage() {
               </span>
             </div>
             <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-overlay">
-              <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${runwayPct}%` }} />
+              <div
+                className={`h-full rounded-full transition-all ${
+                  health === "empty" || health === "critical" ? "bg-negative" : "bg-accent"
+                }`}
+                style={{ width: `${Math.max(runwayPct, balanceMinor > 0 ? 2 : 0)}%` }}
+              />
             </div>
           </div>
         </div>
