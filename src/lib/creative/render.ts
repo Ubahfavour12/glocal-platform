@@ -10,7 +10,7 @@
  * when the key + a stored source image are present.
  */
 
-import type { CreativeKind, Placement, RenderConceptInput } from "@/lib/higgsfield/client";
+import type { CreativeKind, Placement, RenderConceptInput } from "@/lib/fal/client";
 import { canRender, remainingRenders, type QuotaState } from "./quota";
 
 export interface RenderableConcept {
