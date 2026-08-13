@@ -2,30 +2,139 @@
 
 /*
  * Design tokens — UI Plan §1 "Design Language"
- * Dark premium command-center. One amber accent, used only for agent
- * actions and highlights. Mono face for data labels and metric chips.
+ *
+ * Two full palettes, not one inverted. The product is a dark premium
+ * command-center by origin, and light mode is a designed counterpart rather
+ * than a flipped version: the neutrals stay warm, the amber darkens so it holds
+ * contrast on paper-white, and the semantic colours change value so green and
+ * red stay legible on a light ground.
+ *
+ * Resolution order: system preference by default, overridden by an explicit
+ * choice stamped on <html data-theme>. Values live as plain custom properties
+ * so they can be swapped at runtime; @theme inline maps them to Tailwind
+ * utilities.
  */
-@theme {
-  --color-surface: #0c0c0d;
-  --color-surface-raised: #141416;
-  --color-surface-overlay: #1c1c1f;
-  --color-card: #faf8f5;
-  --color-card-muted: #f5f3ef;
 
-  --color-ink: #ededee;
-  --color-ink-muted: #9b9ba1;
-  --color-ink-faint: #5c5c63;
-  --color-ink-on-card: #17171a;
-  --color-ink-on-card-muted: #6b6b70;
+/* ---------- dark (the default, and the brand's home) ---------- */
+:root {
+  --surface: #0c0c0d;
+  --surface-raised: #141416;
+  --surface-overlay: #1c1c1f;
+  --card: #faf8f5;
+  --card-muted: #f5f3ef;
 
-  --color-accent: #b45309;
-  --color-accent-bright: #d97706;
-  --color-accent-soft: rgba(180, 83, 9, 0.13);
+  --ink: #ededee;
+  --ink-muted: #9b9ba1;
+  --ink-faint: #5c5c63;
+  --ink-on-card: #17171a;
+  --ink-on-card-muted: #6b6b70;
 
-  --color-positive: #4ade80;
-  --color-negative: #f87171;
-  --color-line: #26262a;
-  --color-line-soft: #1a1a1d;
+  --accent: #b45309;
+  --accent-bright: #d97706;
+  --accent-soft: rgba(180, 83, 9, 0.13);
+
+  --positive: #4ade80;
+  --negative: #f87171;
+  --line: #26262a;
+  --line-soft: #1a1a1d;
+}
+
+/* ---------- light (only when the system asks and nothing overrides) ---------- */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --surface: #faf9f7;
+    --surface-raised: #ffffff;
+    --surface-overlay: #f1efea;
+    --card: #ffffff;
+    --card-muted: #f7f5f2;
+
+    --ink: #1b1714;
+    --ink-muted: #63594f;
+    --ink-faint: #9a9086;
+    --ink-on-card: #1b1714;
+    --ink-on-card-muted: #63594f;
+
+    /* Darker amber: the dark-mode value fails contrast on a white ground. */
+    --accent: #a34a07;
+    --accent-bright: #b45309;
+    --accent-soft: rgba(163, 74, 7, 0.09);
+
+    /* Semantic colours need deeper values to stay readable on light. */
+    --positive: #15803d;
+    --negative: #b91c1c;
+    --line: #e6e1da;
+    --line-soft: #f0ece6;
+  }
+}
+
+/* ---------- explicit choice always wins, in both directions ---------- */
+:root[data-theme="light"] {
+  --surface: #faf9f7;
+  --surface-raised: #ffffff;
+  --surface-overlay: #f1efea;
+  --card: #ffffff;
+  --card-muted: #f7f5f2;
+
+  --ink: #1b1714;
+  --ink-muted: #63594f;
+  --ink-faint: #9a9086;
+  --ink-on-card: #1b1714;
+  --ink-on-card-muted: #63594f;
+
+  --accent: #a34a07;
+  --accent-bright: #b45309;
+  --accent-soft: rgba(163, 74, 7, 0.09);
+
+  --positive: #15803d;
+  --negative: #b91c1c;
+  --line: #e6e1da;
+  --line-soft: #f0ece6;
+}
+
+:root[data-theme="dark"] {
+  --surface: #0c0c0d;
+  --surface-raised: #141416;
+  --surface-overlay: #1c1c1f;
+  --card: #faf8f5;
+  --card-muted: #f5f3ef;
+
+  --ink: #ededee;
+  --ink-muted: #9b9ba1;
+  --ink-faint: #5c5c63;
+  --ink-on-card: #17171a;
+  --ink-on-card-muted: #6b6b70;
+
+  --accent: #b45309;
+  --accent-bright: #d97706;
+  --accent-soft: rgba(180, 83, 9, 0.13);
+
+  --positive: #4ade80;
+  --negative: #f87171;
+  --line: #26262a;
+  --line-soft: #1a1a1d;
+}
+
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-overlay: var(--surface-overlay);
+  --color-card: var(--card);
+  --color-card-muted: var(--card-muted);
+
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-ink-on-card: var(--ink-on-card);
+  --color-ink-on-card-muted: var(--ink-on-card-muted);
+
+  --color-accent: var(--accent);
+  --color-accent-bright: var(--accent-bright);
+  --color-accent-soft: var(--accent-soft);
+
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
 
   --font-sans: var(--font-geist-sans), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
@@ -34,8 +143,8 @@
 }
 
 body {
-  background: var(--color-surface);
-  color: var(--color-ink);
+  background: var(--surface);
+  color: var(--ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
@@ -46,23 +155,63 @@ body {
   font-size: 0.6875rem;
   letter-spacing: 0.08em;
   text-transform: lowercase;
-  color: var(--color-ink-muted);
+  color: var(--ink-muted);
 }
 
 ::selection {
-  background: var(--color-accent);
+  background: var(--accent);
   color: #fff;
 }
 
 /* Keyboard focus ring — visible only for keyboard users, never on mouse click.
  * One consistent amber ring across every interactive element (a11y + polish). */
 :focus-visible {
-  outline: 2px solid var(--color-accent-bright);
+  outline: 2px solid var(--accent-bright);
   outline-offset: 2px;
   border-radius: 0.375rem;
 }
 :focus:not(:focus-visible) {
   outline: none;
+}
+
+/* ---------- motion ----------
+ * Deliberately three things only: content arriving, surfaces responding to the
+ * pointer, and the theme swap. Anything more starts to feel decorative, which
+ * is the fastest way for a money product to look unserious.
+ */
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Page content arrives rather than snapping in. Short enough not to delay use. */
+main > * {
+  animation: riseIn 0.22s ease-out both;
+}
+
+/* Cards lift slightly under the pointer, so what is interactive feels alive. */
+.rounded-card {
+  transition:
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+a.rounded-card:hover,
+button.rounded-card:hover {
+  transform: translateY(-1px);
+}
+
+/* The theme swap eases instead of flashing. */
+body,
+.rounded-card {
+  transition-property: background-color, border-color, color;
+  transition-duration: 0.18s;
+  transition-timing-function: ease;
 }
 
 /* Respect reduced-motion preferences for the app's transitions. */

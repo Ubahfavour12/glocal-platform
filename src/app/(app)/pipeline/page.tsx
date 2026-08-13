@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { UseThisButton } from "@/components/pipeline/UseThisButton";
+import { PipelineFilter, type PipelineConcept } from "@/components/pipeline/PipelineFilter";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Pipeline" };
@@ -42,8 +43,20 @@ export default async function PipelinePage() {
 
   const renderedCount = concepts.filter((c) => c.rendered).length;
 
+  // Shape once on the server so the client filter stays a pure list operation.
+  const items: PipelineConcept[] = concepts.map((c) => ({
+    id: c.id,
+    rank: c.rank,
+    hook: clean(c.hook),
+    beats: (c.storyboard ?? []).filter(Boolean).map(clean),
+    copyAngle: clean(c.copy_angle),
+    cta: clean(c.cta),
+    sourcePattern: c.source_pattern ? clean(c.source_pattern) : null,
+    rendered: c.rendered,
+  }));
+
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-4xl 2xl:max-w-5xl">
       <PageHeader
         label="pipeline"
         title="Concepts, ranked"
@@ -60,9 +73,11 @@ export default async function PipelinePage() {
           </p>
         </div>
       ) : (
-        <div className="mt-6 flex flex-col gap-3">
-          {concepts.map((c) => {
-            const beats = (c.storyboard ?? []).filter(Boolean);
+        <PipelineFilter concepts={items}>
+          {(visible) => (
+        <div className="mt-4 flex flex-col gap-3">
+          {visible.map((c) => {
+            const beats = c.beats;
             return (
               <article
                 key={c.id}
@@ -80,7 +95,7 @@ export default async function PipelinePage() {
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-3">
-                      <h3 className="text-[15px] font-semibold leading-snug text-ink">{clean(c.hook)}</h3>
+                      <h3 className="text-[15px] font-semibold leading-snug text-ink">{c.hook}</h3>
                       <span
                         className={`mt-0.5 shrink-0 rounded-full px-2.5 py-0.5 text-[11px] ${
                           c.rendered
@@ -92,8 +107,8 @@ export default async function PipelinePage() {
                       </span>
                     </div>
 
-                    {c.copy_angle && (
-                      <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{clean(c.copy_angle)}</p>
+                    {c.copyAngle && (
+                      <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{c.copyAngle}</p>
                     )}
 
                     {beats.length > 0 && (
@@ -101,7 +116,7 @@ export default async function PipelinePage() {
                         {beats.map((beat, i) => (
                           <li key={i} className="flex gap-2 text-xs leading-relaxed text-ink-muted">
                             <span className="datalabel shrink-0 pt-0.5">shot {i + 1}</span>
-                            <span>{clean(beat)}</span>
+                            <span>{beat}</span>
                           </li>
                         ))}
                       </ol>
@@ -109,10 +124,10 @@ export default async function PipelinePage() {
 
                     <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1.5">
                       <span className="rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-accent-bright">
-                        {clean(c.cta)}
+                        {c.cta}
                       </span>
-                      {c.source_pattern && (
-                        <span className="text-xs text-ink-faint">Borrows {clean(c.source_pattern)}</span>
+                      {c.sourcePattern && (
+                        <span className="text-xs text-ink-faint">Borrows {c.sourcePattern}</span>
                       )}
                       {business && !c.rendered && (
                         <span className="ml-auto">
@@ -126,6 +141,8 @@ export default async function PipelinePage() {
             );
           })}
         </div>
+          )}
+        </PipelineFilter>
       )}
     </div>
   );

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Sidebar } from "./Sidebar";
 import { MobileNav } from "./MobileNav";
 import { NotificationBell } from "./NotificationBell";
+import { ThemeToggle } from "./ThemeToggle";
 
 const COLLAPSE_KEY = "glocal:nav-collapsed";
 
@@ -56,7 +57,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </button>
             <MobileNav />
           </div>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            <ThemeToggle />
             <NotificationBell />
           </div>
         </header>
