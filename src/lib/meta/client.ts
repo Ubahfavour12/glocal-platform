@@ -147,6 +147,8 @@ export async function createPausedAdSet(
     campaignId: string;
     dailyBudgetUsdMinor: number;
     countries: string[];
+    /** Required minimum age for restricted categories (alcohol, dating). */
+    ageMin?: number;
     optimizationGoal?: "LINK_CLICKS" | "OFFSITE_CONVERSIONS" | "LEAD_GENERATION";
   },
 ): Promise<{ adSetId: string }> {
@@ -162,7 +164,13 @@ export async function createPausedAdSet(
         billing_event: "IMPRESSIONS",
         optimization_goal: params.optimizationGoal ?? "LINK_CLICKS",
         bid_strategy: "LOWEST_COST_WITHOUT_CAP",
-        targeting: JSON.stringify({ geo_locations: { countries: params.countries } }),
+        // Only geo, plus any age floor the category legally requires. No
+        // interests or demographics: the creative finds the audience, and
+        // narrowing it raises costs and starves the algorithm of learning.
+        targeting: JSON.stringify({
+          geo_locations: { countries: params.countries },
+          ...(params.ageMin ? { age_min: params.ageMin } : {}),
+        }),
       },
     },
     cfg.accessToken,

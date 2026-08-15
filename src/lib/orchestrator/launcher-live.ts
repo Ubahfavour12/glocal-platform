@@ -46,6 +46,7 @@ export function liveLaunchAdapters(
         campaignId: ctx.campaignId,
         dailyBudgetUsdMinor: ad.budgetUsdMinor,
         countries: ctx.countries.length ? ctx.countries : ["NG"],
+        ageMin: ctx.ageMin,
       });
     },
 

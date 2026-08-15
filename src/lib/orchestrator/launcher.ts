@@ -34,6 +34,8 @@ export interface LaunchContext {
   pageId: string;
   campaignId: string; // resolved/created campaign
   countries: string[];
+  /** Minimum age the category legally requires, when it requires one. */
+  ageMin?: number;
 }
 
 export interface AdLaunchResult {

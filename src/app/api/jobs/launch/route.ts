@@ -7,6 +7,7 @@ import type { ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
 import type { ConnectionMode } from "@/lib/tracking/modes";
 import { asPlan, planAllowsLaunch } from "@/lib/billing/plan";
 import { resolveTargetCountries } from "@/lib/tracking/geo";
+import { audienceConstraintsFor } from "@/lib/compliance/targeting";
 
 export const maxDuration = 300;
 
@@ -69,7 +70,7 @@ async function launchForPlan(
 
   const { data: biz } = await supabase
     .from("businesses")
-    .select("goal, connection_mode, destination, service_geo, country, plan")
+    .select("goal, category, connection_mode, destination, service_geo, country, plan")
     .eq("id", businessId)
     .maybeSingle();
   if (!biz) return "business_missing";
@@ -112,7 +113,31 @@ async function launchForPlan(
   if (!campaignId) return "awaiting_campaign";
 
   const goal = (biz.goal ?? "whatsapp") as "sales" | "leads" | "whatsapp" | "visits";
-  const countries = resolveTargetCountries(biz.service_geo, biz.country as string | null);
+  const targetCountries = resolveTargetCountries(biz.service_geo, biz.country as string | null);
+
+  // Restricted categories (alcohol, dating) carry network-mandated audience
+  // rules. The gateway has always flagged this; now it is actually applied.
+  const constraints = audienceConstraintsFor((biz.category as string) ?? "", targetCountries);
+  if (constraints.countries.length === 0) {
+    await supabase.from("journal_entries").insert({
+      business_id: businessId,
+      entry_type: "note",
+      content: {
+        action: "launch_skipped",
+        reason: "category_not_advertisable_in_target_markets",
+        detail: { blocked: constraints.blockedCountries },
+      },
+    });
+    return "category_blocked_in_market";
+  }
+  if (constraints.note) {
+    await supabase.from("journal_entries").insert({
+      business_id: businessId,
+      entry_type: "note",
+      content: { action: "targeting_constrained", detail: { note: constraints.note } },
+    });
+  }
+  const countries = constraints.countries;
 
   const ctx: LaunchContext = {
     businessId,
@@ -121,6 +146,7 @@ async function launchForPlan(
     pageId: acct.platform_page_id,
     campaignId,
     countries,
+    ageMin: constraints.ageMin,
   };
 
   const ads = payloadToAds(plan.payload, goal);
