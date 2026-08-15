@@ -5,6 +5,13 @@ import { useRouter } from "next/navigation";
 import { AgentNote } from "@/components/ui/AgentNote";
 import { SalesCheckIn, type SellableAd } from "@/components/approval/SalesCheckIn";
 import { totalPlannedUsdMinor, type ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
+import {
+  defaultLaunchAt,
+  describeLaunchAt,
+  launchSuggestion,
+  resolveLaunchAt,
+  type LaunchChoice,
+} from "@/lib/orchestrator/launch-timing";
 
 /**
  * The evening approval card, Blueprint §2.2 / UF-4. The single human moment
@@ -31,6 +38,9 @@ export function ApprovalCard({
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
+  // When to go live. The agent suggests, the customer decides.
+  const [when, setWhen] = useState<LaunchChoice>("default");
+  const [customAt, setCustomAt] = useState("");
 
   const total = totalPlannedUsdMinor(plan);
   const championPct = total > 0 ? Math.round((plan.championBudgetUsdMinor / total) * 100) : 0;
@@ -38,17 +48,35 @@ export function ApprovalCard({
   async function approve() {
     setBusy("approved");
     setError("");
+    const now = new Date();
+    const launchAt = resolveLaunchAt(when, now, customAt || undefined);
+
     const res = await fetch("/api/approvals/respond", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ approval_id: approvalId, response: "approved" }),
+      body: JSON.stringify({
+        approval_id: approvalId,
+        response: "approved",
+        scheduled_for: launchAt ? launchAt.toISOString() : null,
+      }),
     });
-    setBusy(null);
     if (!res.ok) {
+      setBusy(null);
       const data = (await res.json().catch(() => null)) as { error?: string } | null;
       setError(data?.error ?? "could not submit");
       return;
     }
+
+    // "Now" cannot wait for a once-a-day cron, so trigger the launcher directly.
+    if (when === "now") {
+      await fetch("/api/plan/launch-now", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approval_id: approvalId }),
+      }).catch(() => null);
+    }
+
+    setBusy(null);
     router.refresh();
   }
 
@@ -155,6 +183,51 @@ export function ApprovalCard({
         </section>
       )}
 
+      {/* when to go live */}
+      <section className="mt-4 rounded-card border border-line bg-surface-raised p-5">
+        <div className="datalabel">when should these go live</div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {(
+            [
+              ["default", `Tomorrow morning`],
+              ["now", "As soon as I approve"],
+              ["custom", "Pick a time"],
+            ] as [LaunchChoice, string][]
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setWhen(key)}
+              className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                when === key
+                  ? "border-accent bg-accent-soft text-accent-bright"
+                  : "border-line text-ink-muted hover:text-ink"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {when === "custom" && (
+          <input
+            type="datetime-local"
+            value={customAt}
+            onChange={(e) => setCustomAt(e.target.value)}
+            aria-label="Launch date and time"
+            className="mt-3 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none sm:max-w-xs"
+          />
+        )}
+
+        <p className="mt-3 text-xs leading-relaxed text-ink-faint">
+          {when === "default"
+            ? launchSuggestion(new Date())
+            : when === "now"
+              ? "They will go live as soon as you approve. Still paused until your account is funded and live."
+              : "Pick any moment from here on. I will hold the plan until then."}
+        </p>
+      </section>
+
       {/* actions */}
       <div className="mt-6 flex gap-3">
         <button
@@ -179,7 +252,13 @@ export function ApprovalCard({
         </p>
       )}
       <p className="mt-3 text-center text-xs text-ink-faint">
-        Nothing spends until you approve. Ads launch tomorrow morning, always paused first.
+        Nothing spends until you approve. Ads go live{" "}
+        {when === "now"
+          ? "as soon as you approve"
+          : when === "custom" && customAt
+            ? describeLaunchAt(new Date(customAt), new Date())
+            : describeLaunchAt(defaultLaunchAt(new Date()), new Date())}
+        , always paused first.
       </p>
       <p className="mt-4 text-center text-xs text-ink-faint">
         Want to spend more or less per day?{" "}

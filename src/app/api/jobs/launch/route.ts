@@ -26,12 +26,16 @@ export async function GET(req: NextRequest) {
   const supabase = createServiceClient();
   const today = new Date().toISOString().slice(0, 10);
 
+  // Due now = approved, not yet launched, and either scheduled for a moment
+  // that has passed, or unscheduled (which means the default morning run).
+  const nowIso = new Date().toISOString();
   const { data: plans, error } = await supabase
     .from("approvals")
-    .select("id, business_id, plan_date, payload")
+    .select("id, business_id, plan_date, payload, scheduled_for")
     .eq("status", "approved")
     .is("launched_at", null)
-    .lte("plan_date", today);
+    .lte("plan_date", today)
+    .or(`scheduled_for.is.null,scheduled_for.lte.${nowIso}`);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const outcomes: { businessId: string; result: string }[] = [];
