@@ -11,6 +11,7 @@ import {
   minFirstDepositUsdMinor,
 } from "@/lib/money/ledger";
 import { currencyForCountry, dialCodeForCountry, listCountries } from "@/lib/money/currency";
+import { checkWhatsApp, stripTrunkPrefix, waMeLink } from "@/lib/onboarding/phone";
 import {
   budgetAdvice,
   countryFromPhone,
@@ -343,13 +344,17 @@ export default function OnboardingPage() {
   const mismatch = goal ? goalDoorMismatch(goal, door) : null;
   const advice = budgetAdvice(dailyMinor);
 
-  // A phone number is the one field we can genuinely check the shape of. We
-  // cannot confirm WhatsApp is registered on it without the Business API, so
-  // the copy claims a format check and nothing more.
-  const doorDigits = doorValue.replace(/\D/g, "");
+  // Checked against the country's real numbering plan, so a missing digit or
+  // a shop landline is caught here rather than after a week of ads pointing at
+  // nothing. Whether WhatsApp is registered on it is not knowable from here;
+  // the owner settles that with one tap on the link an ad would use.
+  const phone = useMemo(
+    () => (door === "whatsapp" ? checkWhatsApp(doorValue, country) : null),
+    [door, doorValue, country],
+  );
   const doorOk =
     door === "whatsapp"
-      ? doorDigits.length >= 9 && doorDigits.length <= 15
+      ? phone?.valid === true
       : /^[\w-]+(\.[\w-]+)+/.test(doorValue.trim().replace(/^https?:\/\//, ""));
   const doorFilled = doorValue.trim().length > 0;
   const doorBad = doorFilled && !doorOk;
@@ -421,7 +426,11 @@ export default function OnboardingPage() {
     setSaveError(null);
 
     const connectionMode = door === "link" ? "website" : door;
-    const destination = door === "whatsapp" ? `${dial} ${doorValue.trim()}` : doorValue.trim();
+    // E.164 for WhatsApp: the one shape wa.me accepts, and the only one that
+    // survives being pasted into an ad link without a country code going
+    // missing. Guarded above, so e164 is never null here.
+    const destination =
+      door === "whatsapp" ? (phone?.e164 ?? doorValue.trim()) : doorValue.trim();
 
     try {
       localStorage.setItem(
@@ -798,11 +807,17 @@ export default function OnboardingPage() {
                           <input
                             value={doorValue}
                             onChange={(e) => {
-                              setDoorValue(e.target.value);
-                              // The dialling code answers the country question,
-                              // so a typed number keeps that field honest.
+                              const raw = e.target.value;
+                              // People type 0802 555 0117 out of habit. Behind
+                              // a fixed +234 that is not a number, so fix the
+                              // field rather than telling them off.
+                              setDoorValue(
+                                d.id === "whatsapp" ? stripTrunkPrefix(raw, country) : raw,
+                              );
+                              // A typed dialling code is deliberate, where the
+                              // country is a guess, so let the number win.
                               if (!countryTouched) {
-                                const c = countryFromPhone(e.target.value.trim());
+                                const c = countryFromPhone(raw.trim());
                                 if (c) setCountry(c);
                               }
                             }}
@@ -817,15 +832,28 @@ export default function OnboardingPage() {
                         {doorBad && (
                           <FieldError>
                             {d.id === "whatsapp"
-                              ? "That is not a complete phone number. Ads pointing at a dead number go nowhere, so check the digits."
+                              ? (phone?.problem ??
+                                "That is not a complete number. Ads pointing at a dead number go nowhere, so check the digits.")
                               : "That does not look like a web address. Ads pointing at a broken link waste every cent they spend."}
                           </FieldError>
                         )}
-                        {doorFilled && doorOk && d.id === "whatsapp" && (
-                          <p className="mt-2 text-xs leading-relaxed text-ink-faint">
-                            The shape is right. Send yourself a test message before you go live,
-                            because I cannot tell from here whether WhatsApp answers on it.
-                          </p>
+                        {doorOk && d.id === "whatsapp" && phone?.e164 && (
+                          <div className="mt-2.5">
+                            <p className="text-xs leading-relaxed text-ink-faint">
+                              A real mobile number in {currencyForCountry(phone.country ?? country).countryName}.
+                              I cannot tell from here whether WhatsApp answers on it, so open the
+                              link a customer would tap and see for yourself.
+                            </p>
+                            <a
+                              href={waMeLink(phone.e164, `Test from ${name.trim() || "Glocal"}`)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-2 inline-flex items-center gap-2 rounded-lg border border-line px-3.5 py-2 text-[13px] text-ink transition-colors hover:border-accent"
+                            >
+                              <Icon name="chat" className="h-4 w-4 text-accent" />
+                              Open the link your ads will use
+                            </a>
+                          </div>
                         )}
                       </div>
                     )}
