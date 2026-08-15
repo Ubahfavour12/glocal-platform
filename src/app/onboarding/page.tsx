@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { buildServiceGeo } from "@/lib/tracking/geo";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { screenCategory } from "@/lib/compliance/categories";
@@ -89,7 +90,7 @@ export default function OnboardingPage() {
           name: name.trim(),
           category: category.trim(),
           goal,
-          service_geo: { raw: geo.trim() },
+          service_geo: buildServiceGeo(geo, country),
           daily_budget_usd_minor: dailyMinor,
           connection_mode: connectionMode,
           destination: destination.trim(),

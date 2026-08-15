@@ -6,6 +6,7 @@ import { metaConfigFromEnv, objectiveForGoal, ctaForGoal } from "@/lib/meta/clie
 import type { ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
 import type { ConnectionMode } from "@/lib/tracking/modes";
 import { asPlan, planAllowsLaunch } from "@/lib/billing/plan";
+import { resolveTargetCountries } from "@/lib/tracking/geo";
 
 export const maxDuration = 300;
 
@@ -68,7 +69,7 @@ async function launchForPlan(
 
   const { data: biz } = await supabase
     .from("businesses")
-    .select("goal, connection_mode, destination, service_geo, plan")
+    .select("goal, connection_mode, destination, service_geo, country, plan")
     .eq("id", businessId)
     .maybeSingle();
   if (!biz) return "business_missing";
@@ -111,7 +112,7 @@ async function launchForPlan(
   if (!campaignId) return "awaiting_campaign";
 
   const goal = (biz.goal ?? "whatsapp") as "sales" | "leads" | "whatsapp" | "visits";
-  const countries = extractCountries(biz.service_geo);
+  const countries = resolveTargetCountries(biz.service_geo, biz.country as string | null);
 
   const ctx: LaunchContext = {
     businessId,
@@ -149,12 +150,4 @@ function payloadToAds(payload: ApprovalPlanPayload, goal: Parameters<typeof ctaF
     budgetUsdMinor: c.budgetUsdMinor,
     mediaUrl: c.mediaUrl,
   }));
-}
-
-function extractCountries(serviceGeo: unknown): string[] {
-  if (serviceGeo && typeof serviceGeo === "object" && "countries" in serviceGeo) {
-    const c = (serviceGeo as { countries?: unknown }).countries;
-    if (Array.isArray(c) && c.every((x) => typeof x === "string")) return c as string[];
-  }
-  return ["NG"];
 }
