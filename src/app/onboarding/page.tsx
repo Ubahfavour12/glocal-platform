@@ -914,7 +914,11 @@ export default function OnboardingPage() {
                       {o.badge && !on && (
                         <span
                           className={`datalabel shrink-0 whitespace-nowrap ${
-                            o.measurement === "auto" ? "text-positive" : "text-ink-faint"
+                            o.measurement === "auto"
+                              ? "text-positive"
+                              : o.measurement === "needs_setup"
+                                ? "text-accent"
+                                : "text-ink-faint"
                           }`}
                         >
                           {o.badge}

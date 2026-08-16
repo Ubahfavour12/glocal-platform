@@ -9,6 +9,9 @@ import { asPlan, planAllowsLaunch } from "@/lib/billing/plan";
 import { resolveTargetCountries } from "@/lib/tracking/geo";
 import { audienceConstraintsFor } from "@/lib/compliance/targeting";
 
+/** How long an approved-but-unlaunched plan stays launchable: today + yesterday. */
+const PLAN_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
+
 export const maxDuration = 300;
 
 /**
@@ -28,8 +31,30 @@ export async function GET(req: NextRequest) {
   const supabase = createServiceClient();
   const today = new Date().toISOString().slice(0, 10);
 
-  // Due now = approved, not yet launched, and either scheduled for a moment
-  // that has passed, or unscheduled (which means the default morning run).
+  /**
+   * A plan is written for one specific day. Its budgets, its concepts and the
+   * verdict behind it are all that day's, so launching it later is not "late",
+   * it is wrong. Without this, an approved plan that never launched sits in the
+   * queue forever and goes live the moment the ad platform is connected, taking
+   * every other stale plan with it. Yesterday is allowed so a cron that runs
+   * late, or a timezone edge, does not silently drop a real plan.
+   */
+  const cutoff = new Date(Date.now() - PLAN_STALE_AFTER_MS).toISOString().slice(0, 10);
+
+  // Anything older has missed its day. Retire it so it stops being a queue of
+  // ads waiting to fire, and so Activity shows what happened to it.
+  const { data: staleRows } = await supabase
+    .from("approvals")
+    .update({ status: "expired" })
+    .eq("status", "approved")
+    .is("launched_at", null)
+    .lt("plan_date", cutoff)
+    .select("id");
+  const expired = staleRows?.length ?? 0;
+
+  // Due now = approved, not yet launched, for a day that has not passed, and
+  // either scheduled for a moment that has passed or unscheduled (which means
+  // the default morning run).
   const nowIso = new Date().toISOString();
   const { data: plans, error } = await supabase
     .from("approvals")
@@ -37,6 +62,7 @@ export async function GET(req: NextRequest) {
     .eq("status", "approved")
     .is("launched_at", null)
     .lte("plan_date", today)
+    .gte("plan_date", cutoff)
     .or(`scheduled_for.is.null,scheduled_for.lte.${nowIso}`);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -56,7 +82,7 @@ export async function GET(req: NextRequest) {
       outcomes.push({ businessId: plan.business_id, result: `error: ${(e as Error).message}` });
     }
   }
-  return NextResponse.json({ launched: outcomes.length, outcomes });
+  return NextResponse.json({ launched: outcomes.length, expired, outcomes });
 }
 
 type Supa = ReturnType<typeof createServiceClient>;

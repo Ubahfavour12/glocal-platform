@@ -28,7 +28,7 @@
 import { MIN_ACTIVE_DAYS, MIN_ATTRIBUTED_ORDERS } from "@/lib/tracking/consistency";
 import type { Door, Goal } from "./inference";
 
-export type Measurement = "auto" | "self_reported" | "impossible";
+export type Measurement = "auto" | "needs_setup" | "self_reported" | "impossible";
 
 export interface GoalOption {
   goal: Goal;
@@ -94,22 +94,48 @@ export function measurementFor(
         badge: "counted for you",
       };
     }
+    // A website can report its own orders, but only once our snippet is on the
+    // checkout. That is a one-off job someone can do for them, so it is a step
+    // to take rather than a limit to live with, and the wording has to say so.
+    if (door === "link") {
+      return {
+        measurement: "needs_setup",
+        note:
+          "Paste one line of my code on your site and every order reports itself, values included, exactly like a store. " +
+          "Until it is in, you can confirm sales by hand and I will use those instead.",
+        badge: "add one line of code",
+      };
+    }
     return {
       measurement: "self_reported",
-      note:
-        (door === "whatsapp"
-          ? "I can see the chats, but not who paid. "
-          : "I can see who taps through, but not who paid. ") + SELF_REPORT_PROMISE,
+      note: "I can see the chats, but not who paid. " + SELF_REPORT_PROMISE,
       badge: "you confirm sales",
     };
   }
 
-  // Footfall: no ad platform on earth reports who walked in.
+  // Visits mean two different things, and the door decides which one.
+  if (door === "store") {
+    return {
+      measurement: "auto",
+      note: "Your store reports every visit your ads send it, so I can see who arrived and who bought.",
+      badge: "counted for you",
+    };
+  }
+  if (door === "link") {
+    return {
+      measurement: "needs_setup",
+      note:
+        "With my code on your site I count every visit an ad sends you. " +
+        "Walk-ins to a physical shop are the part nobody can count, so log those the way you log a sale.",
+      badge: "add one line of code",
+    };
+  }
+  // Footfall behind a chat: no ad platform on earth reports who walked in.
   return {
     measurement: "self_reported",
     note:
       "No ad platform can tell me who walked into your shop, so nobody can promise you this automatically. " +
-      "I optimise for people tapping through, and when a walk-in buys, log it the same way. " +
+      "I optimise for the chats your ads start, and when a walk-in buys, log it the same way. " +
       "That is what turns footfall into something I can actually learn from.",
     badge: "you confirm visits",
   };
@@ -117,7 +143,7 @@ export function measurementFor(
 
 /** The goal list for a door, best-measured first, impossible ones last. */
 export function goalOptionsFor(door: Door): GoalOption[] {
-  const order: Measurement[] = ["auto", "self_reported", "impossible"];
+  const order: Measurement[] = ["auto", "needs_setup", "self_reported", "impossible"];
   return (Object.keys(LABELS) as Goal[])
     .map((goal) => ({ goal, ...LABELS[goal], ...measurementFor(goal, door) }))
     .sort((a, b) => order.indexOf(a.measurement) - order.indexOf(b.measurement));

@@ -26,11 +26,19 @@ describe("measurementFor", () => {
   it("offers sales without a store, rather than refusing them", () => {
     // The whole point: a WhatsApp seller can still be judged on money, it
     // just costs them a tap a day to get there.
-    for (const door of ["whatsapp", "link"] as Door[]) {
-      const m = measurementFor("sales", door);
-      expect(m.measurement, door).toBe("self_reported");
-      expect(m.note, door).toMatch(/tap the one that brought the buyer/);
-    }
+    const m = measurementFor("sales", "whatsapp");
+    expect(m.measurement).toBe("self_reported");
+    expect(m.note).toMatch(/tap the one that brought the buyer/);
+  });
+
+  it("treats a website's own orders as a job to do, not a limit to accept", () => {
+    // One line of code on the checkout and a site reports orders like a store.
+    // Calling that impossible would be wrong, and calling it automatic would
+    // be a lie until the snippet is actually in.
+    const m = measurementFor("sales", "link");
+    expect(m.measurement).toBe("needs_setup");
+    expect(m.note).toMatch(/one line of my code/);
+    expect(m.note).toMatch(/confirm sales by hand/);
   });
 
   it("quotes the real consistency gate, so the promise cannot drift", () => {
@@ -38,12 +46,17 @@ describe("measurementFor", () => {
     expect(measurementFor("sales", "whatsapp").note).toMatch(/3 sales across 2 days/);
   });
 
-  it("never promises footfall automatically, through any door", () => {
-    for (const door of DOORS) {
-      const m = measurementFor("visits", door);
-      expect(m.measurement, door).toBe("self_reported");
-      expect(m.note, door).toMatch(/No ad platform/);
-    }
+  it("counts visits a store or a tagged site can see for itself", () => {
+    expect(measurementFor("visits", "store").measurement).toBe("auto");
+    expect(measurementFor("visits", "link").measurement).toBe("needs_setup");
+  });
+
+  it("never promises physical footfall, which nothing can report", () => {
+    // Behind a chat there is no site to tag, so a walk-in is only ever known
+    // because the owner says so.
+    const m = measurementFor("visits", "whatsapp");
+    expect(m.measurement).toBe("self_reported");
+    expect(m.note).toMatch(/No ad platform/);
   });
 
   it("treats leads as visible through every door", () => {
@@ -96,6 +109,10 @@ describe("defaultGoalFor", () => {
     for (const door of DOORS) {
       expect(measurementFor(defaultGoalFor(door), door).measurement, door).toBe("auto");
     }
+  });
+
+  it("keeps leads as the website default, since sales there need the snippet first", () => {
+    expect(defaultGoalFor("link")).toBe("leads");
   });
 
   it("never defaults to something impossible", () => {
