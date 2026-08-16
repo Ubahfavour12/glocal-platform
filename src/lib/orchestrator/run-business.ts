@@ -47,6 +47,30 @@ export interface RunOptions {
    * produces anything new.
    */
   excludeConceptIds?: string[];
+  /**
+   * Force the plan to wait for a human, even on a full-auto account.
+   *
+   * Pressing "Regenerate" is the owner saying they are in the loop right now:
+   * they looked at a plan and rejected it. Handing them a replacement that is
+   * already approved means the ads they asked to be rewritten go live without
+   * anyone reading the rewrite. Full auto is consent to skip a review nobody
+   * asked for, not consent to skip the one they just started.
+   */
+  requireApproval?: boolean;
+}
+
+/**
+ * Pure: the status a freshly built plan should be stored with.
+ *
+ * Full auto is consent to skip a review the owner never asked for. It is not
+ * consent to skip the review they just started: pressing "Regenerate" means
+ * they read a plan and rejected it, so the replacement has to be read too.
+ */
+export function approvalStatusFor(
+  planStatus: string,
+  requireApproval: boolean | undefined,
+): "approved" | "awaiting" {
+  return planStatus === "auto_approved" && !requireApproval ? "approved" : "awaiting";
 }
 
 // Either engine being configured is enough; the render lane fails over between
@@ -174,7 +198,7 @@ export async function runForBusiness(
             business_id: p.businessId,
             plan_date: p.planDate,
             payload,
-            status: p.status === "auto_approved" ? "approved" : "awaiting",
+            status: approvalStatusFor(p.status, opts.requireApproval),
           },
           { onConflict: "business_id,plan_date" },
         );

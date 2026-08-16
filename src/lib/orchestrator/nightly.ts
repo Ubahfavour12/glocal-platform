@@ -192,21 +192,49 @@ export async function runNightly(
     CHALLENGERS_PER_DAY + MAX_GATEWAY_SUBSTITUTIONS,
   );
 
+  // Two paths, because they have different people waiting on them.
+  //
+  // Regenerate runs with no renderer and someone watching a spinner. The
+  // gateway scans do not depend on each other, so run the whole pool at once
+  // and then walk the answers in rank order: the plan that comes out is
+  // identical, it just arrives in one round trip instead of one per concept.
+  //
+  // The nightly run keeps its sequential shape. There a render happens first
+  // and the scan reads the rendered copy, and renders are far too expensive to
+  // do speculatively for concepts that may never be used.
+  const scanAhead = adapters.renderCreative
+    ? null
+    : await Promise.all(
+        pool.map((concept) =>
+          runGateway(
+            {
+              copy: concept.copy,
+              category: ctx.category,
+              destinationKind: ctx.goal === "whatsapp" ? "whatsapp" : "url",
+            },
+            adapters.llmGatewayScan,
+          ),
+        ),
+      );
+
   let poolIdx = 0;
   while (challengers.length < challengerPlan.count && poolIdx < pool.length) {
-    const concept = pool[poolIdx++];
+    const at = poolIdx++;
+    const concept = pool[at];
     const creative = adapters.renderCreative
       ? await adapters.renderCreative(ctx.businessId, concept)
       : undefined;
 
-    const gateway = await runGateway(
-      {
-        copy: creative?.copy ?? concept.copy,
-        category: ctx.category,
-        destinationKind: ctx.goal === "whatsapp" ? "whatsapp" : "url",
-      },
-      adapters.llmGatewayScan,
-    );
+    const gateway =
+      scanAhead?.[at] ??
+      (await runGateway(
+        {
+          copy: creative?.copy ?? concept.copy,
+          category: ctx.category,
+          destinationKind: ctx.goal === "whatsapp" ? "whatsapp" : "url",
+        },
+        adapters.llmGatewayScan,
+      ));
     await adapters.audit(ctx.businessId, "gateway_scan", {
       conceptId: concept.id,
       verdict: gateway.verdict,

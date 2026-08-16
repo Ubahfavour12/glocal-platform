@@ -111,6 +111,9 @@ export async function POST(req: NextRequest) {
     const plan = await runForBusiness(service, business as BizRow, new Date(), {
       skipRender: true,
       skipSideEffects: true,
+      // They just rejected a plan, so they are watching. A replacement must
+      // never arrive pre-approved, even on a full-auto account.
+      requireApproval: true,
       preferConceptIds: body.concept_ids,
       excludeConceptIds: rejected,
     });

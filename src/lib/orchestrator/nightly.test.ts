@@ -181,3 +181,43 @@ describe("runNightly — verdict step", () => {
     expect(actions).toContain("plan_created");
   });
 });
+
+describe("regenerate speed", () => {
+  it("scans the whole pool at once when there is no renderer", async () => {
+    // Regenerate has someone watching a spinner, and the scans do not depend
+    // on each other. Doing them one at a time made wall time scale with pool
+    // size for no reason at all.
+    let inFlight = 0;
+    let peak = 0;
+    const { adapters } = makeAdapters({
+      llmGatewayScan: async () => {
+        peak = Math.max(peak, ++inFlight);
+        await new Promise((r) => setTimeout(r, 5));
+        inFlight--;
+        return { verdict: "pass", riskScore: 0, issues: [] };
+      },
+    });
+
+    await runNightly(ctx(), adapters, now);
+    expect(peak).toBeGreaterThan(1);
+  });
+
+  it("still scans one at a time when a render has to come first", async () => {
+    // Renders are expensive and must never happen for concepts that may never
+    // be used, so the unattended nightly path keeps its sequential shape.
+    let inFlight = 0;
+    let peak = 0;
+    const { adapters } = makeAdapters({
+      renderCreative: async (_b, c) => ({ conceptId: c.id, copy: c.copy }),
+      llmGatewayScan: async () => {
+        peak = Math.max(peak, ++inFlight);
+        await new Promise((r) => setTimeout(r, 5));
+        inFlight--;
+        return { verdict: "pass", riskScore: 0, issues: [] };
+      },
+    });
+
+    await runNightly(ctx(), adapters, now);
+    expect(peak).toBe(1);
+  });
+});
