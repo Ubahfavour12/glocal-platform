@@ -165,9 +165,24 @@ export default async function TodayPage() {
           {local && balanceUsdMinor > 0 && (
             <div className="mt-0.5 font-mono text-xs text-ink-faint">{fmtDual(balanceUsdMinor, local).replace(/^[^(]*\(/, "≈ ").replace(/\)$/, "")}</div>
           )}
-          <p className="mt-2 flex-1 text-xs text-ink-faint">
+          <p className="mt-2 text-xs text-ink-faint">
             To go live we hold 7 days of your budget, about ${runwayHoldUsd.toFixed(0)} at your current rate.
           </p>
+          {/* The daily budget was set once during onboarding and then lived
+              only in Settings, a screen nobody opens. Money the agent spends
+              every day has to be visible and changeable from the screen people
+              actually look at. */}
+          <div className="mt-3 flex flex-1 items-baseline justify-between border-t border-line-soft pt-3">
+            <span className="datalabel">daily budget</span>
+            <span className="flex items-baseline gap-2">
+              <span className="font-mono text-sm text-ink">
+                ${((business.daily_budget_usd_minor as number) / 100).toFixed(0)}/day
+              </span>
+              <Link href="/settings" className="text-xs text-accent transition-colors hover:text-accent-bright">
+                Change
+              </Link>
+            </span>
+          </div>
           <Link href="/wallet" className="mt-4 inline-flex w-fit items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-bright">
             {balanceUsdMinor > 0 ? "Manage wallet" : "Add funds"}
           </Link>

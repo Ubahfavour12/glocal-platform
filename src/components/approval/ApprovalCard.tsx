@@ -29,11 +29,17 @@ export function ApprovalCard({
   plan,
   businessId,
   ads = [],
+  balanceUsdMinor = 0,
+  requiredUsdMinor = 0,
 }: {
   approvalId: string;
   plan: ApprovalPlanPayload;
   businessId?: string;
   ads?: SellableAd[];
+  /** Wallet balance, so the card can tell whether approving will do anything. */
+  balanceUsdMinor?: number;
+  /** Seven days of budget, the hold that has to clear before ads can run. */
+  requiredUsdMinor?: number;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -41,6 +47,11 @@ export function ApprovalCard({
   // When to go live. The agent suggests, the customer decides.
   const [when, setWhen] = useState<LaunchChoice>("default");
   const [customAt, setCustomAt] = useState("");
+
+  // Approving an unfunded plan queues it and then nothing happens. Saying so
+  // up front is the difference between a decision and a nag.
+  const shortfallUsdMinor = Math.max(0, requiredUsdMinor - balanceUsdMinor);
+  const unfunded = requiredUsdMinor > 0 && shortfallUsdMinor > 0;
 
   const total = totalPlannedUsdMinor(plan);
   const championPct = total > 0 ? Math.round((plan.championBudgetUsdMinor / total) * 100) : 0;
@@ -114,6 +125,31 @@ export function ApprovalCard({
     <div className="mx-auto max-w-lg">
       <div className="datalabel">tomorrow&apos;s plan · {plan.planDate}</div>
       <h1 className="mt-1 text-2xl font-semibold tracking-tight">Ready for your approval</h1>
+
+      {unfunded && (
+        <section className="mt-5 rounded-card border border-line bg-surface-raised p-5">
+          <div className="datalabel">before any of this can run</div>
+          <p className="mt-2 text-sm leading-relaxed text-ink">
+            Your wallet holds {money(balanceUsdMinor)} and going live needs{" "}
+            {money(requiredUsdMinor)}, seven days of your budget. You can approve this now
+            and I will hold it, but nothing goes live until the wallet covers the hold.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <a
+              href="/wallet"
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-bright"
+            >
+              Add {money(shortfallUsdMinor)}
+            </a>
+            <a
+              href="/settings"
+              className="rounded-lg border border-line px-4 py-2 text-sm text-ink-muted transition-colors hover:text-ink"
+            >
+              Lower the daily budget
+            </a>
+          </div>
+        </section>
+      )}
 
       {/* Yesterday's sales check-in. Only shown once ads have actually run:
           with nothing live there is no sale to attribute and nothing to pick. */}
@@ -235,7 +271,11 @@ export function ApprovalCard({
           onClick={approve}
           className="flex-1 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-accent-bright disabled:opacity-50"
         >
-          {busy === "approved" ? "Approving…" : "Approve & launch tomorrow"}
+          {busy === "approved"
+            ? "Approving…"
+            : unfunded
+              ? "Approve and hold until funded"
+              : "Approve & launch tomorrow"}
         </button>
         <button
           disabled={busy !== null}

@@ -194,7 +194,7 @@ describe("regenerate speed", () => {
         peak = Math.max(peak, ++inFlight);
         await new Promise((r) => setTimeout(r, 5));
         inFlight--;
-        return { verdict: "pass", riskScore: 0, issues: [] };
+        return { verdict: "pass" as const, riskScore: 0, issues: [], layer: "rules+llm" as const };
       },
     });
 
@@ -208,12 +208,12 @@ describe("regenerate speed", () => {
     let inFlight = 0;
     let peak = 0;
     const { adapters } = makeAdapters({
-      renderCreative: async (_b, c) => ({ conceptId: c.id, copy: c.copy }),
+      renderCreative: async (_b, c) => ({ conceptId: c.id, copy: c.copy, mediaUrl: "https://example.test/x.jpg" }),
       llmGatewayScan: async () => {
         peak = Math.max(peak, ++inFlight);
         await new Promise((r) => setTimeout(r, 5));
         inFlight--;
-        return { verdict: "pass", riskScore: 0, issues: [] };
+        return { verdict: "pass" as const, riskScore: 0, issues: [], layer: "rules+llm" as const };
       },
     });
 

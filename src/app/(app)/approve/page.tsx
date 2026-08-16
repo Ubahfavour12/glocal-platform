@@ -2,6 +2,7 @@ import { ApprovalCard } from "@/components/approval/ApprovalCard";
 import type { SellableAd } from "@/components/approval/SalesCheckIn";
 import type { ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
 import { createClient } from "@/lib/supabase/server";
+import { minFirstDepositUsdMinor } from "@/lib/money/ledger";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Approve" };
@@ -65,10 +66,12 @@ export default async function ApprovePage() {
   let approval: { id: string; payload: ApprovalPlanPayload; businessId: string } | null = null;
   let sellableAds: SellableAd[] = [];
   let fullAuto = false;
+  let balanceUsdMinor = 0;
+  let requiredUsdMinor = 0;
   if (userData.user) {
     const { data: business } = await supabase
       .from("businesses")
-      .select("id, full_auto")
+      .select("id, full_auto, daily_budget_usd_minor")
       .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle();
@@ -92,6 +95,20 @@ export default async function ApprovePage() {
         // new business has nothing to attribute a sale to, so the question is
         // noise (and the ad picker would be empty).
         sellableAds = await loadSellableAds(supabase, business.id);
+
+        // Approving a plan the account cannot fund does nothing, and a screen
+        // that hides that is a nag: it asks for a decision that will not take
+        // effect and never says why. Work out the shortfall here so the card
+        // can lead with the real blocker instead of the ritual.
+        const { data: wallet } = await supabase
+          .from("wallet_balances")
+          .select("balance_usd_minor")
+          .eq("business_id", business.id)
+          .maybeSingle();
+        balanceUsdMinor = Number(wallet?.balance_usd_minor ?? 0);
+        requiredUsdMinor = minFirstDepositUsdMinor(
+          Number(business.daily_budget_usd_minor ?? 0),
+        );
       }
     }
   }
@@ -154,6 +171,8 @@ export default async function ApprovePage() {
       plan={approval.payload}
       businessId={approval.businessId}
       ads={sellableAds}
+      balanceUsdMinor={balanceUsdMinor}
+      requiredUsdMinor={requiredUsdMinor}
     />
   );
 }
