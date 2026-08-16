@@ -13,9 +13,14 @@ import {
 import { currencyForCountry, dialCodeForCountry, listCountries } from "@/lib/money/currency";
 import { checkWhatsApp, stripTrunkPrefix, waMeLink } from "@/lib/onboarding/phone";
 import {
+  defaultGoalFor,
+  goalOptionsFor,
+  isImpossible,
+  measurementFor,
+} from "@/lib/onboarding/measurability";
+import {
   budgetAdvice,
   countryFromPhone,
-  goalDoorMismatch,
   inferCountry,
   OTHER_TRADE,
   OWNER_ROLES,
@@ -66,13 +71,6 @@ const DOORS: { id: Door; label: string; hint: string; placeholder: string }[] = 
     hint: "Shopify. I read real orders, so I optimise for money.",
     placeholder: "yourshop.myshopify.com",
   },
-];
-
-const GOALS: { id: Goal; label: string; hint: string }[] = [
-  { id: "whatsapp", label: "WhatsApp conversations", hint: "Someone messages you. Best if you close by chat." },
-  { id: "sales", label: "Sales", hint: "A confirmed order. Needs a store, or you telling me." },
-  { id: "leads", label: "Leads", hint: "A name and number to follow up." },
-  { id: "visits", label: "Shop visits", hint: "Footfall. I can point at maps but I can't count who arrives." },
 ];
 
 const MONEY_FACTS = [
@@ -341,7 +339,14 @@ export default function OnboardingPage() {
       ? null
       : `≈ ${local.symbol}${Math.ceil((holdMinor * DEMO_NGN_PER_USD_BUFFERED) / 100).toLocaleString()}`;
 
-  const mismatch = goal ? goalDoorMismatch(goal, door) : null;
+  const goalOptions = useMemo(() => goalOptionsFor(door), [door]);
+
+  // Changing the door can strand the goal on something that door cannot
+  // report, so move it to the strongest signal the new door gives for free.
+  useEffect(() => {
+    if (!hydrated) return;
+    setGoal((g) => (g === null || isImpossible(g, door) ? defaultGoalFor(door) : g));
+  }, [hydrated, door]);
   const advice = budgetAdvice(dailyMinor);
 
   // Checked against the country's real numbering plan, so a missing digit or
@@ -368,7 +373,7 @@ export default function OnboardingPage() {
       : phase === "door"
         ? doorOk
         : phase === "goal"
-          ? goal !== null
+          ? goal !== null && !isImpossible(goal, door)
           : phase === "photo"
             ? media.length > 0
             : true;
@@ -871,37 +876,68 @@ export default function OnboardingPage() {
               What counts as working?
             </h1>
             <p className="mt-2.5 text-sm leading-relaxed text-ink-muted">
-              This is what I judge every ad against. Pick the thing you would actually be
-              pleased to see more of.
+              This is what I judge every ad against. What I can measure depends on where
+              your ads land, so this list is built from the door you picked.
             </p>
             <div className="mt-6 flex flex-col gap-2.5">
-              {GOALS.map((g) => (
-                <button
-                  key={g.id}
-                  onClick={() => setGoal(g.id)}
-                  className={`flex items-center justify-between gap-3 rounded-card border p-4 text-left transition-colors ${
-                    goal === g.id
-                      ? "border-accent bg-accent-soft"
-                      : "border-line bg-surface-raised hover:border-ink-faint"
-                  }`}
-                >
-                  <span className="min-w-0">
-                    <span className="block text-[15px] font-medium text-ink">{g.label}</span>
-                    <span className="mt-0.5 block text-xs leading-relaxed text-ink-muted">
-                      {g.hint}
-                    </span>
-                  </span>
-                  {goal === g.id && (
-                    <Icon name="check" className="h-[19px] w-[19px] shrink-0 text-accent" />
-                  )}
-                </button>
-              ))}
+              {goalOptions.map((o) => {
+                const closed = o.measurement === "impossible";
+                const on = goal === o.goal;
+                return (
+                  <button
+                    key={o.goal}
+                    onClick={() => !closed && setGoal(o.goal)}
+                    disabled={closed}
+                    aria-disabled={closed}
+                    className={`rounded-card border p-4 text-left transition-colors ${
+                      closed
+                        ? "cursor-not-allowed border-line-soft bg-surface opacity-70"
+                        : on
+                          ? "border-accent bg-accent-soft"
+                          : "border-line bg-surface-raised hover:border-ink-faint"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div
+                          className={`text-[15px] font-medium ${closed ? "text-ink-faint" : "text-ink"}`}
+                        >
+                          {o.label}
+                        </div>
+                        <div className="mt-0.5 text-xs leading-relaxed text-ink-muted">
+                          {o.hint}
+                        </div>
+                      </div>
+                      {on && !closed && (
+                        <Icon name="check" className="h-[19px] w-[19px] shrink-0 text-accent" />
+                      )}
+                      {o.badge && !on && (
+                        <span
+                          className={`datalabel shrink-0 whitespace-nowrap ${
+                            o.measurement === "auto" ? "text-positive" : "text-ink-faint"
+                          }`}
+                        >
+                          {o.badge}
+                        </span>
+                      )}
+                    </div>
+                    {/* The reason is only worth the space once it is their
+                        choice, or once it is the thing blocking them. */}
+                    {(on || closed) && o.note && (
+                      <p
+                        className={`mt-3 border-t pt-3 text-[13px] leading-relaxed ${
+                          closed
+                            ? "border-line-soft text-ink-faint"
+                            : "border-accent/25 text-ink-muted"
+                        }`}
+                      >
+                        {o.note}
+                      </p>
+                    )}
+                  </button>
+                );
+              })}
             </div>
-            {mismatch && (
-              <div className="mt-3.5">
-                <AgentNote>{mismatch}</AgentNote>
-              </div>
-            )}
           </section>
         )}
 
@@ -1137,6 +1173,18 @@ export default function OnboardingPage() {
                   when: "tomorrow",
                   live: false,
                 },
+                // Only promised when their goal actually needs it, so nobody
+                // is told about a daily chore they will never be asked for.
+                ...(goal && measurementFor(goal, door).measurement === "self_reported"
+                  ? [
+                      {
+                        title: "Then one tap a day from you",
+                        body: "I show you yesterday's ads and you tap the one that brought the buyer. That is the only thing I cannot see for myself.",
+                        when: "each evening",
+                        live: false,
+                      },
+                    ]
+                  : []),
               ].map((s) => (
                 <li key={s.title} className="relative pb-6 pl-6">
                   <span
