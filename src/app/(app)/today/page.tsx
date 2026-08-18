@@ -3,6 +3,7 @@ import { AgentNote } from "@/components/ui/AgentNote";
 import { MetricChip } from "@/components/ui/MetricChip";
 import { BoltIcon, CursorIcon, BagIcon, TrendIcon, TrophyIcon, WalletIcon } from "@/components/ui/icons";
 import { createClient } from "@/lib/supabase/server";
+import { defaultLaunchAt, describeLaunchAt } from "@/lib/orchestrator/launch-timing";
 import { adEfficiency, formatAgainstOrder, formatCostPerCustomer } from "@/lib/metrics/efficiency";
 import { fetchUsdRate } from "@/lib/money/rates";
 import { currencyForCountry } from "@/lib/money/currency";
@@ -53,7 +54,7 @@ export default async function TodayPage() {
   const walletId = wallet?.wallet_id as string | undefined;
   const balanceUsdMinor = Number(wallet?.balance_usd_minor ?? 0);
 
-  const [conceptsRes, salesRes, spendRes, clicksRes, approvalRes, testRes] = await Promise.all([
+  const [conceptsRes, salesRes, spendRes, clicksRes, approvalRes, queuedRes, testRes] = await Promise.all([
     supabase.from("concepts").select("id", { count: "exact", head: true }).eq("business_id", bizId),
     supabase.from("conversions").select("value_usd_minor").eq("business_id", bizId).gte("created_at", todayIso),
     walletId
@@ -65,6 +66,10 @@ export default async function TodayPage() {
       .eq("smart_links.business_id", bizId)
       .gte("created_at", todayIso),
     supabase.from("approvals").select("plan_date").eq("business_id", bizId).eq("status", "awaiting").order("plan_date", { ascending: false }).limit(1).maybeSingle(),
+    // Approved but not yet fired. On full auto nobody ever sees an approval
+    // screen, so without this there is no moment at which the owner can learn
+    // that ads are about to go live, let alone change them first.
+    supabase.from("approvals").select("plan_date, scheduled_for").eq("business_id", bizId).eq("status", "approved").is("launched_at", null).order("plan_date", { ascending: true }).limit(1).maybeSingle(),
     supabase.from("ab_tests").select("status, test_date").eq("business_id", bizId).order("test_date", { ascending: false }).limit(1).maybeSingle(),
   ]);
 
@@ -74,6 +79,7 @@ export default async function TodayPage() {
   const spendTodayUsdMinor = Math.abs((spendRes.data ?? []).reduce((s, r) => s + Number(r.amount_usd_minor ?? 0), 0));
   const clicksToday = clicksRes.count ?? 0;
   const awaiting = approvalRes.data;
+  const queued = queuedRes.data as { plan_date: string; scheduled_for: string | null } | null;
   const duelRunning = testRes.data?.status === "pending";
 
   // Local currency for the aside (USD stays the anchor).
@@ -134,6 +140,31 @@ export default async function TodayPage() {
           hint={formatAgainstOrder(efficiency)}
         />
       </section>
+
+      {queued && (
+        <section className="mb-6">
+          <div className="rounded-card border border-accent/40 bg-accent-soft p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="datalabel text-accent">going live {describeLaunchAt(
+                  queued.scheduled_for ? new Date(queued.scheduled_for) : defaultLaunchAt(new Date()),
+                  new Date(),
+                )}</div>
+                <p className="mt-1.5 text-sm leading-relaxed text-ink">
+                  Tomorrow&apos;s ads are approved and waiting. You can still change them or stop
+                  them until they go up.
+                </p>
+              </div>
+              <Link
+                href="/approve"
+                className="shrink-0 rounded-lg border border-accent/50 px-4 py-2 text-sm text-ink transition-colors hover:bg-accent/10"
+              >
+                Review them
+              </Link>
+            </div>
+          </div>
+        </section>
+      )}
 
       {efficiency.verdict !== "too_early" && (
         <section className="mt-6">

@@ -219,28 +219,51 @@ export function ApprovalCard({
         </section>
       )}
 
-      {/* when to go live */}
-      <section className="mt-4 rounded-card border border-line bg-surface-raised p-5">
+      {/* When to go live, decided before the tap rather than after it.
+          The old layout put a small row of choices above one big amber button
+          reading "Approve & launch tomorrow", which told everyone tomorrow was
+          the answer and the row above was for people who like settings. Most
+          never touched it, so most never learned they could be live in ten
+          minutes. The choice is the screen now, and the button reports the
+          consequence of the choice rather than presuming one. */}
+      <section className="mt-5">
         <div className="datalabel">when should these go live</div>
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-col gap-2">
           {(
             [
-              ["default", `Tomorrow morning`],
-              ["now", "As soon as I approve"],
-              ["custom", "Pick a time"],
-            ] as [LaunchChoice, string][]
-          ).map(([key, label]) => (
+              ["now", "Right away", "Live within minutes of approving."],
+              ["default", "Tomorrow morning", launchSuggestion(new Date())],
+              ["custom", "Pick a date and time", "I hold the plan until the moment you choose."],
+            ] as [LaunchChoice, string, string][]
+          ).map(([key, label, hint]) => (
             <button
               key={key}
               type="button"
               onClick={() => setWhen(key)}
-              className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+              className={`flex items-start justify-between gap-3 rounded-card border p-4 text-left transition-colors ${
                 when === key
-                  ? "border-accent bg-accent-soft text-accent-bright"
-                  : "border-line text-ink-muted hover:text-ink"
+                  ? "border-accent bg-accent-soft"
+                  : "border-line bg-surface-raised hover:border-ink-faint"
               }`}
             >
-              {label}
+              <span className="min-w-0">
+                <span className="block text-[15px] font-medium text-ink">{label}</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-ink-muted">{hint}</span>
+              </span>
+              {when === key && (
+                <svg
+                  viewBox="0 0 24 24"
+                  className="h-[19px] w-[19px] shrink-0 text-accent"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
             </button>
           ))}
         </div>
@@ -251,36 +274,33 @@ export function ApprovalCard({
             value={customAt}
             onChange={(e) => setCustomAt(e.target.value)}
             aria-label="Launch date and time"
-            className="mt-3 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink focus:border-accent focus:outline-none sm:max-w-xs"
+            className="mt-2 w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-sm text-ink focus:border-accent focus:outline-none"
           />
         )}
-
-        <p className="mt-3 text-xs leading-relaxed text-ink-faint">
-          {when === "default"
-            ? launchSuggestion(new Date())
-            : when === "now"
-              ? "They will go live as soon as you approve. Still paused until your account is funded and live."
-              : "Pick any moment from here on. I will hold the plan until then."}
-        </p>
       </section>
 
-      {/* actions */}
-      <div className="mt-6 flex gap-3">
+      {/* actions. The button says what will happen, so nobody has to work it
+          out from a control they may never have noticed. */}
+      <div className="mt-5 flex gap-3">
         <button
           disabled={busy !== null}
           onClick={approve}
-          className="flex-1 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-accent-bright disabled:opacity-50"
+          className="flex-1 rounded-lg bg-accent px-6 py-3.5 text-sm font-medium text-white transition-colors hover:bg-accent-bright disabled:opacity-50"
         >
           {busy === "approved"
             ? "Approving…"
             : unfunded
               ? "Approve and hold until funded"
-              : "Approve & launch tomorrow"}
+              : when === "now"
+                ? "Approve and launch now"
+                : when === "custom" && customAt
+                  ? `Approve and launch ${describeLaunchAt(new Date(customAt), new Date())}`
+                  : `Approve and launch ${describeLaunchAt(defaultLaunchAt(new Date()), new Date())}`}
         </button>
         <button
           disabled={busy !== null}
           onClick={regenerate}
-          className="rounded-lg border border-line px-5 py-3 text-sm text-ink-muted transition-colors hover:text-ink disabled:opacity-50"
+          className="rounded-lg border border-line px-5 py-3.5 text-sm text-ink-muted transition-colors hover:text-ink disabled:opacity-50"
         >
           {busy === "regenerating" ? "Writing new ads…" : "Regenerate"}
         </button>
@@ -292,13 +312,7 @@ export function ApprovalCard({
         </p>
       )}
       <p className="mt-3 text-center text-xs text-ink-faint">
-        Nothing spends until you approve. Ads go live{" "}
-        {when === "now"
-          ? "as soon as you approve"
-          : when === "custom" && customAt
-            ? describeLaunchAt(new Date(customAt), new Date())
-            : describeLaunchAt(defaultLaunchAt(new Date()), new Date())}
-        , always paused first.
+        Nothing spends until you approve, and every ad goes up paused first.
       </p>
       <p className="mt-4 text-center text-xs text-ink-faint">
         Want to spend more or less per day?{" "}
