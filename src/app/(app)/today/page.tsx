@@ -3,6 +3,7 @@ import { AgentNote } from "@/components/ui/AgentNote";
 import { MetricChip } from "@/components/ui/MetricChip";
 import { BoltIcon, CursorIcon, BagIcon, TrendIcon, TrophyIcon, WalletIcon } from "@/components/ui/icons";
 import { createClient } from "@/lib/supabase/server";
+import { adEfficiency, formatAgainstOrder, formatCostPerCustomer } from "@/lib/metrics/efficiency";
 import { fetchUsdRate } from "@/lib/money/rates";
 import { currencyForCountry } from "@/lib/money/currency";
 import { fmtDual, fmtRoas, fmtUsd } from "@/lib/money/format";
@@ -69,6 +70,7 @@ export default async function TodayPage() {
 
   const pipelineCount = conceptsRes.count ?? 0;
   const salesTodayUsdMinor = (salesRes.data ?? []).reduce((s, r) => s + Number(r.value_usd_minor ?? 0), 0);
+  const customersToday = (salesRes.data ?? []).length;
   const spendTodayUsdMinor = Math.abs((spendRes.data ?? []).reduce((s, r) => s + Number(r.amount_usd_minor ?? 0), 0));
   const clicksToday = clicksRes.count ?? 0;
   const awaiting = approvalRes.data;
@@ -92,6 +94,15 @@ export default async function TodayPage() {
       ? `Your pipeline has ${pipelineCount} concepts. Fund your wallet and I'll launch the first duel this evening.`
       : `I'm ready when you are. Fund your wallet and upload a product photo, I'll study the top ads in your niche and have tomorrow's first two waiting for approval.`;
 
+  // The only question a shop owner actually has: does money in bring back more
+  // than it costs? Spend, clicks and revenue each answer a piece of it and none
+  // answers it outright.
+  const efficiency = adEfficiency({
+    spendUsdMinor: spendTodayUsdMinor,
+    revenueUsdMinor: salesTodayUsdMinor,
+    customers: customersToday,
+  });
+
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",
     day: "numeric",
@@ -111,12 +122,39 @@ export default async function TodayPage() {
         <div className="datalabel shrink-0">{today}</div>
       </header>
 
-      <section className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 xl:grid-cols-5">
         <MetricChip icon={<BoltIcon />} label="spend today" value={fmtDual(spendTodayUsdMinor, local)} hint={duelRunning ? "live" : "no live campaigns yet"} />
         <MetricChip icon={<CursorIcon />} label="link clicks" value={clicksToday > 0 ? clicksToday.toLocaleString() : "—"} hint="taps through your ads" />
         <MetricChip icon={<BagIcon />} label="verified sales" value={salesTodayUsdMinor > 0 ? fmtDual(salesTodayUsdMinor, local) : "—"} hint="today" />
         <MetricChip icon={<TrendIcon />} label="return on spend" value={fmtRoas(salesTodayUsdMinor, spendTodayUsdMinor)} hint="sales vs spend" />
+        <MetricChip
+          icon={<WalletIcon />}
+          label="cost per customer"
+          value={formatCostPerCustomer(efficiency)}
+          hint={formatAgainstOrder(efficiency)}
+        />
       </section>
+
+      {efficiency.verdict !== "too_early" && (
+        <section className="mt-6">
+          <div
+            className={`rounded-card border p-4 ${
+              efficiency.verdict === "losing"
+                ? "border-negative/40 bg-negative/5"
+                : "border-line bg-surface-raised"
+            }`}
+          >
+            <div className="datalabel">
+              {efficiency.verdict === "losing"
+                ? "worth looking at"
+                : efficiency.verdict === "breaking_even"
+                  ? "running level"
+                  : "paying for itself"}
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-ink">{efficiency.note}</p>
+          </div>
+        </section>
+      )}
 
       <section className="mt-6">
         {awaiting ? (
