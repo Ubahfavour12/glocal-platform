@@ -15,12 +15,59 @@ export type LaunchChoice = "default" | "now" | "custom";
 export const DEFAULT_LAUNCH_HOUR = 7;
 
 /**
+ * The hour in a given timezone right now.
+ *
+ * The shop's clock is the one that matters: 7am has to mean 7am where the shop
+ * is, not 7am wherever the server happens to run. Intl does the conversion
+ * without pulling in a timezone library, and an unusable zone falls back to UTC
+ * rather than throwing, because a bad timezone string must never stop a launch.
+ */
+export function hourInZone(now: Date, timeZone: string): number {
+  try {
+    const h = new Intl.DateTimeFormat("en-GB", {
+      timeZone,
+      hour: "numeric",
+      hour12: false,
+    }).format(now);
+    const n = Number(h);
+    return Number.isFinite(n) ? n % 24 : now.getUTCHours();
+  } catch {
+    return now.getUTCHours();
+  }
+}
+
+/**
+ * Is it this business's launch hour where the shop is?
+ *
+ * The launcher runs on a schedule of its own and asks this per business, so one
+ * job serves every timezone and every preferred hour. Anything earlier in the
+ * day than the chosen hour waits; anything at or after it is due, so a run that
+ * is late (or was missed) still launches rather than silently skipping the day.
+ */
+export function launchDueNow(now: Date, launchHour: number, timeZone: string): boolean {
+  const hour = hourInZone(now, timeZone);
+  const target = Number.isFinite(launchHour) ? Math.min(23, Math.max(0, launchHour)) : DEFAULT_LAUNCH_HOUR;
+  return hour >= target;
+}
+
+/** The next time the chosen hour comes round, in the shop's own clock. */
+export function nextLaunchAt(now: Date, launchHour: number, timeZone: string): Date {
+  const target = Number.isFinite(launchHour) ? Math.min(23, Math.max(0, launchHour)) : DEFAULT_LAUNCH_HOUR;
+  const offsetHours = target - hourInZone(now, timeZone);
+  const at = new Date(now);
+  at.setMinutes(0, 0, 0);
+  at.setHours(at.getHours() + offsetHours);
+  if (at <= now) at.setDate(at.getDate() + 1);
+  return at;
+}
+
+/**
  * The next default launch moment: tomorrow morning, or this morning if it has
  * not happened yet. Approving at 6am should not wait 25 hours.
  */
-export function defaultLaunchAt(now: Date): Date {
+export function defaultLaunchAt(now: Date, launchHour: number = DEFAULT_LAUNCH_HOUR): Date {
   const at = new Date(now);
-  at.setHours(DEFAULT_LAUNCH_HOUR, 0, 0, 0);
+  at.setHours(launchHour, 0, 0, 0);
   if (at <= now) at.setDate(at.getDate() + 1);
   return at;
 }

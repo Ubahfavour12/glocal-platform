@@ -5,6 +5,7 @@ import {
   describeLaunchAt,
   launchSuggestion,
   resolveLaunchAt,
+  launchDueNow,
 } from "./launch-timing";
 
 const at = (h: number, m = 0, day = 12) => new Date(2026, 7, day, h, m, 0, 0);
@@ -71,5 +72,35 @@ describe("describeLaunchAt", () => {
     expect(describeLaunchAt(at(18), now)).toMatch(/^today at/);
     expect(describeLaunchAt(at(7, 0, 13), now)).toMatch(/^tomorrow at/);
     expect(describeLaunchAt(at(7, 0, 16), now)).toMatch(/at /);
+  });
+});
+
+describe("launchDueNow", () => {
+  const lagosNoon = new Date("2026-08-16T11:00:00Z"); // 12:00 in Lagos (UTC+1)
+
+  it("uses the shop's clock, not the server's", () => {
+    // Same instant, two shops, two answers. This is the whole point.
+    expect(launchDueNow(lagosNoon, 7, "Africa/Lagos")).toBe(true);
+    expect(launchDueNow(lagosNoon, 7, "America/Los_Angeles")).toBe(false);
+  });
+
+  it("waits until the chosen hour arrives", () => {
+    expect(launchDueNow(lagosNoon, 18, "Africa/Lagos")).toBe(false);
+    expect(launchDueNow(lagosNoon, 12, "Africa/Lagos")).toBe(true);
+  });
+
+  it("still launches when the run is late rather than skipping the day", () => {
+    // A cron that fires at 14:00 for an 07:00 preference must not decide the
+    // moment has passed and leave the shop with no ads at all.
+    expect(launchDueNow(lagosNoon, 7, "Africa/Lagos")).toBe(true);
+  });
+
+  it("survives a timezone string it cannot read", () => {
+    expect(() => launchDueNow(lagosNoon, 7, "Not/AZone")).not.toThrow();
+  });
+
+  it("clamps an out-of-range hour instead of never firing", () => {
+    expect(launchDueNow(lagosNoon, 99, "Africa/Lagos")).toBe(false);
+    expect(launchDueNow(lagosNoon, -5, "Africa/Lagos")).toBe(true);
   });
 });

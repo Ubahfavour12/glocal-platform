@@ -54,7 +54,8 @@ export default async function TodayPage() {
   const walletId = wallet?.wallet_id as string | undefined;
   const balanceUsdMinor = Number(wallet?.balance_usd_minor ?? 0);
 
-  const [conceptsRes, salesRes, spendRes, clicksRes, approvalRes, queuedRes, testRes] = await Promise.all([
+  const [conceptsRes, salesRes, spendRes, clicksRes, approvalRes, socialsRes, queuedRes, testRes] =
+    await Promise.all([
     supabase.from("concepts").select("id", { count: "exact", head: true }).eq("business_id", bizId),
     supabase.from("conversions").select("value_usd_minor").eq("business_id", bizId).gte("created_at", todayIso),
     walletId
@@ -66,6 +67,10 @@ export default async function TodayPage() {
       .eq("smart_links.business_id", bizId)
       .gte("created_at", todayIso),
     supabase.from("approvals").select("plan_date").eq("business_id", bizId).eq("status", "awaiting").order("plan_date", { ascending: false }).limit(1).maybeSingle(),
+    // Which networks are connected. Onboarding never asks, on purpose: it is
+    // seven screens already and an OAuth redirect mid-signup loses people. So
+    // the ask belongs here, once they have somewhere to come back to.
+    supabase.from("platform_accounts").select("platform").eq("business_id", bizId),
     // Approved but not yet fired. On full auto nobody ever sees an approval
     // screen, so without this there is no moment at which the owner can learn
     // that ads are about to go live, let alone change them first.
@@ -80,6 +85,14 @@ export default async function TodayPage() {
   const clicksToday = clicksRes.count ?? 0;
   const awaiting = approvalRes.data;
   const queued = queuedRes.data as { plan_date: string; scheduled_for: string | null } | null;
+  const connected = new Set((socialsRes.data ?? []).map((r) => String(r.platform)));
+  // Meta is the one that actually blocks ads. The rest widen reach.
+  const NETWORKS = [
+    { id: "meta", label: "Facebook & Instagram", why: "Required before any ad can run.", href: "/api/oauth/meta/start", required: true },
+    { id: "instagram", label: "Instagram on its own", why: "For accounts not linked to a Facebook Page.", href: "/api/oauth/instagram/start", required: false },
+    { id: "tiktok", label: "TikTok", why: "A second audience, from the same creatives.", href: "/settings", required: false },
+  ];
+  const missing = NETWORKS.filter((n) => !connected.has(n.id));
   const duelRunning = testRes.data?.status === "pending";
 
   // Local currency for the aside (USD stays the anchor).
@@ -140,6 +153,43 @@ export default async function TodayPage() {
           hint={formatAgainstOrder(efficiency)}
         />
       </section>
+
+      {missing.length > 0 && (
+        <section className="mb-6">
+          <div
+            className={`rounded-card border p-5 ${
+              missing.some((n) => n.required)
+                ? "border-accent/40 bg-accent-soft"
+                : "border-line bg-surface-raised"
+            }`}
+          >
+            <div className="datalabel">
+              {missing.some((n) => n.required) ? "one thing left" : "widen your reach"}
+            </div>
+            <p className="mt-1.5 text-sm leading-relaxed text-ink">
+              {missing.some((n) => n.required)
+                ? "I have written your ads, but I cannot put them anywhere until you connect the account they will run from. It takes one tap and I never post without your approval."
+                : "Your ads run on Facebook and Instagram already. Connecting more puts the same creatives in front of a different audience."}
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {missing.map((n) => (
+                <a
+                  key={n.id}
+                  href={n.href}
+                  title={n.why}
+                  className={`rounded-lg px-4 py-2 text-sm transition-colors ${
+                    n.required
+                      ? "bg-accent font-medium text-white hover:bg-accent-bright"
+                      : "border border-line text-ink-muted hover:text-ink"
+                  }`}
+                >
+                  Connect {n.label}
+                </a>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {queued && (
         <section className="mb-6">

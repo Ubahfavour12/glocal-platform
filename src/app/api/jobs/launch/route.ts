@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { launchPlan, type LaunchContext, type PlanAd } from "@/lib/orchestrator/launcher";
+import { DEFAULT_LAUNCH_HOUR, launchDueNow } from "@/lib/orchestrator/launch-timing";
 import { liveLaunchAdapters } from "@/lib/orchestrator/launcher-live";
 import { metaConfigFromEnv, objectiveForGoal, ctaForGoal } from "@/lib/meta/client";
 import type { ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
@@ -58,13 +59,32 @@ export async function GET(req: NextRequest) {
   const nowIso = new Date().toISOString();
   const { data: plans, error } = await supabase
     .from("approvals")
-    .select("id, business_id, plan_date, payload, scheduled_for")
+    .select("id, business_id, plan_date, payload, scheduled_for, businesses(launch_hour, launch_timezone)")
     .eq("status", "approved")
     .is("launched_at", null)
     .lte("plan_date", today)
     .gte("plan_date", cutoff)
     .or(`scheduled_for.is.null,scheduled_for.lte.${nowIso}`);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  /**
+   * A plan with an explicit scheduled_for was timed by hand for that one night
+   * and the query above already filtered on it. Everything else follows the
+   * business's own daily launch hour, which is the single preference both
+   * modes read: it pre-fills the approval card, and for a full-auto account it
+   * IS the launch time. Skipping is not failing, the next run picks it up.
+   */
+  const due = (plans ?? []).filter((p) => {
+    if (p.scheduled_for) return true;
+    const biz = p.businesses as unknown as
+      | { launch_hour?: number; launch_timezone?: string }
+      | null;
+    return launchDueNow(
+      new Date(),
+      biz?.launch_hour ?? DEFAULT_LAUNCH_HOUR,
+      biz?.launch_timezone ?? "Africa/Lagos",
+    );
+  });
 
   const outcomes: { businessId: string; result: string }[] = [];
   let cfg: ReturnType<typeof metaConfigFromEnv> | null = null;
@@ -74,7 +94,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "meta not configured" }, { status: 500 });
   }
 
-  for (const plan of plans ?? []) {
+  for (const plan of due) {
     try {
       const outcome = await launchForPlan(supabase, plan, cfg);
       outcomes.push({ businessId: plan.business_id, result: outcome });
@@ -82,7 +102,7 @@ export async function GET(req: NextRequest) {
       outcomes.push({ businessId: plan.business_id, result: `error: ${(e as Error).message}` });
     }
   }
-  return NextResponse.json({ launched: outcomes.length, expired, outcomes });
+  return NextResponse.json({ launched: outcomes.length, expired, waiting: (plans ?? []).length - due.length, outcomes });
 }
 
 type Supa = ReturnType<typeof createServiceClient>;

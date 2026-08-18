@@ -21,7 +21,7 @@ export default async function SettingsPage() {
   const supabase = await createClient();
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, daily_budget_usd_minor, goal, persona, full_auto, plan, free_render_used")
+    .select("id, daily_budget_usd_minor, goal, persona, full_auto, plan, free_render_used, launch_hour")
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -79,6 +79,7 @@ export default async function SettingsPage() {
             goal: business.goal as Goal,
             persona: (business.persona as Persona) ?? "smart",
             fullAuto: Boolean(business.full_auto),
+            launchHour: Number(business.launch_hour ?? 7),
           }}
           balanceUsdMinor={balanceUsdMinor}
         />

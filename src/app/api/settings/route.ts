@@ -30,6 +30,8 @@ export async function POST(req: NextRequest) {
     goal?: string;
     persona?: string;
     full_auto?: boolean;
+    launch_hour?: number;
+    launch_timezone?: string;
   } | null;
   if (!body) return NextResponse.json({ error: "bad request" }, { status: 400 });
 
@@ -55,6 +57,14 @@ export async function POST(req: NextRequest) {
     update.persona = body.persona;
   }
   if (typeof body.full_auto === "boolean") update.full_auto = body.full_auto;
+  // Clamped rather than rejected: an out-of-range hour is a client bug, and
+  // refusing the whole save would lose the customer's other changes with it.
+  if (Number.isFinite(body.launch_hour)) {
+    update.launch_hour = Math.min(23, Math.max(0, Math.round(body.launch_hour as number)));
+  }
+  if (typeof body.launch_timezone === "string" && body.launch_timezone.length <= 64) {
+    update.launch_timezone = body.launch_timezone;
+  }
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: "nothing to update" }, { status: 400 });

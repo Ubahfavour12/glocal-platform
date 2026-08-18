@@ -24,7 +24,13 @@ export function SettingsForm({
   initial,
   balanceUsdMinor,
 }: {
-  initial: { dailyBudgetUsdMinor: number; goal: Goal; persona: Persona; fullAuto: boolean };
+  initial: {
+    dailyBudgetUsdMinor: number;
+    goal: Goal;
+    persona: Persona;
+    fullAuto: boolean;
+    launchHour: number;
+  };
   balanceUsdMinor: number;
 }) {
   const router = useRouter();
@@ -32,6 +38,7 @@ export function SettingsForm({
   const [goal, setGoal] = useState<Goal>(initial.goal);
   const [persona, setPersona] = useState<Persona>(initial.persona);
   const [fullAuto, setFullAuto] = useState(initial.fullAuto);
+  const [launchHour, setLaunchHour] = useState(initial.launchHour);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
@@ -51,6 +58,11 @@ export function SettingsForm({
         goal,
         persona,
         full_auto: fullAuto,
+        launch_hour: launchHour,
+        // The shop's own clock, so 7am means 7am where the shop is rather than
+        // wherever the server happens to run.
+        launch_timezone:
+          Intl.DateTimeFormat().resolvedOptions().timeZone || "Africa/Lagos",
       }),
     });
     setSaving(false);
@@ -131,6 +143,38 @@ export function SettingsForm({
             </button>
           ))}
         </div>
+      </div>
+
+      {/* One preference, read by both modes. Full auto used to mean "do not
+          ask me" AND "go at whatever hour the cron happened to run", which
+          nobody chose. Now it only means the first. */}
+      <div>
+        <div className="datalabel">when your ads go live each day</div>
+        <p className="mt-1 text-xs leading-relaxed text-ink-faint">
+          {fullAuto
+            ? "Full autonomy is on, so this is the hour your ads go up."
+            : "This is the time already chosen when you open the evening approval. You can still change it for one night."}
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {[6, 7, 9, 12, 15, 17, 19].map((h) => (
+            <button
+              key={h}
+              type="button"
+              onClick={() => setLaunchHour(h)}
+              className={`rounded-full border px-4 py-2 text-sm transition-colors ${
+                launchHour === h
+                  ? "border-accent bg-accent-soft text-ink"
+                  : "border-line text-ink-muted hover:border-ink-faint"
+              }`}
+            >
+              {h === 12 ? "12 noon" : h < 12 ? `${h}am` : `${h - 12}pm`}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-xs leading-relaxed text-ink-faint">
+          Mornings give an ad the whole day to gather the views a fair test needs. Evenings suit
+          trades where people buy after work.
+        </p>
       </div>
 
       {/* full auto */}
