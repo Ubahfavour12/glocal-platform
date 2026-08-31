@@ -109,11 +109,14 @@ export async function persistRenderedCreative(
   businessId: string,
   conceptId: string,
   mediaUrl: string,
+  /** Which engine produced it, so duel verdicts can be read per engine. */
+  engine?: "fal" | "higgsfield",
 ): Promise<void> {
   await supabase.from("creatives").insert({
     business_id: businessId,
     concept_id: conceptId,
     state: "ready",
     media_url: mediaUrl,
+    ...(engine ? { engine } : {}),
   });
 }

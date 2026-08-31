@@ -4,6 +4,10 @@ import {
   overageCostUsdMinor,
   remainingRenders,
   splitAgainstQuota,
+  VIDEO_CREDIT_WEIGHT,
+  creditsFor,
+  canRenderKind,
+  remainingOfKind,
 } from "./quota";
 
 describe("render quota", () => {
@@ -35,5 +39,37 @@ describe("render quota", () => {
     expect(overageCostUsdMinor(2, 40)).toBe(160);
     expect(overageCostUsdMinor(0, 40)).toBe(0);
     expect(overageCostUsdMinor(1, 33, 2.5)).toBe(83); // ceil(82.5)
+  });
+});
+
+describe("video credit weighting", () => {
+  it("charges a video more of the daily allowance than an image", () => {
+    // A video costs the vendor 10-40x an image. Spending one credit on it
+    // would make the cheapest customer the most expensive one.
+    expect(creditsFor("image")).toBe(1);
+    expect(creditsFor("video")).toBe(VIDEO_CREDIT_WEIGHT);
+    expect(VIDEO_CREDIT_WEIGHT).toBeGreaterThan(1);
+  });
+
+  it("refuses a video that will not fit, before it is offered", () => {
+    const q = { usedToday: 0, dailyLimit: 2 };
+    expect(canRenderKind(q, "image")).toBe(true);
+    expect(canRenderKind(q, "video")).toBe(false);
+  });
+
+  it("allows a video once the allowance covers it", () => {
+    expect(canRenderKind({ usedToday: 0, dailyLimit: 4 }, "video")).toBe(true);
+  });
+
+  it("reports how many of each kind are still affordable", () => {
+    const q = { usedToday: 0, dailyLimit: 8 };
+    expect(remainingOfKind(q, "image")).toBe(8);
+    expect(remainingOfKind(q, "video")).toBe(2);
+  });
+
+  it("never reports a negative allowance when the cap is already blown", () => {
+    const q = { usedToday: 99, dailyLimit: 2 };
+    expect(remainingOfKind(q, "video")).toBe(0);
+    expect(canRenderKind(q, "video")).toBe(false);
   });
 });

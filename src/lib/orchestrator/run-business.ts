@@ -142,7 +142,7 @@ export async function runForBusiness(
       getNextConcepts: async (businessId, count) => {
         const { data } = await supabase
           .from("concepts")
-          .select("id, rank, hook, copy_angle, cta")
+          .select("id, rank, hook, copy_angle, cta, kind")
           .eq("business_id", businessId)
           .eq("rendered", false)
           .order("rank", { ascending: true })
@@ -162,6 +162,7 @@ export async function runForBusiness(
             hook: c.hook,
             copy: c.copy_angle,
             cta: c.cta,
+            kind: c.kind,
           }));
         // Customer hand-picks jump the queue, in the order they chose them.
         const preferred = opts.preferConceptIds ?? [];

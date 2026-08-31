@@ -22,12 +22,16 @@ import {
   persistRenderedCreative,
 } from "@/lib/media/storage";
 import { promptFromConcept, renderConcepts, type RenderDeps } from "./render";
+import { routeRender } from "./router";
+import { canRenderKind, type RenderKind } from "./quota";
 import { asPlan, planAllowsRender, type PlanState } from "@/lib/billing/plan";
 
 interface OrchestratorConcept {
   id: string;
   hook: string;
   copy: string;
+  /** What this concept is meant to become; absent means an image. */
+  kind?: string | null;
 }
 interface RenderedForPlan {
   conceptId: string;
@@ -68,33 +72,49 @@ export function renderCreativeLive(supabase: SupabaseClient) {
     const dailyLimit = (sub?.renders_per_day as number) ?? 2;
     const usedToday = await countRendersToday(supabase, businessId);
 
+    // What this concept is meant to become. The first render on an account is
+    // always an image, and a video only runs when the weighted allowance can
+    // actually cover it, so nobody picks video and watches it fail.
+    const wantedKind: RenderKind = (concept.kind as RenderKind) === "video" ? "video" : "image";
+    const kind: RenderKind = canRenderKind({ usedToday, dailyLimit }, wantedKind)
+      ? wantedKind
+      : "image";
+
+    // Both engines are live and the job picks between them: video to Higgsfield
+    // for its motion work, images to fal where they are cheapest, and a free
+    // account never reaches the expensive engine whatever it asked for.
+    const route = routeRender({ kind, plan: planState.plan, available: engines });
+    const ordered: RenderEngine[] = route.order.length > 0 ? route.order : engines;
+
     // Whichever engine accepted the job has to be the one polled: job ids are
     // not portable between vendors.
-    let usedEngine: RenderEngine = engines[0];
+    let usedEngine: RenderEngine = ordered[0];
     const failedEngines: { engine: EngineName; error: string }[] = [];
 
     const deps: RenderDeps = {
       submit: async (input) => {
-        const result = await submitWithFailover(engines, input);
+        const result = await submitWithFailover(ordered, input);
         if (!result) throw new Error("no render engine could be reached");
-        usedEngine = engines.find((e) => e.name === result.engine) ?? engines[0];
+        usedEngine = ordered.find((e) => e.name === result.engine) ?? ordered[0];
         failedEngines.push(...result.failed);
         return { jobId: result.status.jobId };
       },
       poll: async (jobId) => {
-        // "image" matches the kind submitted below.
-        const s = await usedEngine.poll(jobId, "image");
+        const s = await usedEngine.poll(jobId, kind);
         return { state: s.state, mediaUrl: s.mediaUrl, error: s.error };
       },
       sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+      // Record which engine made it. The duel already decides which creative
+      // wins on real money, so tagging the maker turns those verdicts into
+      // engine evidence without running a single extra experiment.
       persist: (conceptId, mediaUrl) =>
-        persistRenderedCreative(supabase, businessId, conceptId, mediaUrl),
+        persistRenderedCreative(supabase, businessId, conceptId, mediaUrl, usedEngine.name),
     };
 
     const summary = await renderConcepts(
       [{ conceptId: concept.id, prompt: promptFromConcept(concept.hook, []) }],
       // Entry tier is image-led (cheaper); vertical for reels/stories.
-      { sourceImageUrl, kind: "image", placement: "reel", quota: { usedToday, dailyLimit } },
+      { sourceImageUrl, kind, placement: "reel", quota: { usedToday, dailyLimit } },
       deps,
     );
 
@@ -106,7 +126,7 @@ export function renderCreativeLive(supabase: SupabaseClient) {
         entry_type: "note",
         content: {
           action: "render_failover",
-          detail: { used: usedEngine.name, failed: failedEngines },
+          detail: { used: usedEngine.name, failed: failedEngines, routing: route.reason },
         },
       });
     }

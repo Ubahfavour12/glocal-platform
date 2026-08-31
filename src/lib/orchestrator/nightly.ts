@@ -52,6 +52,8 @@ export interface Concept {
   hook: string;
   copy: string;
   cta: string;
+  /** What it should become: "image" or "video". Absent means an image. */
+  kind?: string | null;
 }
 
 export interface RenderedCreative {
