@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { GlocalMark } from "@/components/brand/Logo";
 import { buildServiceGeo } from "@/lib/tracking/geo";
 import { createClient } from "@/lib/supabase/client";
 import { uploadProductMedia } from "@/lib/media/storage";
@@ -542,7 +543,8 @@ export default function OnboardingPage() {
     ];
     return (
       <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col px-6 py-12">
-        <h1 className="text-2xl font-semibold leading-tight tracking-tight">
+        <GlocalMark className="h-9 w-9 text-ink" title="Glocal" />
+        <h1 className="mt-6 text-2xl font-semibold leading-tight tracking-tight">
           You stopped at {d.phase === "budget" ? "the budget" : "step " + Math.min(stopped + 1, COUNTED)}.
         </h1>
         <p className="mt-2.5 text-sm leading-relaxed text-ink-muted">

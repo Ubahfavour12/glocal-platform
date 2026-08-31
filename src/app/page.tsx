@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { GlocalMark } from "@/components/brand/Logo";
 
 export default function Home() {
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-6 py-24 text-center">
-      <div className="datalabel">autonomous marketing</div>
+      <GlocalMark className="h-14 w-14 text-ink" title="Glocal" />
+      <div className="datalabel mt-5">autonomous marketing</div>
       <h1 className="mt-4 max-w-2xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
         Upload a photo. Fund a wallet.
         <br />

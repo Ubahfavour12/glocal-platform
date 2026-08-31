@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV } from "./nav";
+import { GlocalMark } from "@/components/brand/Logo";
 
 /**
  * Mobile navigation (Phase 3 polish). The desktop sidebar is hidden below md;
@@ -52,8 +53,11 @@ export function MobileNav() {
           <aside className="absolute left-0 top-0 flex h-full w-64 flex-col border-r border-line bg-surface">
             <div className="flex items-center justify-between px-5 pb-6 pt-6">
               <div>
-                <div className="font-mono text-sm font-semibold tracking-wide text-ink">
-                  glocal<span className="text-accent-bright">.</span>
+                <div className="flex items-center gap-2.5">
+                  <GlocalMark className="h-7 w-7 shrink-0 text-ink" title="Glocal" />
+                  <span className="font-mono text-sm font-semibold tracking-wide text-ink">
+                    glocal<span className="text-accent-bright">.</span>
+                  </span>
                 </div>
                 <div className="datalabel mt-1">autonomous marketing</div>
               </div>

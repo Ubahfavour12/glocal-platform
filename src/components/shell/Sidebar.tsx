@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV } from "./nav";
+import { GlocalMark } from "@/components/brand/Logo";
 
 /** Web navigation, UI Plan §2.1. Desktop-only; the mobile drawer mirrors it. */
 export function Sidebar() {
@@ -10,8 +11,11 @@ export function Sidebar() {
   return (
     <aside className="hidden w-56 shrink-0 flex-col border-r border-line-soft bg-surface lg:flex xl:w-64">
       <div className="px-5 pb-6 pt-6">
-        <div className="font-mono text-sm font-semibold tracking-wide text-ink">
-          glocal<span className="text-accent-bright">.</span>
+        <div className="flex items-center gap-2.5">
+          <GlocalMark className="h-7 w-7 shrink-0 text-ink" title="Glocal" />
+          <span className="font-mono text-sm font-semibold tracking-wide text-ink">
+            glocal<span className="text-accent-bright">.</span>
+          </span>
         </div>
         <div className="datalabel mt-1">autonomous marketing</div>
       </div>
