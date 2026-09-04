@@ -9,6 +9,8 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { renderCostUsdMinor } from "@/lib/creative/pricing";
+import type { RenderKind } from "@/lib/creative/quota";
 
 export const MEDIA_BUCKET = "product-media";
 
@@ -111,6 +113,8 @@ export async function persistRenderedCreative(
   mediaUrl: string,
   /** Which engine produced it, so duel verdicts can be read per engine. */
   engine?: "fal" | "higgsfield",
+  /** What it cost, so the video economics stop being a guess in a chat log. */
+  kind?: RenderKind,
 ): Promise<void> {
   await supabase.from("creatives").insert({
     business_id: businessId,
@@ -118,5 +122,8 @@ export async function persistRenderedCreative(
     state: "ready",
     media_url: mediaUrl,
     ...(engine ? { engine } : {}),
+    ...(engine && kind
+      ? { render_cost_usd_minor: renderCostUsdMinor(engine, kind) }
+      : {}),
   });
 }

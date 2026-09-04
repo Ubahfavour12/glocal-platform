@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = (await req.json().catch(() => null)) as
-    | { business_id?: string; concept_ids?: string[] }
+    | { business_id?: string; concept_ids?: string[]; kind?: string }
     | null;
   if (!body?.business_id) {
     return NextResponse.json({ error: "business_id required" }, { status: 400 });
@@ -59,7 +59,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // What the hand-picked concept should become. Written before the rebuild so
+  // the render lane reads it as the concept's own kind, rather than the choice
+  // having to be threaded through every layer between here and the renderer.
+  // Free accounts stay on images: they get one render, and a video costs the
+  // vendor an order of magnitude more.
   const service = createServiceClient();
+  const wantsVideo = body.kind === "video" && asPlan(business.plan as string | null) === "paid";
+  if (body.concept_ids?.length) {
+    await service
+      .from("concepts")
+      .update({ kind: wantsVideo ? "video" : "image" })
+      .in("id", body.concept_ids)
+      .eq("business_id", business.id);
+  }
+
   const startOfDay = new Date();
   startOfDay.setUTCHours(0, 0, 0, 0);
 

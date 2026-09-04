@@ -1,6 +1,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { UseThisButton } from "@/components/pipeline/UseThisButton";
+import { canRenderKind, VIDEO_CREDIT_WEIGHT } from "@/lib/creative/quota";
+import { countRendersToday } from "@/lib/media/storage";
+import { asPlan } from "@/lib/billing/plan";
 import { PipelineFilter, type PipelineConcept } from "@/components/pipeline/PipelineFilter";
 
 export const dynamic = "force-dynamic";
@@ -26,10 +29,27 @@ export default async function PipelinePage() {
   const supabase = await createClient();
   const { data: business } = await supabase
     .from("businesses")
-    .select("id")
+    .select("id, plan")
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
+
+  // Whether a video is affordable today, worked out here rather than guessed
+  // in the browser, so the option is disabled with a reason instead of failing
+  // after it is chosen. A free account never sees video offered at all.
+  let videoAffordable = false;
+  if (business) {
+    const { data: sub } = await supabase
+      .from("subscriptions")
+      .select("renders_per_day")
+      .eq("business_id", business.id)
+      .maybeSingle();
+    const dailyLimit = (sub?.renders_per_day as number) ?? 2;
+    const usedToday = await countRendersToday(supabase, business.id as string);
+    videoAffordable =
+      asPlan(business.plan as string | null) === "paid" &&
+      canRenderKind({ usedToday, dailyLimit }, "video");
+  }
 
   const concepts: ConceptRow[] = business
     ? (
@@ -131,7 +151,12 @@ export default async function PipelinePage() {
                       )}
                       {business && !c.rendered && (
                         <span className="ml-auto">
-                          <UseThisButton businessId={business.id as string} conceptId={c.id} />
+                          <UseThisButton
+                            businessId={business.id as string}
+                            conceptId={c.id}
+                            videoAffordable={videoAffordable}
+                            videoCredits={VIDEO_CREDIT_WEIGHT}
+                          />
                         </span>
                       )}
                     </div>
