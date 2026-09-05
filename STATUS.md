@@ -37,7 +37,7 @@ engineering.
 | **`FAL_KEY`** into `platform/.env.local` | local renders are dormant without it | `FOUNDER-ACTIONS.md` §0b |
 | **Vercel → Settings → Git** | connect `glocal-platform`, grant the GitHub App access to the private repo, confirm production branch is `master` not `main`. Then merges deploy themselves | Vercel dashboard |
 | **`FLUTTERWAVE_WEBHOOK_HASH`** | currently empty. Webhooks fail closed, so a customer is charged and the wallet never credits | Vercel env |
-| **CAC amendment** | unlocks Flutterwave/Paystack **live** keys | in progress |
+| **CAC amendment** | unlocks Flutterwave/Paystack **live** keys (both rails are built; neither can charge without them) | in progress |
 | **Domain `useglocal.ai`** | unlocks business email → Meta App Review → TikTok dev app | not bought |
 | **Meta Business Verification + App Review** | the master switch: no ads can run without it | needs domain first |
 
@@ -160,6 +160,7 @@ until step 1 exists. That is the whole shape of the delay.
 |---|---|---|
 | **CAC amendment** | Flutterwave + Paystack **live** keys, so money can enter | in progress |
 | **`FLUTTERWAVE_WEBHOOK_HASH`** | wallets crediting after payment. Currently **empty**, so a customer would be charged and credited nothing | one paste into Vercel |
+| **`PAYSTACK_SECRET_KEY`** | the second money rail. Built and tested, dormant without it. Needs no separate webhook secret — Paystack signs with this same key | one paste, after CAC |
 | **`HIGGSFIELD_API_KEY`** | video renders. Without it video silently falls back to fal and nothing warns | waiting on payment |
 | **`FAL_KEY`** in `.env.local` | local renders only; production may already have it | one paste |
 | **Lawyer: ToS + Privacy** | legally launching at all | not started |
@@ -169,11 +170,15 @@ until step 1 exists. That is the whole shape of the delay.
 
 Small next to the gates above.
 
-1. **Paystack** as the second money rail, once Flutterwave is proven live
-2. **Founder admin console** — every customer, wallet, verdict and error in one
+1. **Founder admin console** — every customer, wallet, verdict and error in one
    view. Wanted **before** the dogfood, not after
-3. **Sentry + PostHog** — needs two free accounts creating
-4. **Directions taps** as a counted footfall signal
+2. **Sentry + PostHog** — needs two free accounts creating
+3. **Directions taps** as a counted footfall signal
+
+**Paystack** has moved off this list — the rail is built and tested, and now
+waits on a key like everything else. `PAYMENTS_PROVIDER` chooses which rail new
+checkouts open on; both webhooks stay live whichever is chosen, so a charge
+already in flight still settles after a switch.
 
 ### Then, the proof
 

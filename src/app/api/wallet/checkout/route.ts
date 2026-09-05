@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createCheckout } from "@/lib/payments/flutterwave";
+import { createCheckout } from "@/lib/payments/provider";
 import { effectiveRate, localCostForUsd } from "@/lib/money/fx";
 import { fetchUsdRate } from "@/lib/money/rates";
 import { createClient } from "@/lib/supabase/server";
 
 /**
  * UF-2 step 2: signed-in owner requests a top-up of X USD → we quote the
- * final local price at the buffered rate and hand back Flutterwave's hosted
- * checkout link. The quoted fx rate travels in meta so the confirm step
+ * final local price at the buffered rate and hand back the active rail's
+ * hosted checkout link. The quoted fx rate travels in meta so the confirm step
  * credits at exactly the quoted rate.
+ *
+ * Which rail that is comes from the provider router, and the answer is
+ * returned to the caller so a support conversation about a specific payment
+ * does not have to guess which PSP to go looking in.
  */
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -44,7 +48,7 @@ export async function POST(req: NextRequest) {
     const txRef = `topup-${business.id.slice(0, 8)}-${Date.now()}`;
     const origin = req.nextUrl.origin;
 
-    const { link } = await createCheckout({
+    const { link, psp } = await createCheckout({
       txRef,
       amountLocalMinor: localMinor,
       currency: "NGN",
@@ -56,6 +60,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       link,
+      psp,
       quoted: { usd_minor: body.usd_minor, local_minor: localMinor, currency: "NGN", rate },
     });
   } catch (err) {

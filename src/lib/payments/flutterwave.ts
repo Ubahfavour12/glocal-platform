@@ -10,7 +10,14 @@
  *  - USD credited is computed from the verified local amount at the same
  *    buffered rate quoted at checkout (stored in meta), floor-rounded.
  *  - record_psp_topup is idempotent on the transaction reference.
+ *
+ * The ledger-facing pieces (the credit arithmetic, the charge metadata shape,
+ * the constant-time compare) now live in `shared.ts` so the Paystack rail
+ * cannot drift onto different arithmetic. This file keeps its original public
+ * surface; only the implementations moved.
  */
+
+import { constantTimeEquals, type CheckoutRequest, type VerifiedTransaction } from "./shared";
 
 const API = "https://api.flutterwave.com/v3";
 
@@ -18,6 +25,11 @@ function secretKey(): string {
   const key = process.env.FLUTTERWAVE_SECRET_KEY;
   if (!key) throw new Error("FLUTTERWAVE_SECRET_KEY not configured");
   return key;
+}
+
+/** Is this rail configured at all? Lets the router prefer a rail that works. */
+export function isConfigured(): boolean {
+  return Boolean(process.env.FLUTTERWAVE_SECRET_KEY);
 }
 
 async function fw<T>(path: string, init?: RequestInit): Promise<T> {
@@ -34,28 +46,6 @@ async function fw<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(`Flutterwave ${path}: ${data.message ?? "request failed"}`);
   }
   return data.data as T;
-}
-
-export interface CheckoutRequest {
-  txRef: string;
-  amountLocalMinor: number;
-  currency: string; // e.g. NGN
-  customerEmail: string;
-  customerName: string;
-  redirectUrl: string;
-  /** hosted-checkout title (defaults to a wallet top-up) */
-  title?: string;
-  /**
-   * Carried through to verification. Wallet top-ups carry usd_minor + fx_rate
-   * (for the credit computation); subscription charges carry purpose + tier.
-   */
-  meta: {
-    business_id: string;
-    usd_minor?: number;
-    fx_rate?: number;
-    purpose?: "subscription";
-    tier?: string;
-  };
 }
 
 /** Create a hosted checkout page; returns the URL to send the customer to. */
@@ -76,17 +66,6 @@ export async function createCheckout(req: CheckoutRequest): Promise<{ link: stri
       customizations: { title: req.title ?? "Wallet top-up" },
     }),
   });
-}
-
-export interface VerifiedTransaction {
-  id: number;
-  txRef: string;
-  status: "successful" | "failed" | string;
-  amountLocalMinor: number;
-  currency: string;
-  meta:
-    | { business_id?: string; usd_minor?: number; fx_rate?: number; purpose?: string; tier?: string }
-    | null;
 }
 
 /** Verify a transaction by Flutterwave's numeric transaction id. */
@@ -116,22 +95,8 @@ export async function verifyTransaction(transactionId: string): Promise<Verified
 export function isAuthenticWebhook(headerHash: string | null): boolean {
   const expected = process.env.FLUTTERWAVE_WEBHOOK_HASH;
   if (!expected || !headerHash) return false;
-  if (headerHash.length !== expected.length) return false;
-  let diff = 0;
-  for (let i = 0; i < expected.length; i++) {
-    diff |= headerHash.charCodeAt(i) ^ expected.charCodeAt(i);
-  }
-  return diff === 0;
+  return constantTimeEquals(expected, headerHash);
 }
 
-/**
- * USD minor units to credit for a verified local payment, floor-rounded so
- * the ledger never over-credits (mirrors fx.usdCreditForLocal).
- */
-export function usdCreditForVerified(
-  amountLocalMinor: number,
-  fxRate: number, // buffered local-per-USD rate quoted at checkout
-): number {
-  if (!(fxRate > 0)) throw new Error("fx rate must be positive");
-  return Math.floor(amountLocalMinor / fxRate);
-}
+export { usdCreditForVerified } from "./shared";
+export type { CheckoutRequest, VerifiedTransaction } from "./shared";
