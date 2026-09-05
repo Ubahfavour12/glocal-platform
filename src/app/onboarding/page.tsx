@@ -103,6 +103,43 @@ const PHOTO_OUTPUTS = [
   { tag: "4:5", label: "The duel's challengers" },
 ];
 
+/** Step labels for the tablet/desktop rail — mobile never renders these. */
+const STEP_LABELS: Record<Phase, string> = {
+  business: "Business",
+  door: "Where ads land",
+  goal: "What counts as working",
+  money: "How money works",
+  budget: "Daily budget",
+  photo: "Your product",
+  next: "What's next",
+};
+
+/**
+ * The permanent right-hand column shown at lg+ (desktop width). Only set for
+ * phases that have no inline explanation today — money and budget already
+ * speak for themselves via the AgentNote in the main column, so repeating
+ * that in a second place would just be noise.
+ */
+const AGENT_ASIDE: Partial<Record<Phase, { label: string; body?: string; formats?: boolean }>> = {
+  business: {
+    label: "why I ask",
+    body: "Country only exists so I can show your local currency beside the USD figures. Every number in the product stays anchored in USD.",
+  },
+  door: {
+    label: "why I ask",
+    body: "I check the destination before you continue. A dead WhatsApp number is the single most expensive mistake in setup, because the ads still run.",
+  },
+  goal: {
+    label: "why I ask",
+    body: "This becomes the metric the daily duel is judged on. ‘You confirm sales’ is a real path, not a downgrade: after 10 confirmed sales the duel stops judging taps and starts judging money.",
+  },
+  photo: { label: "what I will build from it", formats: true },
+  next: {
+    label: "why no confetti",
+    body: "Nothing has actually happened yet. You'll know setup worked when tomorrow's plan arrives, so that's what this screen points at.",
+  },
+};
+
 /* ------------------------------------------------------------------ icons */
 
 function Icon({ name, className = "h-4 w-4" }: { name: string; className?: string }) {
@@ -208,6 +245,71 @@ function AgentNote({ children }: { children: React.ReactNode }) {
         <span className="datalabel text-accent">agent</span>
       </div>
       <p className="mt-2 text-sm leading-relaxed text-ink">{children}</p>
+    </div>
+  );
+}
+
+/**
+ * Left rail shown from md (tablet) up: the phone's dot progress bar becomes a
+ * list of named steps. Only steps already reached are clickable — the rail is
+ * a shortcut back, not a way to skip validation ahead.
+ */
+function StepRail({
+  phase,
+  idx,
+  onGo,
+  onExit,
+}: {
+  phase: Phase;
+  idx: number;
+  onGo: (p: Phase) => void;
+  onExit: () => void;
+}) {
+  return (
+    <div className="flex h-full flex-col">
+      <div className="datalabel">
+        step {Math.min(idx + 1, COUNTED)} of {COUNTED}
+      </div>
+      <nav className="mt-3 flex flex-col gap-0.5">
+        {FLOW.slice(0, COUNTED).map((p, i) => {
+          const done = i < idx;
+          const current = p === phase;
+          const reachable = i <= idx;
+          return (
+            <button
+              key={p}
+              onClick={() => reachable && onGo(p)}
+              disabled={!reachable}
+              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
+                current
+                  ? "bg-surface-overlay font-medium text-ink"
+                  : reachable
+                    ? "text-ink-muted hover:bg-surface-raised hover:text-ink"
+                    : "cursor-default text-ink-faint"
+              }`}
+            >
+              <span
+                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                  done ? "border-accent bg-accent" : current ? "border-accent" : "border-line"
+                }`}
+              >
+                {done ? (
+                  <Icon name="check" className="h-2.5 w-2.5 text-white" />
+                ) : (
+                  <span className="font-mono text-[10px] text-ink-faint">{i + 1}</span>
+                )}
+              </span>
+              {STEP_LABELS[p]}
+            </button>
+          );
+        })}
+      </nav>
+      <button
+        onClick={onExit}
+        className="mt-auto pt-4 text-left text-sm text-ink-muted transition-colors hover:text-ink"
+      >
+        Save &amp; exit
+      </button>
     </div>
   );
 }
@@ -542,7 +644,7 @@ export default function OnboardingPage() {
       },
     ];
     return (
-      <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col px-6 py-12">
+      <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col px-6 py-12 md:max-w-2xl md:py-20">
         <GlocalMark className="h-9 w-9 text-ink" title="Glocal" />
         <h1 className="mt-6 text-2xl font-semibold leading-tight tracking-tight">
           You stopped at {d.phase === "budget" ? "the budget" : "step " + Math.min(stopped + 1, COUNTED)}.
@@ -566,7 +668,7 @@ export default function OnboardingPage() {
               />
             ))}
           </div>
-          <ul className="mt-5 flex flex-col gap-3.5">
+          <ul className="mt-5 grid grid-cols-1 gap-3.5 md:grid-cols-2">
             {rows.map((r) => (
               <li key={r.label} className="flex items-start gap-3">
                 {r.done ? (
@@ -603,43 +705,53 @@ export default function OnboardingPage() {
 
   /* -- the flow ---------------------------------------------------------- */
 
+  const aside = AGENT_ASIDE[phase];
+
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col px-6 pb-8 pt-6">
+    <main className="mx-auto flex w-full max-w-xl flex-col px-6 pb-8 pt-6 md:min-h-screen md:max-w-none md:flex-row md:gap-10 md:px-10 md:py-10 lg:gap-14 lg:px-14">
       {chrome && (
-        <header className="shrink-0">
-          <div className="flex items-center justify-between gap-3">
-            <button
-              onClick={back}
-              disabled={idx === 0}
-              aria-label="Back"
-              className="-ml-2 flex h-10 w-10 items-center justify-center rounded-full text-ink transition-opacity disabled:opacity-30"
-            >
-              <Icon name="back" className="h-5 w-5" />
-            </button>
-            <span className="datalabel">
-              step {Math.min(idx + 1, COUNTED)} of {COUNTED}
-            </span>
-            <button
-              onClick={() => router.push("/today")}
-              className="text-sm text-ink-muted transition-colors hover:text-ink"
-            >
-              Save &amp; exit
-            </button>
-          </div>
-          <div className="mt-3 flex gap-1">
-            {Array.from({ length: COUNTED }).map((_, i) => (
-              <span
-                key={i}
-                className={`h-1 flex-1 rounded-full transition-colors ${
-                  i <= Math.min(idx, COUNTED - 1) ? "bg-accent" : "bg-surface-overlay"
-                }`}
-              />
-            ))}
-          </div>
-        </header>
+        <aside className="hidden shrink-0 md:block md:w-56 lg:w-64">
+          <StepRail phase={phase} idx={idx} onGo={go} onExit={() => router.push("/today")} />
+        </aside>
       )}
 
-      <div className="flex-1 pt-7">
+      <div className="flex min-w-0 flex-1 flex-col">
+        {chrome && (
+          <header className="shrink-0 md:hidden">
+            <div className="flex items-center justify-between gap-3">
+              <button
+                onClick={back}
+                disabled={idx === 0}
+                aria-label="Back"
+                className="-ml-2 flex h-10 w-10 items-center justify-center rounded-full text-ink transition-opacity disabled:opacity-30"
+              >
+                <Icon name="back" className="h-5 w-5" />
+              </button>
+              <span className="datalabel">
+                step {Math.min(idx + 1, COUNTED)} of {COUNTED}
+              </span>
+              <button
+                onClick={() => router.push("/today")}
+                className="text-sm text-ink-muted transition-colors hover:text-ink"
+              >
+                Save &amp; exit
+              </button>
+            </div>
+            <div className="mt-3 flex gap-1">
+              {Array.from({ length: COUNTED }).map((_, i) => (
+                <span
+                  key={i}
+                  className={`h-1 flex-1 rounded-full transition-colors ${
+                    i <= Math.min(idx, COUNTED - 1) ? "bg-accent" : "bg-surface-overlay"
+                  }`}
+                />
+              ))}
+            </div>
+          </header>
+        )}
+
+      <div className="flex flex-1 items-start gap-10 pt-7 md:pt-0 lg:gap-14">
+      <div className="min-w-0 flex-1 md:max-w-2xl">
         {/* ---------------------------------------------------- 1 business */}
         {phase === "business" && (
           <section>
@@ -702,7 +814,7 @@ export default function OnboardingPage() {
             )}
 
             <div className="datalabel mt-6">who you are here</div>
-            <div className="mt-2.5 flex flex-col gap-2">
+            <div className="mt-2.5 grid grid-cols-1 gap-2 md:grid-cols-2">
               {OWNER_ROLES.map((r) => (
                 <button
                   key={r.id}
@@ -881,7 +993,7 @@ export default function OnboardingPage() {
               This is what I judge every ad against. What I can measure depends on where
               your ads land, so this list is built from the door you picked.
             </p>
-            <div className="mt-6 flex flex-col gap-2.5">
+            <div className="mt-6 grid grid-cols-1 gap-2.5 md:grid-cols-2">
               {goalOptions.map((o) => {
                 const closed = o.measurement === "impossible";
                 const on = goal === o.goal;
@@ -953,7 +1065,7 @@ export default function OnboardingPage() {
             <h1 className="text-2xl font-semibold leading-tight tracking-tight">
               Before I ask for a number, here is exactly what happens to your money.
             </h1>
-            <div className="mt-6 flex flex-col gap-2.5">
+            <div className="mt-6 grid grid-cols-1 gap-2.5 md:grid-cols-2">
               {MONEY_FACTS.map((f) => (
                 <div
                   key={f.title}
@@ -1225,19 +1337,59 @@ export default function OnboardingPage() {
         )}
       </div>
 
-      <footer className="sticky bottom-0 shrink-0 border-t border-line-soft bg-surface pb-2 pt-3">
-        {footerHint && (
-          <p className="mb-2.5 text-center text-xs text-ink-faint">{footerHint}</p>
-        )}
-        <button
-          onClick={next}
-          disabled={!canAdvance || saving}
-          className="flex w-full items-center justify-center gap-2.5 rounded-lg bg-accent px-6 py-4 text-base font-medium text-white transition-colors hover:bg-accent-bright disabled:bg-surface-overlay disabled:text-ink-faint"
-        >
-          {saving && <Spinner />}
-          {ctaLabel}
-        </button>
+      {chrome && aside && (
+        <aside className="hidden w-72 shrink-0 lg:block">
+          <div className="rounded-card border border-line bg-surface-raised p-4">
+            <div className="datalabel">{aside.label}</div>
+            {aside.formats ? (
+              <div className="mt-3 flex gap-2.5">
+                {PHOTO_OUTPUTS.map((o) => (
+                  <div key={o.tag} className="min-w-0 flex-1">
+                    <div className="datalabel flex aspect-[4/5] items-center justify-center rounded-[10px] bg-surface-overlay">
+                      {o.tag}
+                    </div>
+                    <div className="mt-1.5 text-[11px] leading-snug text-ink-muted">{o.label}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-[13px] leading-relaxed text-ink-muted">{aside.body}</p>
+            )}
+          </div>
+        </aside>
+      )}
+      </div>
+
+      <footer className="sticky bottom-0 shrink-0 border-t border-line-soft bg-surface pb-2 pt-3 md:static md:mt-6 md:border-t-0 md:bg-transparent md:pb-0 md:pt-0">
+        <div className="md:flex md:items-center md:justify-between md:gap-5">
+          {chrome ? (
+            <button
+              onClick={back}
+              disabled={idx === 0}
+              className="hidden items-center gap-2 text-sm text-ink-muted transition-opacity hover:text-ink disabled:opacity-30 md:flex"
+            >
+              <Icon name="back" className="h-[18px] w-[18px]" />
+              Back
+            </button>
+          ) : (
+            <span className="hidden md:block" />
+          )}
+          <div className="md:flex md:items-center md:gap-5">
+            {footerHint && (
+              <p className="mb-2.5 text-center text-xs text-ink-faint md:mb-0">{footerHint}</p>
+            )}
+            <button
+              onClick={next}
+              disabled={!canAdvance || saving}
+              className="flex w-full items-center justify-center gap-2.5 rounded-lg bg-accent px-6 py-4 text-base font-medium text-white transition-colors hover:bg-accent-bright disabled:bg-surface-overlay disabled:text-ink-faint md:w-auto md:px-7"
+            >
+              {saving && <Spinner />}
+              {ctaLabel}
+            </button>
+          </div>
+        </div>
       </footer>
+      </div>
     </main>
   );
 }
