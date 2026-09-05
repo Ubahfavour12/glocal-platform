@@ -1,60 +1,48 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ConceptCard } from "./ConceptCard";
+import {
+  filterConcepts,
+  tabCounts,
+  type PipelineConcept,
+  type PipelineTab,
+} from "@/lib/pipeline/filter";
 
-export interface PipelineConcept {
-  id: string;
-  rank: number;
-  hook: string;
-  beats: string[];
-  copyAngle: string;
-  cta: string;
-  sourcePattern: string | null;
-  rendered: boolean;
-}
+export type { PipelineConcept } from "@/lib/pipeline/filter";
 
 /**
- * Search and filter over the concept pipeline.
+ * Search and filter over the concept pipeline, and render the result.
  *
- * Fifty concepts is a long scroll anywhere and unusable on a phone, so the list
- * needs a way in. Filtering happens client-side because the whole set is
- * already loaded and fifty rows is nothing: a round trip per keystroke would be
- * slower and worse.
+ * This component renders the list itself rather than taking a render prop from
+ * the page. It used to take `children: (visible) => ReactNode`, which looks
+ * natural but cannot work: the page is a Server Component, and a function
+ * cannot be serialised across the server/client boundary. React threw
+ * "Functions cannot be passed directly to Client Components" and the whole
+ * Pipeline page 500'd — but only once a business had concepts, because the
+ * empty state returns before reaching this component, which is why it looked
+ * intermittent rather than broken.
+ *
+ * So every prop here is data. Keeping it that way is what keeps the page up.
  */
 export function PipelineFilter({
   concepts,
-  children,
+  businessId,
+  videoAffordable,
+  videoCredits,
 }: {
   concepts: PipelineConcept[];
-  children: (visible: PipelineConcept[]) => React.ReactNode;
+  businessId: string | null;
+  videoAffordable: boolean;
+  videoCredits: number;
 }) {
   const [query, setQuery] = useState("");
-  const [only, setOnly] = useState<"all" | "rendered" | "scripted">("all");
+  const [only, setOnly] = useState<PipelineTab>("all");
 
-  const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return concepts.filter((c) => {
-      if (only === "rendered" && !c.rendered) return false;
-      if (only === "scripted" && c.rendered) return false;
-      if (!q) return true;
-      return (
-        c.hook.toLowerCase().includes(q) ||
-        c.copyAngle.toLowerCase().includes(q) ||
-        c.beats.some((b) => b.toLowerCase().includes(q))
-      );
-    });
-  }, [concepts, query, only]);
+  const visible = useMemo(() => filterConcepts(concepts, query, only), [concepts, query, only]);
+  const counts = useMemo(() => tabCounts(concepts), [concepts]);
 
-  const counts = useMemo(
-    () => ({
-      all: concepts.length,
-      rendered: concepts.filter((c) => c.rendered).length,
-      scripted: concepts.filter((c) => !c.rendered).length,
-    }),
-    [concepts],
-  );
-
-  const tab = (key: typeof only, label: string) => (
+  const tab = (key: PipelineTab, label: string) => (
     <button
       key={key}
       onClick={() => setOnly(key)}
@@ -91,7 +79,17 @@ export function PipelineFilter({
           Nothing matches that. Try a different word, or clear the filter.
         </p>
       ) : (
-        children(visible)
+        <div className="mt-4 flex flex-col gap-3">
+          {visible.map((c) => (
+            <ConceptCard
+              key={c.id}
+              concept={c}
+              businessId={businessId}
+              videoAffordable={videoAffordable}
+              videoCredits={videoCredits}
+            />
+          ))}
+        </div>
       )}
     </>
   );
