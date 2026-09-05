@@ -122,7 +122,7 @@ export function ApprovalCard({
   const money = (m: number) => `$${(m / 100).toFixed(2)}`;
 
   return (
-    <div className="mx-auto max-w-lg">
+    <div className="mx-auto max-w-lg md:max-w-3xl">
       <div className="datalabel">tomorrow&apos;s plan · {plan.planDate}</div>
       <h1 className="mt-1 text-2xl font-semibold tracking-tight">Ready for your approval</h1>
 
@@ -179,8 +179,8 @@ export function ApprovalCard({
         </div>
       </section>
 
-      {/* the two challengers */}
-      <section className="mt-4 grid gap-3">
+      {/* the two challengers, side by side once there's room for a head-to-head read */}
+      <section className="mt-4 grid gap-3 md:grid-cols-2">
         {plan.challengers.map((c, i) => (
           <div key={c.conceptId} className="rounded-card border border-line bg-surface-raised p-4">
             <div className="flex items-center justify-between">
@@ -228,7 +228,7 @@ export function ApprovalCard({
           consequence of the choice rather than presuming one. */}
       <section className="mt-5">
         <div className="datalabel">when should these go live</div>
-        <div className="mt-3 flex flex-col gap-2">
+        <div className="mt-3 grid gap-2 md:grid-cols-3">
           {(
             [
               ["now", "Right away", "Live within minutes of approving."],

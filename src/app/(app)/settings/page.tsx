@@ -54,7 +54,7 @@ export default async function SettingsPage() {
   const mediaCount = mediaRes.count ?? 0;
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-3xl lg:max-w-5xl">
       <PageHeader
         label="settings"
         title="Your account"
@@ -83,7 +83,9 @@ export default async function SettingsPage() {
           }}
           balanceUsdMinor={balanceUsdMinor}
         />
+      </div>
 
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
         {/* Connect socials */}
         <div className="rounded-card border border-line bg-surface-raised p-5">
           <div className="datalabel">social accounts</div>

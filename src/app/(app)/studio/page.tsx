@@ -57,7 +57,7 @@ export default async function StudioPage() {
   })).filter((k) => k.value);
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-3xl lg:max-w-5xl">
       <PageHeader
         label="strategy studio"
         title="Tune your agent"

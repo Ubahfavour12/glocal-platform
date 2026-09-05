@@ -69,9 +69,14 @@ export function StudioForm() {
   }
 
   return (
-    <div className="mt-6 flex flex-col gap-4">
+    <div className="mt-6 grid gap-4 lg:grid-cols-2">
       {STUDIO_QUESTIONS.map((q) => (
-        <div key={q.id} className="rounded-card border border-line bg-surface-raised p-5">
+        <div
+          key={q.id}
+          className={`rounded-card border border-line bg-surface-raised p-5 ${
+            q.type === "text" ? "lg:col-span-2" : ""
+          }`}
+        >
           <label className="text-sm font-medium text-ink">{q.label}</label>
           {q.hint && <p className="mt-1 text-xs text-ink-faint">{q.hint}</p>}
 
@@ -132,7 +137,7 @@ export function StudioForm() {
         </div>
       ))}
 
-      <div className="sticky bottom-4 flex items-center justify-between rounded-card border border-line bg-surface-overlay/90 px-4 py-3 backdrop-blur">
+      <div className="sticky bottom-4 flex items-center justify-between rounded-card border border-line bg-surface-overlay/90 px-4 py-3 backdrop-blur lg:col-span-2">
         <span className="datalabel">
           {filled > 0 ? `${filled} to add` : "add what is true today"}
         </span>
