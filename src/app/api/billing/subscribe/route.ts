@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createCheckout } from "@/lib/payments/flutterwave";
+import { createCheckout } from "@/lib/payments/provider";
 import { effectiveRate, localCostForUsd } from "@/lib/money/fx";
 import { fetchUsdRate } from "@/lib/money/rates";
 import { createClient } from "@/lib/supabase/server";
@@ -9,11 +9,11 @@ import { subscriptionPriceUsdMinor, subscriptionTxRef } from "@/lib/billing/subs
 /**
  * Start a subscription checkout (Phase 4). A signed-in owner picks a tier → we
  * quote the monthly price in local currency at the buffered rate → hand back
- * Flutterwave's hosted checkout link. The charge carries purpose:"subscription"
- * + tier in meta; the webhook reads that and calls activateSubscription on a
- * successful payment. No wallet credit happens here.
+ * the active rail's hosted checkout link. The charge carries
+ * purpose:"subscription" + tier in meta; the webhook reads that and calls
+ * activateSubscription on a successful payment. No wallet credit happens here.
  *
- * Returns 502 until live Flutterwave keys exist — the UI degrades to a
+ * Returns 502 until live keys exist for the active rail — the UI degrades to a
  * "checkout opens when payments go live" note.
  */
 export async function POST(req: NextRequest) {
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     const localMinor = localCostForUsd(usdMinor, snapshot);
     const origin = req.nextUrl.origin;
 
-    const { link } = await createCheckout({
+    const { link, psp } = await createCheckout({
       txRef: subscriptionTxRef(business.id),
       amountLocalMinor: localMinor,
       currency: "NGN",
@@ -72,6 +72,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       link,
+      psp,
       quoted: { usd_minor: usdMinor, local_minor: localMinor, currency: "NGN", rate },
     });
   } catch (err) {

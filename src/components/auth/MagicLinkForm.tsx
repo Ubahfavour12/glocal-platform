@@ -10,6 +10,31 @@ const supabaseConfigured = Boolean(
 
 type Mode = "signin" | "signup";
 
+/** Why a sign-in link did not work, as diagnosed by /auth/callback. */
+export type LinkError = "device" | "expired";
+
+/**
+ * The two failures need different actions, so they get different words.
+ *
+ * "device" is the one worth spelling out. A sign-in link is tied to the
+ * browser that asked for it, so requesting it on a laptop and opening it on a
+ * phone can never work, and neither can an email app that opens links in its
+ * own in-app browser. Nothing is broken and the link is not expired, so any
+ * message about it being invalid would send people hunting for the wrong
+ * problem.
+ */
+const LINK_ERRORS: Record<LinkError, { title: string; body: string }> = {
+  device: {
+    title: "open the link on this device",
+    body:
+      "That link was requested from a different browser, so it can only sign you in there. Send yourself a fresh one from this device and open it here. If your email app opens links in its own window, choose \u201cOpen in browser\u201d.",
+  },
+  expired: {
+    title: "that link has expired",
+    body: "Sign-in links are single use and time limited. Enter your email and we\u2019ll send a new one.",
+  },
+};
+
 const COPY: Record<
   Mode,
   {
@@ -54,8 +79,9 @@ const COPY: Record<
   },
 };
 
-export function MagicLinkForm({ mode }: { mode: Mode }) {
+export function MagicLinkForm({ mode, linkError }: { mode: Mode; linkError?: LinkError }) {
   const c = COPY[mode];
+  const failure = linkError ? LINK_ERRORS[linkError] : null;
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [message, setMessage] = useState("");
@@ -86,6 +112,16 @@ export function MagicLinkForm({ mode }: { mode: Mode }) {
       <div className="w-full max-w-sm">
         <div className="datalabel">{c.label}</div>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">{c.title}</h1>
+
+        {failure && state === "idle" && (
+          <div
+            role="status"
+            className="mt-5 rounded-card border border-line bg-surface-raised p-4"
+          >
+            <div className="datalabel text-accent-bright">{failure.title}</div>
+            <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{failure.body}</p>
+          </div>
+        )}
 
         {!supabaseConfigured ? (
           <div className="mt-8 rounded-card border border-line bg-surface-raised p-5">

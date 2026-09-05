@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 
@@ -14,7 +15,33 @@ import { createClient } from "@/lib/supabase/server";
  * On success we route by whether onboarding is done:
  *   new user  -> /onboarding (collect their business, then the agent wakes)
  *   returning -> /today (straight to the dashboard, no re-onboarding)
+ *
+ * On failure we say WHY, because the two causes need different actions from
+ * the customer and both previously looked like being dumped back on the email
+ * form for no reason:
+ *
+ *   device  - a PKCE link opened somewhere other than the browser that asked
+ *             for it. Requesting the link stores a one-time code verifier in
+ *             that browser; without it the code cannot be exchanged, no matter
+ *             how fresh the link is. Requesting on a laptop and opening on a
+ *             phone lands here, as does an email app that opens links in its
+ *             own in-app browser.
+ *   expired - the link is genuinely used up or too old.
  */
+type FailureReason = "device" | "expired" | "link";
+
+/**
+ * Does this browser hold the PKCE verifier that pairs with an emailed code?
+ *
+ * Checked directly rather than inferred from the error text, which is provider
+ * wording and can change underneath us. @supabase/ssr stores the verifier in a
+ * cookie whose name ends in `-code-verifier`.
+ */
+async function hasCodeVerifier(): Promise<boolean> {
+  const store = await cookies();
+  return store.getAll().some((c) => c.name.endsWith("-code-verifier") && c.value);
+}
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const tokenHash = searchParams.get("token_hash");
@@ -23,10 +50,17 @@ export async function GET(request: Request) {
 
   const supabase = await createClient();
   let authed = false;
+  let reason: FailureReason = "link";
 
   if (code) {
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    authed = !error;
+    if (!(await hasCodeVerifier())) {
+      // Exchanging would fail anyway; naming the cause beats a generic error.
+      reason = "device";
+    } else {
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      authed = !error;
+      if (error) reason = "expired";
+    }
   } else if (tokenHash) {
     // A NEW signup's link carries a "signup" token; a returning user's carries
     // "magiclink"/"email". If the template's ?type= doesn't match the token's
@@ -44,10 +78,13 @@ export async function GET(request: Request) {
         break;
       }
     }
+    // token_hash is device-independent, so a failure here is a spent or stale
+    // link rather than the wrong browser.
+    if (!authed) reason = "expired";
   }
 
   if (!authed) {
-    return NextResponse.redirect(`${origin}/login?error=link`);
+    return NextResponse.redirect(`${origin}/login?error=${reason}`);
   }
 
   // RLS scopes this to the just-signed-in user.
