@@ -285,7 +285,8 @@ export default async function TodayPage() {
             <div className="mt-0.5 font-mono text-xs text-ink-faint">{fmtDual(balanceUsdMinor, local).replace(/^[^(]*\(/, "≈ ").replace(/\)$/, "")}</div>
           )}
           <p className="mt-2 text-xs text-ink-faint">
-            To go live we hold 7 days of your budget, about ${runwayHoldUsd.toFixed(0)} at your current rate.
+            To start, the wallet needs 7 days of budget in it, about ${runwayHoldUsd.toFixed(0)} at your
+            current rate. Nothing is taken now.
           </p>
           {/* The daily budget was set once during onboarding and then lived
               only in Settings, a screen nobody opens. Money the agent spends

@@ -13,6 +13,7 @@ import {
 } from "@/lib/money/ledger";
 import { currencyForCountry, dialCodeForCountry, listCountries } from "@/lib/money/currency";
 import { checkWhatsApp, stripTrunkPrefix, waMeLink } from "@/lib/onboarding/phone";
+import { isValidFoundedYear } from "@/lib/onboarding/tenure";
 import {
   defaultGoalFor,
   goalOptionsFor,
@@ -78,22 +79,22 @@ const MONEY_FACTS = [
   {
     icon: "wallet",
     title: "It sits in your wallet, not ours",
-    body: "You top up a balance. It is spent on your ads only, and you can see every cent that leaves in the statement.",
+    body: "You top up a balance. It only buys your ads, and every cent is on your statement.",
   },
   {
     icon: "hold",
-    title: "Going live holds seven days of budget",
-    body: "It stops your ads dying halfway through a test, which would waste the money already spent. It is still yours.",
+    title: "You need a week of budget to start",
+    body: "Not a fee, and not taken. It has to be in the wallet before ads start, so a test cannot die halfway.",
   },
   {
     icon: "back",
     title: "Unspent money comes back",
-    body: "Ask for it any time and the balance returns to the account you paid from. No lock-in and no minimum term.",
+    body: "Ask any time. It returns to the account you paid from.",
   },
   {
     icon: "tap",
     title: "Nothing spends until you approve",
-    body: "Every evening I show you tomorrow's plan. If you do not tap approve, nothing runs and nothing is charged.",
+    body: "Every evening I show tomorrow's plan. No tap, nothing runs.",
   },
 ] as const;
 
@@ -329,6 +330,7 @@ interface Draft {
   phase: Phase;
   name: string;
   trade: string;
+  foundedYear: string;
   otherTrade: string;
   country: string;
   ownerRole: OwnerRole;
@@ -356,6 +358,7 @@ export default function OnboardingPage() {
 
   const [name, setName] = useState("");
   const [trade, setTrade] = useState("");
+  const [foundedYear, setFoundedYear] = useState("");
   const [otherTrade, setOtherTrade] = useState("");
   const [country, setCountry] = useState("NG");
   const [countryTouched, setCountryTouched] = useState(false);
@@ -384,6 +387,7 @@ export default function OnboardingPage() {
           draftRef.current = d;
           setName(d.name ?? "");
           setTrade(d.trade ?? "");
+          setFoundedYear(d.foundedYear ?? "");
           setOtherTrade(d.otherTrade ?? "");
           setCountry(d.country ?? "NG");
           setOwnerRole(d.ownerRole ?? "owner");
@@ -417,7 +421,7 @@ export default function OnboardingPage() {
       localStorage.setItem(
         DRAFT_KEY,
         JSON.stringify({
-          phase, name, trade, otherTrade, country, ownerRole,
+          phase, name, trade, foundedYear, otherTrade, country, ownerRole,
           door, doorValue, goal, dailyUsd,
           savedAt: new Date().toISOString(),
         } satisfies Draft),
@@ -425,7 +429,7 @@ export default function OnboardingPage() {
     } catch {
       // Private-mode storage refusals must not break the flow.
     }
-  }, [hydrated, phase, name, trade, otherTrade, country, ownerRole, door, doorValue, goal, dailyUsd]);
+  }, [hydrated, phase, name, trade, foundedYear, otherTrade, country, ownerRole, door, doorValue, goal, dailyUsd]);
 
   /* -- derived ----------------------------------------------------------- */
 
@@ -567,6 +571,11 @@ export default function OnboardingPage() {
               connection_mode: connectionMode,
               destination,
               country,
+              // Retention signal, never a gate. An unparseable or skipped
+              // answer is stored as nothing rather than as a guess.
+              founded_year: isValidFoundedYear(Number(foundedYear))
+                ? Number(foundedYear)
+                : null,
               currency: local.currency, // local display currency; USD stays canonical
             })
             .select("id")
@@ -800,6 +809,28 @@ export default function OnboardingPage() {
                 className="mt-2.5 w-full rounded-lg border border-line bg-surface-raised px-4 py-3.5 text-base text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
               />
             )}
+            <label className="datalabel mt-6 block" htmlFor="biz-founded">
+              what year did you start?
+            </label>
+            <p className="mt-1 text-xs leading-relaxed text-ink-faint">
+              Optional. It tells me whether I am advertising a new name or a
+              known one, and the two need different ads.
+            </p>
+            <input
+              id="biz-founded"
+              inputMode="numeric"
+              maxLength={4}
+              value={foundedYear}
+              onChange={(e) => setFoundedYear(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              placeholder={String(new Date().getFullYear() - 3)}
+              className="mt-2 w-32 rounded-lg border border-line bg-surface-raised px-4 py-3.5 text-base text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+            />
+            {foundedYear.length === 4 && !isValidFoundedYear(Number(foundedYear)) && (
+              <p className="mt-2 text-xs text-ink-faint">
+                That year has not happened yet. Leave it blank if you would rather not say.
+              </p>
+            )}
+
             {screen === "blocked" && category.length > 1 && (
               <FieldError>
                 This category cannot be advertised through the ad networks, so I would be
@@ -1063,13 +1094,13 @@ export default function OnboardingPage() {
         {phase === "money" && (
           <section>
             <h1 className="text-2xl font-semibold leading-tight tracking-tight">
-              Before I ask for a number, here is exactly what happens to your money.
+              What happens to your money
             </h1>
-            <div className="mt-6 grid grid-cols-1 gap-2.5 md:grid-cols-2">
+            <div className="mt-4 grid grid-cols-1 gap-2 md:mt-6 md:grid-cols-2 md:gap-2.5">
               {MONEY_FACTS.map((f) => (
                 <div
                   key={f.title}
-                  className="flex items-start gap-3 rounded-card border border-line bg-surface-raised p-4"
+                  className="flex items-start gap-3 rounded-card border border-line bg-surface-raised p-3.5 md:p-4"
                 >
                   <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[10px] bg-surface-overlay text-accent">
                     <Icon name={f.icon} className="h-[17px] w-[17px]" />
@@ -1081,11 +1112,10 @@ export default function OnboardingPage() {
                 </div>
               ))}
             </div>
-            <div className="mt-4">
+            <div className="mt-3 md:mt-4">
               <AgentNote>
-                I earn a small percentage of what you spend on ads, and that is it. I do not
-                take a cut of your sales. If your ads stop working, tell me to pause and the
-                rest of the money is yours.
+                I earn a small percentage of your ad spend, and nothing else. No cut of your
+                sales. Tell me to pause and the rest is yours.
               </AgentNote>
             </div>
           </section>
@@ -1132,13 +1162,15 @@ export default function OnboardingPage() {
 
             <div className="mt-3 rounded-card border border-line bg-surface-raised p-4">
               <div className="flex items-center justify-between">
-                <span className="datalabel">held to go live</span>
+                <span className="datalabel">wallet needs, to start</span>
                 <span className="font-mono text-[17px] font-semibold">${holdUsd}</span>
               </div>
               {holdLocal && <div className="mt-1 text-right font-mono text-xs text-ink-faint">{holdLocal}</div>}
               <p className="mt-2 text-[13px] leading-relaxed text-ink-muted">
-                Seven days of budget, so ads never cut out mid-test. It stays your money and
-                it is still refundable.
+                Seven days of your daily budget. Nothing is taken now and nothing is charged:
+                this is the balance that has to be sitting in the wallet before ads can start,
+                so a test cannot die halfway and waste what it already spent. It stays yours
+                and it stays refundable.
               </p>
             </div>
 
