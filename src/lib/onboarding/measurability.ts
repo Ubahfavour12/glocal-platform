@@ -45,10 +45,13 @@ export interface GoalOption {
 const LABELS: Record<Goal, { label: string; hint: string }> = {
   whatsapp: {
     label: "WhatsApp conversations",
-    hint: "Someone messages you. Best if you close by chat.",
+    hint: "Counts people who start a chat. I see the chat open, not whether they buy.",
   },
-  sales: { label: "Sales", hint: "A confirmed order, and what it was worth." },
-  leads: { label: "Leads", hint: "A name or a number to follow up." },
+  sales: {
+    label: "Sales",
+    hint: "Counts money. Fewer, worth more each, and I need to be told which ad earned it.",
+  },
+  leads: { label: "Leads", hint: "A name or a number to follow up. Not yet a buyer." },
   visits: { label: "Shop visits", hint: "Footfall through your actual door." },
 };
 

@@ -130,9 +130,10 @@ export function ApprovalCard({
         <section className="mt-5 rounded-card border border-line bg-surface-raised p-5">
           <div className="datalabel">before any of this can run</div>
           <p className="mt-2 text-sm leading-relaxed text-ink">
-            Your wallet holds {money(balanceUsdMinor)} and going live needs{" "}
-            {money(requiredUsdMinor)}, seven days of your budget. You can approve this now
-            and I will hold it, but nothing goes live until the wallet covers the hold.
+            Your wallet has {money(balanceUsdMinor)} and starting needs{" "}
+            {money(requiredUsdMinor)} in it, seven days of your budget. Nothing is taken
+            now. You can approve this plan and I will keep it ready, but it cannot run
+            until the balance is there.
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
             <a

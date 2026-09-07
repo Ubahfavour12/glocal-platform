@@ -35,7 +35,7 @@ engineering.
 |---|---|---|
 | **`HIGGSFIELD_API_KEY`** | primary **video** engine. Without it, video jobs silently fall through to fal and nothing warns you | `FOUNDER-ACTIONS.md` §0a |
 | **`FAL_KEY`** into `platform/.env.local` | local renders are dormant without it | `FOUNDER-ACTIONS.md` §0b |
-| **Migrations `0021`–`0023`** | withdrawals and ad-budget holds. Written and tested; the tables and functions do not exist in the database until these are run | Supabase → SQL editor |
+| **Migrations `0021`–`0024`** | withdrawals, ad-budget holds, business start year. Written and tested; none of it exists in the database until these are run | Supabase → SQL editor |
 | **Supabase magic-link template** | sign-in links only work in the browser that asked for them. Switching the template to `token_hash` makes laptop-request / phone-open work | Supabase → Auth → Email Templates |
 | **`FLUTTERWAVE_WEBHOOK_HASH`** | currently empty. Webhooks fail closed, so a customer is charged and the wallet never credits | Vercel env |
 | **CAC amendment** | unlocks Flutterwave/Paystack **live** keys (both rails are built; neither can charge without them) | in progress |
@@ -108,6 +108,19 @@ below it is judgement and stays hand-written.
 Newest first. `git log` carries the full reasoning for each; commit messages
 here are written to be read later, not to be terse.
 
+- **Onboarding money screen, from the phone review** — the number was called a
+  "hold" on three screens when it is actually the minimum balance the wallet
+  needs before ads can start. Nothing is taken, and now it says so. The word
+  "hold" is reserved for the real daily budget hold. The screen also showed two
+  of its four cards above the fold while the button already said "I understand";
+  it now shows all four.
+- **Business start year** — asked once at onboarding, optional, gates nothing.
+  A retention signal: a shop in its first year and a shop of fifteen years churn
+  for different reasons, and one number cannot tell them apart. Needs migration
+  `0024`.
+- **"WhatsApp conversations" vs "Sales"** — the two goals read as near-synonyms.
+  Now each says what it actually counts: chats opened, versus money, which needs
+  telling which ad earned it.
 - **Withdrawals** — a customer can ask for their unspent balance back. The
   money is reserved the moment it is requested, the balance check happens
   inside a locked transaction, and every refusal says why. Needs migration
@@ -177,7 +190,7 @@ until step 1 exists. That is the whole shape of the delay.
 |---|---|---|
 | **CAC amendment** | Flutterwave + Paystack **live** keys, so money can enter | in progress |
 | **`FLUTTERWAVE_WEBHOOK_HASH`** | wallets crediting after payment. Currently **empty**, so a customer would be charged and credited nothing | one paste into Vercel |
-| **Migrations `0021`–`0023`** | withdrawals + ad-budget holds cannot work until the database has them | Supabase SQL editor |
+| **Migrations `0021`–`0024`** | withdrawals, ad-budget holds and the start-year question cannot work until the database has them | Supabase SQL editor |
 | **`PAYSTACK_SECRET_KEY`** | the second money rail. Built and tested, dormant without it. Needs no separate webhook secret — Paystack signs with this same key | one paste, after CAC |
 | **`HIGGSFIELD_API_KEY`** | video renders. Without it video silently falls back to fal and nothing warns | waiting on payment |
 | **`FAL_KEY`** in `.env.local` | local renders only; production may already have it | one paste |
@@ -188,8 +201,9 @@ until step 1 exists. That is the whole shape of the delay.
 
 Small next to the gates above.
 
-1. **Apply migrations `0021`–`0023`** to Supabase — withdrawals and budget
-   holds are written, tested and merged, and inert until the database has them.
+1. **Apply migrations `0021`–`0024`** to Supabase — withdrawals, budget holds
+   and the start-year question are written, tested and merged, and inert until
+   the database has them.
    The code fails soft without them: the wallet page still renders and the
    withdraw button stays hidden, so nothing is broken in the meantime
 2. **Founder admin console** — every customer, wallet, verdict and error in one
@@ -198,6 +212,12 @@ Small next to the gates above.
    API exists
 3. **Sentry + PostHog** — needs two free accounts creating
 4. **Directions taps** as a counted footfall signal
+5. **Retention cohorts by business age** — the start year is captured but
+   nothing reads it yet. Worth doing once there are enough customers for the
+   answer to mean anything, not before
+6. **The rest of the congestion pass** — the money screen was reviewed and
+   fixed on a phone. The other six onboarding steps have not had the same
+   look, and neither have the dashboard screens
 
 **Paystack** has moved off this list — the rail is built and tested, and now
 waits on a key like everything else. `PAYMENTS_PROVIDER` chooses which rail new
