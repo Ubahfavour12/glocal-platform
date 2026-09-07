@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { AddFundsButton } from "@/components/wallet/AddFundsButton";
+import { WithdrawButton } from "@/components/wallet/WithdrawButton";
 import { PageHeader } from "@/components/ui/PageHeader";
 import {
   ArrowInIcon,
@@ -62,10 +63,32 @@ async function walletData() {
     ledger = (data as LedgerRow[]) ?? [];
   }
 
+  // An open withdrawal changes what this page may offer, so it is read here
+  // with everything else rather than discovered after a failed submit.
+  // Money already promised to a launched day's ads. It has left the balance
+  // above, so it is shown by name rather than left as an unexplained drop.
+  const { data: holds } = await supabase
+    .from("budget_holds")
+    .select("amount_usd_minor")
+    .eq("business_id", business.id)
+    .is("released_at", null);
+  const heldMinor = (holds ?? []).reduce(
+    (sum, h) => sum + Number((h as { amount_usd_minor: number }).amount_usd_minor),
+    0,
+  );
+
+  const { count: pendingWithdrawals } = await supabase
+    .from("withdrawals")
+    .select("id", { count: "exact", head: true })
+    .eq("business_id", business.id)
+    .eq("status", "requested");
+
   return {
     business,
     balanceMinor: Number(balanceRow?.balance_usd_minor ?? 0),
     ledger,
+    hasPendingWithdrawal: (pendingWithdrawals ?? 0) > 0,
+    heldMinor,
   };
 }
 
@@ -74,7 +97,8 @@ const KIND_LABELS: Record<string, string> = {
   ad_spend: "Ad spend",
   markup_fee: "Service fee",
   subscription: "Subscription",
-  refund: "Refund",
+  refund: "Withdrawal",
+  budget_hold: "Held for ads",
   adjustment: "Adjustment",
 };
 
@@ -82,8 +106,14 @@ function kindIcon(kind: string): ReactNode {
   const cls = "h-4 w-4";
   switch (kind) {
     case "topup":
-    case "refund":
       return <ArrowInIcon className={cls} />;
+    // A refund entry is money leaving the wallet on its way back to the
+    // customer, so it points out. It shared the incoming arrow until
+    // withdrawals existed and there was nothing to notice it against.
+    case "refund":
+      return <ArrowOutIcon className={cls} />;
+    case "budget_hold":
+      return <BoltIcon className={cls} />;
     case "ad_spend":
       return <BoltIcon className={cls} />;
     case "markup_fee":
@@ -158,6 +188,13 @@ export default async function WalletPage() {
             ${(balanceMinor / 100).toFixed(2)}
           </div>
 
+          {(wallet?.heldMinor ?? 0) > 0 && (
+            <p className="mt-2 text-xs text-ink-faint">
+              ${((wallet?.heldMinor ?? 0) / 100).toFixed(2)} of your balance is held for ads
+              already running today, so it is not counted above and cannot be spent twice.
+            </p>
+          )}
+
           <div className="mt-5">
             <div className="flex items-center justify-between text-xs">
               <span className="text-ink-muted">Runway</span>
@@ -195,6 +232,13 @@ export default async function WalletPage() {
           <div className="datalabel">add funds</div>
           <div className="mt-3">
             <AddFundsButton businessId={wallet.business.id} />
+          </div>
+          <div className="mt-5 border-t border-line pt-5">
+            <WithdrawButton
+              businessId={wallet.business.id}
+              balanceUsdMinor={wallet.balanceMinor}
+              hasPendingWithdrawal={wallet.hasPendingWithdrawal}
+            />
           </div>
         </section>
       ) : (

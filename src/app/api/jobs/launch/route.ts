@@ -9,6 +9,9 @@ import type { ConnectionMode } from "@/lib/tracking/modes";
 import { asPlan, planAllowsLaunch } from "@/lib/billing/plan";
 import { resolveTargetCountries } from "@/lib/tracking/geo";
 import { audienceConstraintsFor } from "@/lib/compliance/targeting";
+import { markupBpsOrDefault } from "@/lib/billing/spend";
+import { holdAmountUsdMinor } from "@/lib/money/hold";
+import { totalPlannedUsdMinor } from "@/lib/orchestrator/plan-payload";
 
 /** How long an approved-but-unlaunched plan stays launchable: today + yesterday. */
 const PLAN_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
@@ -86,6 +89,15 @@ export async function GET(req: NextRequest) {
     );
   });
 
+  /**
+   * Yesterday's promise is returned before today's is made. A hold belongs to
+   * one day; leaving it in place past that day would keep money out of the
+   * customer's balance that nobody ever spent.
+   */
+  const { data: releasedUsdMinor } = await supabase.rpc("release_stale_budget_holds", {
+    p_before_date: today,
+  });
+
   const outcomes: { businessId: string; result: string }[] = [];
   let cfg: ReturnType<typeof metaConfigFromEnv> | null = null;
   try {
@@ -102,7 +114,13 @@ export async function GET(req: NextRequest) {
       outcomes.push({ businessId: plan.business_id, result: `error: ${(e as Error).message}` });
     }
   }
-  return NextResponse.json({ launched: outcomes.length, expired, waiting: (plans ?? []).length - due.length, outcomes });
+  return NextResponse.json({
+    launched: outcomes.length,
+    expired,
+    waiting: (plans ?? []).length - due.length,
+    released_usd_minor: Number(releasedUsdMinor ?? 0),
+    outcomes,
+  });
 }
 
 type Supa = ReturnType<typeof createServiceClient>;
@@ -207,8 +225,49 @@ async function launchForPlan(
 
   const summary = await launchPlan(ctx, ads, adapters);
   await supabase.from("approvals").update({ launched_at: new Date().toISOString() }).eq("id", plan.id);
+
+  /**
+   * The day's budget leaves the spendable balance now, not when the network
+   * eventually reports what it delivered. Until this existed the customer saw
+   * money as available for hours after the agent had already committed it, and
+   * could budget or withdraw against it.
+   *
+   * Held after the launch rather than before it: a plan that never reached the
+   * ad network never committed anything, and holding first would take money
+   * out of the wallet for ads that do not exist. Placing the hold is not
+   * allowed to undo a successful launch, so a failure here is recorded and the
+   * launch still stands -- the stale-hold sweep and real spend both still
+   * reconcile it.
+   */
+  let held = 0;
+  try {
+    const { data: sub } = await supabase
+      .from("subscriptions")
+      .select("spend_markup_bps")
+      .eq("business_id", businessId)
+      .maybeSingle();
+    const planned = totalPlannedUsdMinor(plan.payload);
+    if (planned > 0) {
+      const { data: heldMinor } = await supabase.rpc("place_budget_hold", {
+        p_business_id: businessId,
+        p_plan_date: plan.plan_date,
+        p_amount_usd_minor: holdAmountUsdMinor(
+          planned,
+          markupBpsOrDefault(sub?.spend_markup_bps as number | null | undefined),
+        ),
+      });
+      held = Number(heldMinor ?? 0);
+    }
+  } catch (e) {
+    await supabase.from("journal_entries").insert({
+      business_id: businessId,
+      entry_type: "note",
+      content: { action: "budget_hold_failed", detail: { error: (e as Error).message } },
+    });
+  }
+
   void objectiveForGoal; // objective resolved at provisioning time
-  return `launched ${summary.launched}, awaiting_payment ${summary.awaitingPayment}, errors ${summary.errors}`;
+  return `launched ${summary.launched}, awaiting_payment ${summary.awaitingPayment}, errors ${summary.errors}, held ${held}`;
 }
 
 function payloadToAds(payload: ApprovalPlanPayload, goal: Parameters<typeof ctaForGoal>[0]): PlanAd[] {

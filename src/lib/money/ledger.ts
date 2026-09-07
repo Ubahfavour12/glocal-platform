@@ -11,7 +11,13 @@ export type LedgerKind =
   | "markup_fee"
   | "subscription"
   | "refund"
-  | "adjustment";
+  | "adjustment"
+  /**
+   * Money promised to a day's ads, moved out of spendable balance the moment
+   * the plan launches and returned when that day is done. Signed both ways:
+   * negative places the hold, positive releases it.
+   */
+  | "budget_hold";
 
 export interface LedgerEntry {
   kind: LedgerKind;
@@ -20,13 +26,14 @@ export interface LedgerEntry {
   createdAt: Date;
 }
 
-const CREDIT_KINDS: ReadonlySet<LedgerKind> = new Set(["topup", "adjustment"]);
+const CREDIT_KINDS: ReadonlySet<LedgerKind> = new Set(["topup", "adjustment", "budget_hold"]);
 const DEBIT_KINDS: ReadonlySet<LedgerKind> = new Set([
   "ad_spend",
   "markup_fee",
   "subscription",
   "refund",
   "adjustment",
+  "budget_hold",
 ]);
 
 export function validateEntry(entry: LedgerEntry): void {
@@ -58,6 +65,20 @@ export function canDebit(entries: readonly LedgerEntry[], amountUsdMinor: number
 /** Refundable amount: the unspent balance (delivered spend is never refunded). */
 export function refundable(entries: readonly LedgerEntry[]): number {
   return Math.max(0, balance(entries));
+}
+
+/**
+ * How much is currently held against today's ads.
+ *
+ * Holds net to zero once released, so this is simply the negative of the
+ * budget_hold entries' running sum. Reported separately from the balance
+ * because "your money went somewhere" needs a name, not just a smaller number.
+ */
+export function heldForBudget(entries: readonly LedgerEntry[]): number {
+  const net = entries
+    .filter((e) => e.kind === "budget_hold")
+    .reduce((sum, e) => sum + e.amountUsdMinor, 0);
+  return Math.max(0, -net);
 }
 
 /**
