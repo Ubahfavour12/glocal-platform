@@ -57,3 +57,31 @@ export function currencyForCountry(code: string | null | undefined): CountryCurr
 export function dialCodeForCountry(code: string | null | undefined): string {
   return currencyForCountry(code).dialCode;
 }
+
+/**
+ * Currencies our payment rails can actually charge in.
+ *
+ * Flutterwave and Paystack are African rails. They settle a handful of local
+ * currencies and USD, and nothing else, so a customer's display currency and a
+ * chargeable currency are not the same list. Showing someone rupees and then
+ * charging them naira would be worse than charging in USD and saying so.
+ */
+const PSP_CHARGEABLE = new Set(["NGN", "GHS", "KES", "ZAR", "USD"]);
+
+/**
+ * What to actually charge a customer in, given their signup currency.
+ *
+ * Their own currency when the rail supports it, USD otherwise. USD is the
+ * canonical ledger amount either way; this only decides what the customer is
+ * asked to pay in, and the conversion happens behind it at the buffered rate.
+ */
+export function pspChargeCurrency(businessCurrency: string | null | undefined): string {
+  const c = businessCurrency?.trim().toUpperCase();
+  return c && PSP_CHARGEABLE.has(c) ? c : "USD";
+}
+
+/** Is this customer charged in their own currency, or converted to USD? */
+export function chargesInLocalCurrency(businessCurrency: string | null | undefined): boolean {
+  const c = businessCurrency?.trim().toUpperCase();
+  return Boolean(c && c !== "USD" && PSP_CHARGEABLE.has(c));
+}

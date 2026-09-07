@@ -1,13 +1,17 @@
 /**
  * Withdrawals — paying a customer back their unspent balance.
  *
- * Being able to ask for the money back is the other half of taking it, so the
- * rules here are deliberately strict in the customer's favour and explicit
- * about what they refuse. Every check returns a *reason*, because "withdrawal
- * failed" tells someone waiting on their own money nothing at all.
+ * The money goes back the way it came, to the card or account that paid it.
+ * The customer is never asked for bank details, which is the point: there is
+ * nothing to mistype, nothing for us to store, and nothing an attacker can
+ * redirect. Someone who takes over an account can ask for a withdrawal, but it
+ * can only go back to a card that is not theirs.
  *
  * Only unspent balance is withdrawable. Delivered ad spend is a service already
  * rendered; it is not sitting in the wallet and cannot be returned.
+ *
+ * Every check returns a *reason*, because "withdrawal failed" tells someone
+ * waiting on their own money nothing at all.
  *
  * The authoritative balance check happens inside `request_withdrawal` in the
  * database, where the wallet row is locked. What is here is the same rule
@@ -17,39 +21,18 @@
 /** $10, matching the top-up minimum: below this the payout fee dominates. */
 export const MIN_WITHDRAWAL_USD_MINOR = 1000;
 
-export interface WithdrawalDestination {
-  bankName: string;
-  accountNumber: string;
-  accountName: string;
-}
-
 export type WithdrawalRefusal =
   | "not_a_number"
   | "below_minimum"
   | "exceeds_balance"
   | "nothing_to_withdraw"
-  | "pending_exists"
-  | "bad_destination";
+  | "pending_exists";
 
 export type WithdrawalCheck = { ok: true } | { ok: false; reason: WithdrawalRefusal };
 
 /** How much of a balance may be withdrawn. Never negative. */
 export function withdrawableUsdMinor(balanceUsdMinor: number): number {
   return Math.max(0, Math.floor(balanceUsdMinor));
-}
-
-/**
- * NUBAN account numbers are exactly ten digits. Checking the shape here turns
- * a payout that would silently fail days later into a correction made while
- * the customer is still looking at the form.
- */
-export function isValidDestination(d: Partial<WithdrawalDestination> | null): boolean {
-  if (!d) return false;
-  const bank = d.bankName?.trim() ?? "";
-  const name = d.accountName?.trim() ?? "";
-  const number = d.accountNumber?.trim() ?? "";
-  if (bank.length < 2 || name.length < 2) return false;
-  return /^\d{10}$/.test(number);
 }
 
 /**
@@ -60,10 +43,9 @@ export function isValidDestination(d: Partial<WithdrawalDestination> | null): bo
 export function checkWithdrawal(params: {
   amountUsdMinor: number;
   balanceUsdMinor: number;
-  destination: Partial<WithdrawalDestination> | null;
   hasPendingWithdrawal: boolean;
 }): WithdrawalCheck {
-  const { amountUsdMinor, balanceUsdMinor, destination, hasPendingWithdrawal } = params;
+  const { amountUsdMinor, balanceUsdMinor, hasPendingWithdrawal } = params;
 
   if (hasPendingWithdrawal) return { ok: false, reason: "pending_exists" };
 
@@ -82,8 +64,6 @@ export function checkWithdrawal(params: {
     return { ok: false, reason: "below_minimum" };
   }
 
-  if (!isValidDestination(destination)) return { ok: false, reason: "bad_destination" };
-
   return { ok: true };
 }
 
@@ -94,5 +74,4 @@ export const REFUSAL_MESSAGE: Record<WithdrawalRefusal, string> = {
   exceeds_balance: "That's more than your unspent balance. Money already spent on ads can't be returned.",
   nothing_to_withdraw: "There's nothing to withdraw yet. Your balance is zero.",
   pending_exists: "You already have a withdrawal in progress. It has to finish before you start another.",
-  bad_destination: "Check the bank details. The account number should be the 10 digits on your account.",
 };

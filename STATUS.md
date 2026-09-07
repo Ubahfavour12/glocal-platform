@@ -121,10 +121,26 @@ here are written to be read later, not to be terse.
 - **"WhatsApp conversations" vs "Sales"** — the two goals read as near-synonyms.
   Now each says what it actually counts: chats opened, versus money, which needs
   telling which ad earned it.
-- **Withdrawals** — a customer can ask for their unspent balance back. The
-  money is reserved the moment it is requested, the balance check happens
-  inside a locked transaction, and every refusal says why. Needs migration
-  `0021`.
+- **Withdrawals, refunded to the original payment** — a customer asks for their
+  unspent balance back and it returns to the card or account that paid it. No
+  bank details are asked for, stored, or transmitted, so there is nothing to
+  mistype and nothing an attacker can redirect: someone who takes over an
+  account can only send money back to a card that is not theirs. Needs
+  migration `0021`.
+- **Both money rails, with failover** — if the first rail cannot produce a
+  checkout link, the other is tried and the customer gets a working link rather
+  than an error. Safe precisely because creating a link moves no money; it is
+  deliberately not extended to verification or settlement, where a retry would
+  be a second charge.
+- **Charging in the customer's own currency** — checkout was quoting every
+  customer in naira regardless of where they signed up. It now uses the
+  currency stored at signup where the rails can settle it, and USD where they
+  cannot, with the conversion behind the screen. USD stays the ledger anchor.
+- **Onboarding drafts stop leaking between accounts** — the half-finished run
+  lives in browser storage, so abandoning a signup and returning as a different
+  email handed the next person the previous one's business name, phone and
+  budget. Drafts now carry who they belong to and are discarded when that is
+  someone else.
 - **Ad budget leaves the wallet on launch** — the day's budget, plus its
   markup, is held out of spendable balance the moment a plan goes live rather
   than hours later when the network reports delivery. Holds are released when

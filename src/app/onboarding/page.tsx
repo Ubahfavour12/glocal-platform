@@ -327,6 +327,16 @@ function FieldError({ children }: { children: React.ReactNode }) {
 /* ------------------------------------------------------------------ draft */
 
 interface Draft {
+  /**
+   * Who this half-finished run belongs to.
+   *
+   * The draft lives in localStorage, which is per-browser, not per-account. On
+   * a shared or personal computer someone can abandon a signup, come back as a
+   * different email, and be handed the previous person's business name, trade,
+   * phone number and budget as if they were their own. Stamping the owner lets
+   * a draft be discarded when it does not belong to whoever is signed in now.
+   */
+  ownerId: string | null;
   phase: Phase;
   name: string;
   trade: string;
@@ -373,17 +383,39 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  const [ownerId, setOwnerId] = useState<string | null>(null);
   const draftRef = useRef<Draft | null>(null);
 
   /* -- restore a half-finished run, and infer what we can ---------------- */
 
   useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      // Who is signed in right now. Null in demo mode, where there is no
+      // account to belong to and the draft is only ever this person's own.
+      let uid: string | null = null;
+      try {
+        if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
+          const { data } = await createClient().auth.getUser();
+          uid = data.user?.id ?? null;
+        }
+      } catch {
+        // Auth unavailable: treat as demo mode rather than blocking onboarding.
+      }
+      if (cancelled) return;
+      setOwnerId(uid);
+
     let restored = false;
     try {
       const raw = localStorage.getItem(DRAFT_KEY);
       if (raw) {
         const d = JSON.parse(raw) as Draft;
-        if (d && typeof d.phase === "string" && FLOW.includes(d.phase)) {
+        // A draft stamped with a different account is somebody else's. Drop it
+        // rather than pre-filling this signup with their details.
+        if (d && d.ownerId && uid && d.ownerId !== uid) {
+          localStorage.removeItem(DRAFT_KEY);
+        } else if (d && typeof d.phase === "string" && FLOW.includes(d.phase)) {
           draftRef.current = d;
           setName(d.name ?? "");
           setTrade(d.trade ?? "");
@@ -411,6 +443,11 @@ export default function OnboardingPage() {
     // they correct it in one tap if it is wrong.
     if (!restored) setCountry(inferCountry(readCountrySignals()));
     setHydrated(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   /* -- keep the draft current ------------------------------------------- */
@@ -421,6 +458,7 @@ export default function OnboardingPage() {
       localStorage.setItem(
         DRAFT_KEY,
         JSON.stringify({
+          ownerId,
           phase, name, trade, foundedYear, otherTrade, country, ownerRole,
           door, doorValue, goal, dailyUsd,
           savedAt: new Date().toISOString(),
@@ -429,7 +467,7 @@ export default function OnboardingPage() {
     } catch {
       // Private-mode storage refusals must not break the flow.
     }
-  }, [hydrated, phase, name, trade, foundedYear, otherTrade, country, ownerRole, door, doorValue, goal, dailyUsd]);
+  }, [hydrated, ownerId, phase, name, trade, foundedYear, otherTrade, country, ownerRole, door, doorValue, goal, dailyUsd]);
 
   /* -- derived ----------------------------------------------------------- */
 
