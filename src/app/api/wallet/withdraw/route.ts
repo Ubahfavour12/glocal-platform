@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import {
-  checkWithdrawal,
-  REFUSAL_MESSAGE,
-  type WithdrawalDestination,
-} from "@/lib/money/withdrawal";
+import { checkWithdrawal, REFUSAL_MESSAGE } from "@/lib/money/withdrawal";
 
 /**
- * Request a withdrawal of unspent wallet balance.
+ * Request a withdrawal of unspent wallet balance, back to the payments that
+ * funded it.
+ *
+ * No bank details are accepted here, on purpose. The refund is allocated
+ * against the customer's own past top-ups inside `request_withdrawal`, so
+ * there is no destination field for a caller to supply and therefore none for
+ * an attacker with a stolen session to point at their own account.
  *
  * Ownership is established with the user-scoped client, so RLS decides which
  * business the caller may act on; the withdrawal itself is performed by
@@ -28,7 +30,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = (await req.json().catch(() => null)) as
-    | { business_id?: string; usd_minor?: number; destination?: Partial<WithdrawalDestination> }
+    | { business_id?: string; usd_minor?: number }
     | null;
   if (!body?.business_id) {
     return NextResponse.json({ error: "business_id required" }, { status: 400 });
@@ -59,7 +61,6 @@ export async function POST(req: NextRequest) {
   const verdict = checkWithdrawal({
     amountUsdMinor: Number(body.usd_minor),
     balanceUsdMinor: Number(balanceRow?.balance_usd_minor ?? 0),
-    destination: body.destination ?? null,
     hasPendingWithdrawal: (pendingCount ?? 0) > 0,
   });
   if (!verdict.ok) {
@@ -69,16 +70,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const d = body.destination as WithdrawalDestination;
   const service = createServiceClient();
   const { data: withdrawalId, error } = await service.rpc("request_withdrawal", {
     p_business_id: business.id,
     p_amount_usd_minor: body.usd_minor,
-    p_destination: {
-      bank_name: d.bankName.trim(),
-      account_number: d.accountNumber.trim(),
-      account_name: d.accountName.trim(),
-    },
   });
 
   if (error) {

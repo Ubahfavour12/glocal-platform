@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createCheckout } from "@/lib/payments/provider";
 import { effectiveRate, localCostForUsd } from "@/lib/money/fx";
 import { fetchUsdRate } from "@/lib/money/rates";
+import { pspChargeCurrency } from "@/lib/money/currency";
 import { createClient } from "@/lib/supabase/server";
 import { isTierId } from "@/lib/billing/subscription";
 import { subscriptionPriceUsdMinor, subscriptionTxRef } from "@/lib/billing/subscribe";
@@ -36,7 +37,7 @@ export async function POST(req: NextRequest) {
   // RLS guarantees this only finds the caller's own business.
   const { data: business } = await supabase
     .from("businesses")
-    .select("id, name")
+    .select("id, name, currency")
     .eq("id", body.business_id)
     .maybeSingle();
   if (!business) {
@@ -46,7 +47,11 @@ export async function POST(req: NextRequest) {
   const usdMinor = subscriptionPriceUsdMinor(body.tier);
 
   try {
-    const snapshot = await fetchUsdRate("NGN");
+    // The currency the customer signed up in, not a hardcoded one. USD stays
+    // the canonical ledger amount and the conversion happens here, so someone
+    // in Accra is quoted cedis rather than being asked to pay in naira.
+    const currency = pspChargeCurrency(business.currency as string | null);
+    const snapshot = await fetchUsdRate(currency);
     const rate = effectiveRate(snapshot);
     const localMinor = localCostForUsd(usdMinor, snapshot);
     const origin = req.nextUrl.origin;
@@ -54,7 +59,7 @@ export async function POST(req: NextRequest) {
     const { link, psp } = await createCheckout({
       txRef: subscriptionTxRef(business.id),
       amountLocalMinor: localMinor,
-      currency: "NGN",
+      currency,
       customerEmail: userData.user.email ?? "customer@platform.app",
       customerName: business.name,
       redirectUrl: `${origin}/upgrade?subscribed=1`,
@@ -73,7 +78,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       link,
       psp,
-      quoted: { usd_minor: usdMinor, local_minor: localMinor, currency: "NGN", rate },
+      quoted: { usd_minor: usdMinor, local_minor: localMinor, currency, rate },
     });
   } catch (err) {
     return NextResponse.json(

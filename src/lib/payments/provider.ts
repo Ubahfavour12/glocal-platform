@@ -25,7 +25,12 @@ export function isPspId(value: unknown): value is PspId {
   return typeof value === "string" && (PSP_IDS as readonly string[]).includes(value);
 }
 
-const RAILS: Record<PspId, { isConfigured(): boolean }> = {
+interface Rail {
+  isConfigured(): boolean;
+  createCheckout(req: CheckoutRequest): Promise<{ link: string }>;
+}
+
+const RAILS: Record<PspId, Rail> = {
   flutterwave,
   paystack,
 };
@@ -72,14 +77,59 @@ export function pspRef(psp: PspId, transactionId: string | number): string {
   return `${prefix}-${transactionId}`;
 }
 
-/** Open a hosted checkout on the active rail. */
+/**
+ * The rails to try, in order: the preferred one first, then the other as a
+ * standby. A rail with no key is not an option and is left out.
+ */
+export function checkoutOrder(): PspId[] {
+  const first = activeProvider();
+  const rest = PSP_IDS.filter((p) => p !== first);
+  return [first, ...rest].filter((p) => RAILS[p].isConfigured());
+}
+
+export class NoRailAvailableError extends Error {
+  constructor(readonly attempts: { psp: PspId; error: string }[]) {
+    super(
+      attempts.length === 0
+        ? "No payment rail is configured"
+        : `Every payment rail failed: ${attempts.map((a) => `${a.psp} (${a.error})`).join(", ")}`,
+    );
+    this.name = "NoRailAvailableError";
+  }
+}
+
+/**
+ * Open a hosted checkout, falling back to the other rail if the first one
+ * cannot produce a link.
+ *
+ * Failing over here is safe for one specific reason: creating a checkout moves
+ * no money. It asks the PSP for a URL. If Flutterwave is down, times out, or
+ * refuses, the customer has not paid anything, so trying Paystack cannot
+ * double-charge them -- they are simply handed a working link instead of an
+ * error. The same reasoning is why this must never be extended to verification
+ * or settlement, where money HAS moved and a retry on the wrong rail would be
+ * a second charge.
+ *
+ * A checkout that was half-created on the failed rail is abandoned unpaid. It
+ * carries the same txRef, but the ledger keys on the PSP's own reference
+ * (flw- / ps-), so even the impossible case of both being paid credits twice
+ * for two real payments rather than double-crediting one.
+ */
 export async function createCheckout(
   req: CheckoutRequest,
 ): Promise<{ link: string; psp: PspId }> {
-  const psp = activeProvider();
-  const { link } =
-    psp === "paystack" ? await paystack.createCheckout(req) : await flutterwave.createCheckout(req);
-  return { link, psp };
+  const attempts: { psp: PspId; error: string }[] = [];
+
+  for (const psp of checkoutOrder()) {
+    try {
+      const { link } = await RAILS[psp].createCheckout(req);
+      return { link, psp };
+    } catch (e) {
+      attempts.push({ psp, error: (e as Error).message });
+    }
+  }
+
+  throw new NoRailAvailableError(attempts);
 }
 
 /**
