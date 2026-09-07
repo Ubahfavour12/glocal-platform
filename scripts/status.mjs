@@ -31,6 +31,10 @@ const m = out.match(/Tests\s+(\d+)\s+passed(?:\s*\|\s*(\d+)\s+skipped)?/);
 if (m) tests = `**${m[1]} passing**${m[2] ? `, ${m[2]} skipped` : ""}`;
 else if (/FAIL|failed/i.test(out)) tests = "**FAILING** — run `npx vitest run`";
 
+// Reads the directory, so this is what the REPO carries, not what the database
+// has run. It said "applied" for a long time and could never have known: a file
+// existing here and a function existing in Postgres are different facts, and
+// conflating them is exactly the confident wrongness this file exists to avoid.
 const migrations = readdirSync("supabase/migrations").filter((f) => f.endsWith(".sql")).sort();
 const branch = sh("git rev-parse --abbrev-ref HEAD") || "unknown";
 const commits = sh("git rev-list --count HEAD") || "?";
@@ -47,7 +51,7 @@ const block = `${START}
 | | |
 |---|---|
 | Tests | ${tests} |
-| Migrations applied | through \`${(migrations.at(-1) ?? "none").replace(".sql", "")}\` |
+| Migrations in repo | through \`${(migrations.at(-1) ?? "none").replace(".sql", "")}\` |
 | Commits | ${commits} on \`${branch}\` |
 | GitHub | ${synced} |
 | Uncommitted changes | ${dirty ? `**yes** — ${dirty.split("\n").length} file(s)` : "none"} |
