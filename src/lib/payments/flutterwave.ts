@@ -98,5 +98,31 @@ export function isAuthenticWebhook(headerHash: string | null): boolean {
   return constantTimeEquals(expected, headerHash);
 }
 
+/**
+ * Refund a settled transaction, in whole or in part.
+ *
+ * Flutterwave refunds by its own numeric transaction id and takes MAJOR units,
+ * the same as its charge endpoint. The amount is the local-currency amount to
+ * return, not the USD the ledger holds: the customer paid naira and gets naira
+ * back, so converting here would refund whatever today's rate happens to be
+ * rather than what they actually handed over.
+ */
+export async function refund(
+  transactionId: string,
+  amountLocalMinor: number,
+): Promise<{ refundRef: string }> {
+  if (!Number.isInteger(amountLocalMinor) || amountLocalMinor <= 0) {
+    throw new Error("refund amount must be positive integer minor units");
+  }
+  const data = await fw<{ id: number | string }>(
+    `/transactions/${encodeURIComponent(transactionId)}/refund`,
+    {
+      method: "POST",
+      body: JSON.stringify({ amount: (amountLocalMinor / 100).toFixed(2) }),
+    },
+  );
+  return { refundRef: String(data.id) };
+}
+
 export { usdCreditForVerified } from "./shared";
 export type { CheckoutRequest, VerifiedTransaction } from "./shared";

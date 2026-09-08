@@ -1,7 +1,20 @@
 {
   "crons": [
-    { "path": "/api/jobs/nightly", "schedule": "30 19 * * *" },
-    { "path": "/api/jobs/launch", "schedule": "0 6 * * *" },
-    { "path": "/api/jobs/reconcile", "schedule": "30 3 * * *" }
+    {
+      "path": "/api/jobs/nightly",
+      "schedule": "30 19 * * *"
+    },
+    {
+      "path": "/api/jobs/launch",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/jobs/reconcile",
+      "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/jobs/refunds",
+      "schedule": "45 3 * * *"
+    }
   ]
 }

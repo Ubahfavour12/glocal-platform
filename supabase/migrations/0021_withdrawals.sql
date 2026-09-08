@@ -26,7 +26,10 @@
 -- and stays a record of what happened.
 
 create type withdrawal_status as enum ('requested', 'paid', 'rejected', 'cancelled');
-create type refund_status as enum ('pending', 'refunded', 'failed');
+-- 'sending' is the state that stops a refund going out twice. An allocation is
+-- moved into it BEFORE the PSP is called, so a crashed or retried worker finds
+-- it already claimed rather than paying the customer a second time.
+create type refund_status as enum ('pending', 'sending', 'refunded', 'failed');
 
 create table withdrawals (
   id uuid primary key default uuid_generate_v4(),
@@ -52,6 +55,7 @@ create table withdrawal_allocations (
   -- The PSP's reference for the refund itself, once it exists.
   refund_ref text,
   failure_reason text,
+  attempted_at timestamptz,
   created_at timestamptz not null default now()
 );
 
@@ -258,6 +262,68 @@ end $$;
 revoke all on function settle_withdrawal(uuid, withdrawal_status, text) from public, anon, authenticated;
 grant execute on function settle_withdrawal(uuid, withdrawal_status, text) to service_role;
 
+/**
+ * Claim the next refund to send, atomically.
+ *
+ * Moves one allocation from 'pending' to 'sending' and hands it back. Claiming
+ * BEFORE the PSP call is the whole point: a worker that crashes mid-refund, or
+ * a cron that overlaps itself, finds the row already claimed instead of
+ * refunding the customer twice. SKIP LOCKED means two workers running at once
+ * take different rows rather than blocking or colliding.
+ *
+ * A row stuck in 'sending' -- claimed, then the process died before recording a
+ * result -- is deliberately NOT retried automatically. Nobody can tell from
+ * here whether the PSP received that call, and paying a refund twice is worse
+ * than a refund that waits for a person to look. It shows up as a 'sending' row
+ * with an attempted_at, which is exactly what an admin console should surface.
+ */
+create or replace function claim_refund_allocation()
+returns table (
+  allocation_id uuid,
+  psp_ref text,
+  amount_usd_minor bigint,
+  fx_rate numeric,
+  local_currency text
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id uuid;
+begin
+  update withdrawal_allocations a
+     set status = 'sending', attempted_at = now()
+   where a.id = (
+     select inner_a.id
+       from withdrawal_allocations inner_a
+       join withdrawals w on w.id = inner_a.withdrawal_id
+      where inner_a.status = 'pending'
+        and w.status = 'requested'
+      order by inner_a.created_at
+      limit 1
+      for update skip locked
+   )
+  returning a.id into v_id;
+
+  if v_id is null then
+    return;
+  end if;
+
+  -- The rate the customer actually paid at, carried on the original top-up.
+  -- A refund converts back at THAT rate, not today's: they handed over a
+  -- specific number of naira and that is the number they get back, rather than
+  -- whatever the market has done since.
+  return query
+  select a.id, a.psp_ref, a.amount_usd_minor, le.fx_rate, le.local_currency
+    from withdrawal_allocations a
+    join ledger_entries le on le.psp_ref = a.psp_ref and le.kind = 'topup'
+   where a.id = v_id;
+end $$;
+
+revoke all on function claim_refund_allocation() from public, anon, authenticated;
+grant execute on function claim_refund_allocation() to service_role;
+
 /** Record the outcome of one allocation's refund on its rail. */
 create or replace function record_refund_result(
   p_allocation_id uuid,
@@ -275,7 +341,9 @@ begin
      set status = p_status,
          refund_ref = coalesce(p_refund_ref, refund_ref),
          failure_reason = coalesce(p_failure_reason, failure_reason)
-   where id = p_allocation_id and status = 'pending';
+   -- Only a claimed row can be resolved, so a stale result cannot resurrect an
+   -- allocation that has already been settled another way.
+   where id = p_allocation_id and status = 'sending';
 end $$;
 
 revoke all on function record_refund_result(uuid, refund_status, text, text) from public, anon, authenticated;

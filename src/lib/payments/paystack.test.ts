@@ -4,6 +4,7 @@ import {
   createCheckout,
   isAuthenticWebhook,
   isConfigured,
+  refund,
   usdCreditForVerified,
   verifyTransaction,
 } from "./paystack";
@@ -220,5 +221,24 @@ describe("isConfigured", () => {
     expect(isConfigured()).toBe(true);
     vi.stubEnv("PAYSTACK_SECRET_KEY", "");
     expect(isConfigured()).toBe(false);
+  });
+});
+
+describe("refund — minor units, unlike Flutterwave", () => {
+  it("sends kobo straight through, and refunds by reference", async () => {
+    const calls = stubPaystack({ id: 7788 });
+    const { refundRef } = await refund("topup-abcd1234-1", 10_815_000);
+    expect(calls[0].url).toBe("https://api.paystack.co/refund");
+    // Dividing by 100 here, as the Flutterwave adapter must, would refund a
+    // hundredth of what the customer is owed.
+    expect(calls[0].body).toEqual({ transaction: "topup-abcd1234-1", amount: 10_815_000 });
+    expect(refundRef).toBe("7788");
+  });
+
+  it("refuses a non-positive or fractional amount", async () => {
+    stubPaystack({ id: 1 });
+    await expect(refund("r", 0)).rejects.toThrow();
+    await expect(refund("r", -100)).rejects.toThrow();
+    await expect(refund("r", 10.5)).rejects.toThrow();
   });
 });
