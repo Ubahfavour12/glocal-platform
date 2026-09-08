@@ -30,16 +30,20 @@ export function PipelineFilter({
   businessId,
   videoAffordable,
   videoCredits,
+  plannedConceptIds,
 }: {
   concepts: PipelineConcept[];
   businessId: string | null;
   videoAffordable: boolean;
   videoCredits: number;
+  /** Concept ids that tomorrow's plan actually contains. */
+  plannedConceptIds: string[];
 }) {
   const [query, setQuery] = useState("");
   const [only, setOnly] = useState<PipelineTab>("all");
 
   const visible = useMemo(() => filterConcepts(concepts, query, only), [concepts, query, only]);
+  const planned = useMemo(() => new Set(plannedConceptIds), [plannedConceptIds]);
   const counts = useMemo(() => tabCounts(concepts), [concepts]);
 
   const tab = (key: PipelineTab, label: string) => (
@@ -87,6 +91,7 @@ export function PipelineFilter({
               businessId={businessId}
               videoAffordable={videoAffordable}
               videoCredits={videoCredits}
+              inTomorrowsPlan={planned.has(c.id)}
             />
           ))}
         </div>

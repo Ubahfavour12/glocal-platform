@@ -25,7 +25,7 @@ export function UseThisButton({
   videoCredits?: number;
 }) {
   const router = useRouter();
-  const [state, setState] = useState<"idle" | "busy" | "done">("idle");
+  const [state, setState] = useState<"idle" | "busy">("idle");
   // Images are the default because they are what the account can always
   // afford. Video is offered, priced, and disabled rather than hidden when it
   // will not fit, so the limit is understood instead of merely hit.
@@ -78,12 +78,13 @@ export function UseThisButton({
       setState("idle");
       return;
     }
-    setState("done");
+    // No local "done" state. Whether this concept is in tomorrow's plan is the
+    // server's answer, and refresh goes and gets it: the card re-renders with
+    // the badge if the rebuild actually kept this concept, and with the button
+    // if it did not. Remembering the click instead is how one card ended up
+    // insisting it was in a test that had moved on without it.
     router.refresh();
-  }
-
-  if (state === "done") {
-    return <span className="text-xs text-accent-bright">In tomorrow&apos;s test ✓</span>;
+    setState("idle");
   }
 
   return (
