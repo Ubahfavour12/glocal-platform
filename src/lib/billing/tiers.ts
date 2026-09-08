@@ -26,7 +26,13 @@ export const TIERS: Tier[] = [
     platforms: "Meta",
     tagline: "Get selling. Image-led ads that run themselves.",
     features: [
-      "Image-led creatives + up to 2 video renders/day",
+      // Deliberately no video claim. Starter gets 2 render credits a day and a
+      // video costs 4, so video is not merely rare on this tier, it is
+      // arithmetically impossible. The old line promised "up to 2 video
+      // renders/day" to customers who could never render one. Video is what
+      // Growth is for, and saying so honestly is a better upgrade argument
+      // than a promise that silently fails.
+      "Up to 2 image creatives a day, made for you",
       "Facebook & Instagram ads, run automatically",
       "The daily duel: 2 challengers vs your champion",
       "Verified-sales tracking & true return on spend",

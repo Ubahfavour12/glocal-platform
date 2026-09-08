@@ -15,11 +15,14 @@ export function ConceptCard({
   businessId,
   videoAffordable,
   videoCredits,
+  inTomorrowsPlan,
 }: {
   concept: PipelineConcept;
   businessId: string | null;
   videoAffordable: boolean;
   videoCredits: number;
+  /** True when tomorrow's actual plan contains this concept. */
+  inTomorrowsPlan: boolean;
 }) {
   return (
     <article className="rounded-card border border-line bg-surface-raised p-5 transition-colors hover:border-ink-faint">
@@ -69,15 +72,29 @@ export function ConceptCard({
             {c.sourcePattern && (
               <span className="text-xs text-ink-faint">Borrows {c.sourcePattern}</span>
             )}
-            {businessId && !c.rendered && (
-              <span className="ml-auto">
-                <UseThisButton
-                  businessId={businessId}
-                  conceptId={c.id}
-                  videoAffordable={videoAffordable}
-                  videoCredits={videoCredits}
-                />
+            {/*
+              Read from tomorrow's actual plan, not from whether this button
+              was clicked. The badge used to be local state, so picking a
+              second concept left the first one still claiming a place in a
+              plan it was no longer part of -- two cards, both insisting they
+              were in a test with room for one of them.
+            */}
+            {inTomorrowsPlan ? (
+              <span className="ml-auto text-xs text-accent-bright">
+                In tomorrow&apos;s test ✓
               </span>
+            ) : (
+              businessId &&
+              !c.rendered && (
+                <span className="ml-auto">
+                  <UseThisButton
+                    businessId={businessId}
+                    conceptId={c.id}
+                    videoAffordable={videoAffordable}
+                    videoCredits={videoCredits}
+                  />
+                </span>
+              )
             )}
           </div>
         </div>

@@ -35,7 +35,7 @@ engineering.
 |---|---|---|
 | **`HIGGSFIELD_API_KEY`** | primary **video** engine. Without it, video jobs silently fall through to fal and nothing warns you | `FOUNDER-ACTIONS.md` §0a |
 | **`FAL_KEY`** into `platform/.env.local` | local renders are dormant without it | `FOUNDER-ACTIONS.md` §0b |
-| **Migrations `0021`–`0024`** | withdrawals, ad-budget holds, business start year. Written and tested; none of it exists in the database until these are run | Supabase → SQL editor |
+| **Migration `0025`** | security fix: `record_sale` was callable without signing in, and its ownership guard did not stop it. Forged sales decide which ad wins | Supabase → SQL editor |
 | **Supabase magic-link template** | sign-in links only work in the browser that asked for them. Switching the template to `token_hash` makes laptop-request / phone-open work | Supabase → Auth → Email Templates |
 | **`FLUTTERWAVE_WEBHOOK_HASH`** | currently empty. Webhooks fail closed, so a customer is charged and the wallet never credits | Vercel env |
 | **CAC amendment** | unlocks Flutterwave/Paystack **live** keys (both rails are built; neither can charge without them) | in progress |
@@ -127,6 +127,10 @@ here are written to be read later, not to be terse.
   mistype and nothing an attacker can redirect: someone who takes over an
   account can only send money back to a card that is not theirs. Needs
   migration `0021`.
+- **Migrations `0021`–`0024` applied** (8 Sep) — withdrawals, ad-budget holds
+  and the business start year are live in the database, verified by counting
+  the tables, types, enum value, column and functions rather than by trusting
+  the run.
 - **Refunds actually get sent** — a withdrawal reserved the money and worked
   out which payments to give back, and then nothing sent them. A daily job now
   does, one at a time, claiming each refund before calling the rail so a
@@ -211,7 +215,7 @@ until step 1 exists. That is the whole shape of the delay.
 |---|---|---|
 | **CAC amendment** | Flutterwave + Paystack **live** keys, so money can enter | in progress |
 | **`FLUTTERWAVE_WEBHOOK_HASH`** | wallets crediting after payment. Currently **empty**, so a customer would be charged and credited nothing | one paste into Vercel |
-| **Migrations `0021`–`0024`** | withdrawals, ad-budget holds and the start-year question cannot work until the database has them | Supabase SQL editor |
+| **Migration `0025`** | closes an anonymous path into `record_sale` | Supabase SQL editor |
 | **`PAYSTACK_SECRET_KEY`** | the second money rail. Built and tested, dormant without it. Needs no separate webhook secret — Paystack signs with this same key | one paste, after CAC |
 | **`HIGGSFIELD_API_KEY`** | video renders. Without it video silently falls back to fal and nothing warns | waiting on payment |
 | **`FAL_KEY`** in `.env.local` | local renders only; production may already have it | one paste |
@@ -223,9 +227,11 @@ until step 1 exists. That is the whole shape of the delay.
 
 Small next to the gates above.
 
-1. **Apply migrations `0021`–`0024`** to Supabase — withdrawals, budget holds
-   and the start-year question are written, tested and merged, and inert until
-   the database has them.
+1. **Apply migration `0025`** to Supabase — a security fix, not a feature.
+   `record_sale` could be called without signing in, and its ownership check
+   used `<>` against `auth.uid()`, which is NULL for an anonymous caller, so the
+   guard evaluated to NULL and never fired. Anyone knowing a business id could
+   forge the sales the duel judges ads on.
    The code fails soft without them: the wallet page still renders and the
    withdraw button stays hidden, so nothing is broken in the meantime
 2. **Founder admin console** — every customer, wallet, verdict and error in one

@@ -5,6 +5,7 @@ import { countRendersToday } from "@/lib/media/storage";
 import { asPlan } from "@/lib/billing/plan";
 import { PipelineFilter } from "@/components/pipeline/PipelineFilter";
 import type { PipelineConcept } from "@/lib/pipeline/filter";
+import type { ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Pipeline" };
@@ -61,6 +62,29 @@ export default async function PipelinePage() {
       ) as ConceptRow[]
     : [];
 
+  /**
+   * Which concepts are actually in the next plan.
+   *
+   * Taken from the plan itself rather than from whether a button was pressed.
+   * A plan has room for a fixed number of challengers, and picking again
+   * rebuilds it, so a click is not proof of a place in it.
+   */
+  const plannedConceptIds = new Set<string>();
+  if (business) {
+    const { data: nextPlan } = await supabase
+      .from("approvals")
+      .select("payload")
+      .eq("business_id", business.id)
+      .in("status", ["pending", "approved"])
+      .order("plan_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const payload = nextPlan?.payload as ApprovalPlanPayload | null;
+    for (const ch of payload?.challengers ?? []) {
+      if (ch?.conceptId) plannedConceptIds.add(ch.conceptId);
+    }
+  }
+
   const renderedCount = concepts.filter((c) => c.rendered).length;
 
   // Shape once on the server so the client filter stays a pure list operation.
@@ -98,6 +122,7 @@ export default async function PipelinePage() {
           businessId={(business?.id as string | undefined) ?? null}
           videoAffordable={videoAffordable}
           videoCredits={VIDEO_CREDIT_WEIGHT}
+          plannedConceptIds={[...plannedConceptIds]}
         />
       )}
     </div>
