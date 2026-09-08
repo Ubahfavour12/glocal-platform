@@ -140,6 +140,31 @@ export async function createCheckout(
  * still verify against Flutterwave even if Paystack became the active rail
  * while the customer was on the payment page.
  */
+/**
+ * Split a ledger reference back into the rail that made it and that rail's own
+ * id. The inverse of pspRef, and the only place that knows the prefixes, so a
+ * refund can never be sent to the wrong provider.
+ */
+export function parsePspRef(ref: string): { psp: PspId; id: string } | null {
+  const m = /^(flw|ps)-(.+)$/.exec(ref.trim());
+  if (!m) return null;
+  return { psp: m[1] === "flw" ? "flutterwave" : "paystack", id: m[2] };
+}
+
+/** Refund part or all of a settled charge, on the rail that took it. */
+export async function refund(
+  ref: string,
+  amountLocalMinor: number,
+): Promise<{ refundRef: string; psp: PspId }> {
+  const parsed = parsePspRef(ref);
+  if (!parsed) throw new Error(`unrecognised payment reference "${ref}"`);
+  const { refundRef } =
+    parsed.psp === "paystack"
+      ? await paystack.refund(parsed.id, amountLocalMinor)
+      : await flutterwave.refund(parsed.id, amountLocalMinor);
+  return { refundRef, psp: parsed.psp };
+}
+
 export async function verifyTransaction(
   psp: PspId,
   reference: string,

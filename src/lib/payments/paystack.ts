@@ -131,5 +131,27 @@ export function isAuthenticWebhook(rawBody: string, signature: string | null): b
   return constantTimeEquals(hmacSha512Hex(key, rawBody), signature);
 }
 
+/**
+ * Refund a settled transaction, in whole or in part.
+ *
+ * Paystack refunds by the transaction's reference and takes MINOR units, the
+ * same asymmetry as its charge endpoint (see note 1 in the file header).
+ * Dividing by 100 here, as the Flutterwave adapter must, would refund a
+ * hundredth of what the customer is owed.
+ */
+export async function refund(
+  reference: string,
+  amountLocalMinor: number,
+): Promise<{ refundRef: string }> {
+  if (!Number.isInteger(amountLocalMinor) || amountLocalMinor <= 0) {
+    throw new Error("refund amount must be positive integer minor units");
+  }
+  const data = await ps<{ id: number | string }>("/refund", {
+    method: "POST",
+    body: JSON.stringify({ transaction: reference, amount: amountLocalMinor }),
+  });
+  return { refundRef: String(data.id) };
+}
+
 export { usdCreditForVerified } from "./shared";
 export type { CheckoutRequest, VerifiedTransaction } from "./shared";

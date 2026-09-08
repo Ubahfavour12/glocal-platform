@@ -127,6 +127,11 @@ here are written to be read later, not to be terse.
   mistype and nothing an attacker can redirect: someone who takes over an
   account can only send money back to a card that is not theirs. Needs
   migration `0021`.
+- **Refunds actually get sent** — a withdrawal reserved the money and worked
+  out which payments to give back, and then nothing sent them. A daily job now
+  does, one at a time, claiming each refund before calling the rail so a
+  crashed or overlapping run cannot pay anyone twice. Refunds convert back at
+  the rate the customer originally paid, not today's.
 - **Both money rails, with failover** — if the first rail cannot produce a
   checkout link, the other is tried and the customer gets a working link rather
   than an error. Safe precisely because creating a link moves no money; it is
@@ -212,6 +217,7 @@ until step 1 exists. That is the whole shape of the delay.
 | **`FAL_KEY`** in `.env.local` | local renders only; production may already have it | one paste |
 | **Lawyer: ToS + Privacy** | legally launching at all | not started |
 | **Supabase Pro** | free tier auto-pauses the database | at launch |
+| **Vercel plan (cron limits)** | Hobby caps cron frequency, so refunds run daily. Someone waiting on their own money deserves hourly | at launch |
 
 ### Code still to write
 
