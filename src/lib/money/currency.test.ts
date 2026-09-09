@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { currencyForCountry, dialCodeForCountry, DEFAULT_COUNTRY, listCountries, pspChargeCurrency, chargesInLocalCurrency } from "./currency";
 
 describe("currencyForCountry", () => {
@@ -37,49 +37,64 @@ describe("listCountries", () => {
   });
 });
 
-describe("pspChargeCurrency", () => {
-  it("charges the customer in their own currency where the rail supports it", () => {
+describe("pspChargeCurrency — what THIS merchant may charge", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("defaults to NGN alone, which is what a fresh Nigerian account can do", () => {
+    vi.stubEnv("PSP_MERCHANT_CURRENCIES", "");
     expect(pspChargeCurrency("NGN")).toBe("NGN");
-    expect(pspChargeCurrency("GHS")).toBe("GHS");
-    expect(pspChargeCurrency("KES")).toBe("KES");
-    expect(pspChargeCurrency("ZAR")).toBe("ZAR");
   });
 
-  it("falls back to USD for currencies these rails cannot settle", () => {
-    // Showing rupees and charging naira would be worse than charging USD.
-    expect(pspChargeCurrency("INR")).toBe("USD");
-    expect(pspChargeCurrency("EUR")).toBe("USD");
+  it("does NOT charge a GBP customer in USD when USD is not approved", () => {
+    // The live failure: Paystack answered "Currency not supported by merchant"
+    // and no customer could top up at all. USD is a product currency, not
+    // necessarily a merchant one.
+    vi.stubEnv("PSP_MERCHANT_CURRENCIES", "");
+    expect(pspChargeCurrency("GBP")).toBe("NGN");
+    expect(pspChargeCurrency("EGP")).toBe("NGN");
+    expect(pspChargeCurrency("USD")).toBe("NGN");
+  });
+
+  it("does NOT offer GHS or KES on a Nigerian account", () => {
+    // Paystack supports them; a Nigerian merchant does not.
+    vi.stubEnv("PSP_MERCHANT_CURRENCIES", "");
+    expect(pspChargeCurrency("GHS")).toBe("NGN");
+    expect(pspChargeCurrency("KES")).toBe("NGN");
+  });
+
+  it("quotes dollars once international payments are approved", () => {
+    vi.stubEnv("PSP_MERCHANT_CURRENCIES", "NGN,USD");
     expect(pspChargeCurrency("GBP")).toBe("USD");
-    expect(pspChargeCurrency("AED")).toBe("USD");
+    expect(pspChargeCurrency("USD")).toBe("USD");
+    // A Nigerian customer still pays naira, not dollars.
+    expect(pspChargeCurrency("NGN")).toBe("NGN");
   });
 
-  it("falls back to USD when the currency is missing or junk", () => {
-    expect(pspChargeCurrency(null)).toBe("USD");
-    expect(pspChargeCurrency(undefined)).toBe("USD");
-    expect(pspChargeCurrency("")).toBe("USD");
-    expect(pspChargeCurrency("nonsense")).toBe("USD");
+  it("tolerates spacing and casing in the env var", () => {
+    vi.stubEnv("PSP_MERCHANT_CURRENCIES", " ngn , usd ");
+    expect(pspChargeCurrency("GBP")).toBe("USD");
   });
 
-  it("tolerates casing and whitespace from stored data", () => {
-    expect(pspChargeCurrency(" ngn ")).toBe("NGN");
-    expect(pspChargeCurrency("ghs")).toBe("GHS");
+  it("falls back rather than charging in nothing on a junk value", () => {
+    vi.stubEnv("PSP_MERCHANT_CURRENCIES", " , , ");
+    expect(pspChargeCurrency("GBP")).toBe("NGN");
   });
 
-  it("never invents a currency the rails cannot charge", () => {
-    for (const c of listCountries()) {
-      expect(["NGN", "GHS", "KES", "ZAR", "USD"]).toContain(pspChargeCurrency(c.currency));
-    }
+  it("handles a missing business currency", () => {
+    vi.stubEnv("PSP_MERCHANT_CURRENCIES", "");
+    expect(pspChargeCurrency(null)).toBe("NGN");
+    expect(pspChargeCurrency(undefined)).toBe("NGN");
   });
 });
 
 describe("chargesInLocalCurrency", () => {
-  it("is true only when the customer pays in their own non-USD currency", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("is true only when the merchant can charge that currency", () => {
+    vi.stubEnv("PSP_MERCHANT_CURRENCIES", "NGN");
     expect(chargesInLocalCurrency("NGN")).toBe(true);
-    expect(chargesInLocalCurrency("GHS")).toBe(true);
-    // A US customer's own currency IS USD, so nothing is being converted.
-    expect(chargesInLocalCurrency("USD")).toBe(false);
-    // An Indian customer is converted to USD, so this is not their currency.
-    expect(chargesInLocalCurrency("INR")).toBe(false);
-    expect(chargesInLocalCurrency(null)).toBe(false);
+    expect(chargesInLocalCurrency("GBP")).toBe(false);
+    expect(chargesInLocalCurrency("GHS")).toBe(false);
   });
 });
+
