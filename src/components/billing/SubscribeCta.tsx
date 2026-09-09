@@ -4,9 +4,14 @@ import { useState } from "react";
 
 /**
  * Plan-choice button. POSTs to /api/billing/subscribe and forwards to the
- * hosted checkout link. Until live payment keys exist the route returns an
- * error, so the button degrades to a "checkout opens when payments go live"
- * note rather than going nowhere.
+ * hosted checkout link.
+ *
+ * It used to answer EVERY failure with "checkout opens as soon as payments go
+ * live". That was written when no rail had keys, and it aged into a lie: with
+ * Paystack configured and rejecting the currency, the button reported a
+ * missing feature while the actual fault was a fixable misconfiguration nobody
+ * could see. A button that explains only the failure it was born with will
+ * eventually explain the wrong one, so it now shows what the server said.
  */
 export function SubscribeCta({
   tierId,
@@ -21,7 +26,8 @@ export function SubscribeCta({
   current: boolean;
   recommended?: boolean;
 }) {
-  const [state, setState] = useState<"idle" | "loading" | "soon">("idle");
+  const [state, setState] = useState<"idle" | "loading" | "soon" | "error">("idle");
+  const [message, setMessage] = useState("");
 
   if (current) {
     return (
@@ -43,14 +49,24 @@ export function SubscribeCta({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ business_id: businessId, tier: tierId }),
       });
-      const data = (await res.json().catch(() => null)) as { link?: string } | null;
+      const data = (await res.json().catch(() => null)) as
+        | { link?: string; error?: string }
+        | null;
       if (res.ok && data?.link) {
         window.location.href = data.link;
         return;
       }
-      setState("soon"); // payments not live yet, or checkout unavailable
+      // No rail configured at all is genuinely "not live yet". Anything else is
+      // a fault worth naming, because someone can act on it.
+      if (/No payment rail is configured/i.test(data?.error ?? "")) {
+        setState("soon");
+        return;
+      }
+      setState("error");
+      setMessage(data?.error ?? "Checkout could not be started. Please try again.");
     } catch {
-      setState("soon");
+      setState("error");
+      setMessage("Could not reach checkout. Check your connection and try again.");
     }
   }
 
@@ -73,6 +89,7 @@ export function SubscribeCta({
           subscribe right here.
         </p>
       )}
+      {state === "error" && <p className="mt-2 text-xs text-negative">{message}</p>}
     </div>
   );
 }
