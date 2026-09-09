@@ -16,6 +16,8 @@ export function ConceptCard({
   videoAffordable,
   videoCredits,
   inTomorrowsPlan,
+  plannedConceptIds,
+  challengerSlots,
 }: {
   concept: PipelineConcept;
   businessId: string | null;
@@ -23,6 +25,8 @@ export function ConceptCard({
   videoCredits: number;
   /** True when tomorrow's actual plan contains this concept. */
   inTomorrowsPlan: boolean;
+  plannedConceptIds: string[];
+  challengerSlots: number;
 }) {
   return (
     <article className="rounded-card border border-line bg-surface-raised p-5 transition-colors hover:border-ink-faint">
@@ -92,6 +96,8 @@ export function ConceptCard({
                     conceptId={c.id}
                     videoAffordable={videoAffordable}
                     videoCredits={videoCredits}
+                    plannedConceptIds={plannedConceptIds}
+                    challengerSlots={challengerSlots}
                   />
                 </span>
               )

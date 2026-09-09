@@ -7,6 +7,9 @@ import { PipelineFilter } from "@/components/pipeline/PipelineFilter";
 import type { PipelineConcept } from "@/lib/pipeline/filter";
 import type { ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
 
+/** Slots the duel runs when the plan does not say otherwise. */
+const DEFAULT_CHALLENGER_SLOTS = 2;
+
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Pipeline" };
 
@@ -69,20 +72,35 @@ export default async function PipelinePage() {
    * A plan has room for a fixed number of challengers, and picking again
    * rebuilds it, so a click is not proof of a place in it.
    */
-  const plannedConceptIds = new Set<string>();
+  const plannedConceptIds: string[] = [];
+  let challengerSlots = DEFAULT_CHALLENGER_SLOTS;
   if (business) {
-    const { data: nextPlan } = await supabase
+    // "awaiting" and "approved" are the two live states. The first version of
+    // this queried "pending", which is not a value approval_status has, so the
+    // query matched nothing on every account and no concept ever showed as
+    // being in tomorrow's test. The error was discarded rather than surfaced,
+    // which is why it looked like the feature simply did nothing.
+    const { data: nextPlan, error: planError } = await supabase
       .from("approvals")
       .select("payload")
       .eq("business_id", business.id)
-      .in("status", ["pending", "approved"])
+      .in("status", ["awaiting", "approved"])
       .order("plan_date", { ascending: false })
       .limit(1)
       .maybeSingle();
+    if (planError) {
+      // Never silently: a badge that cannot be computed must not look like a
+      // plan that contains nothing.
+      console.error("pipeline: could not read tomorrow's plan", planError.message);
+    }
     const payload = nextPlan?.payload as ApprovalPlanPayload | null;
     for (const ch of payload?.challengers ?? []) {
-      if (ch?.conceptId) plannedConceptIds.add(ch.conceptId);
+      if (ch?.conceptId) plannedConceptIds.push(ch.conceptId);
     }
+    // The plan's own challenger count is the real capacity: a small budget
+    // funds fewer than the default, and the customer should see that number
+    // rather than one we assumed.
+    if (payload?.challengers?.length) challengerSlots = payload.challengers.length;
   }
 
   const renderedCount = concepts.filter((c) => c.rendered).length;
@@ -122,7 +140,8 @@ export default async function PipelinePage() {
           businessId={(business?.id as string | undefined) ?? null}
           videoAffordable={videoAffordable}
           videoCredits={VIDEO_CREDIT_WEIGHT}
-          plannedConceptIds={[...plannedConceptIds]}
+          plannedConceptIds={plannedConceptIds}
+          challengerSlots={challengerSlots}
         />
       )}
     </div>
