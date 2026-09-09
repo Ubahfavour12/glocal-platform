@@ -15,6 +15,8 @@ const REASONS: Record<string, LinkError> = {
   device: "device",
   expired: "expired",
   link: "expired", // the old generic value, kept so older links still explain themselves
+  idle: "idle",
+  absolute: "absolute",
 };
 
 export default async function LoginPage({
@@ -22,7 +24,14 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const raw = (await searchParams).error;
-  const key = Array.isArray(raw) ? raw[0] : raw;
+  const params = await searchParams;
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+
+  // Two different ways to arrive here needing an explanation: a link that did
+  // not work (?error=) and a session the proxy ended (?timeout=). Without the
+  // second, an idle sign-out dumps someone on an empty login box with no idea
+  // why -- which reads as the app having lost their work.
+  const timeout = one(params.timeout);
+  const key = timeout ?? one(params.error);
   return <MagicLinkForm mode="signin" linkError={key ? REASONS[key] : undefined} />;
 }

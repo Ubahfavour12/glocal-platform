@@ -22,6 +22,28 @@ import type { CheckoutRequest, VerifiedTransaction } from "./shared";
 export const PSP_IDS = ["flutterwave", "paystack", "monnify"] as const;
 export type PspId = (typeof PSP_IDS)[number];
 
+/**
+ * Rails that may open a NEW checkout.
+ *
+ * Flutterwave is deliberately absent. It is RETIRED, not deleted: it still
+ * verifies, refunds and receives webhooks, because charges taken on it before
+ * retirement must still settle and must still be refundable for years. What it
+ * may no longer do is take a customer's money for the first time.
+ *
+ * This is a list rather than a check inside activeProvider() because the
+ * failure it prevents already happened in production: `PAYMENTS_PROVIDER` was
+ * set to "flutterwave" in the hosting environment, which outranked every
+ * default in this file, and customers were being sent to a Flutterwave
+ * checkout page long after the code here "preferred" Paystack. A preference
+ * that an environment variable can silently overrule is not a decision. Being
+ * absent from this list cannot be overridden by configuration at all.
+ */
+export const CHECKOUT_RAILS: readonly PspId[] = ["paystack", "monnify"] as const;
+
+export function canOpenCheckout(psp: PspId): boolean {
+  return CHECKOUT_RAILS.includes(psp);
+}
+
 export function isPspId(value: unknown): value is PspId {
   return typeof value === "string" && (PSP_IDS as readonly string[]).includes(value);
 }
@@ -50,26 +72,34 @@ export function activeProvider(): PspId {
   if (configured) {
     if (!isPspId(configured)) {
       throw new Error(
-        `PAYMENTS_PROVIDER must be one of ${PSP_IDS.join(" | ")}, got "${configured}"`,
+        `PAYMENTS_PROVIDER must be one of ${CHECKOUT_RAILS.join(" | ")}, got "${configured}"`,
       );
     }
-    return configured;
+    // A retired rail named here is IGNORED rather than obeyed or thrown on.
+    //
+    // Throwing would take checkout down completely for a setting that is stale
+    // rather than wrong, and obeying it is what put customers on a Flutterwave
+    // page in the first place. So we fall through to the order below and say so
+    // loudly, which leaves payments working while the variable is cleaned up.
+    if (!canOpenCheckout(configured)) {
+      console.warn(
+        `PAYMENTS_PROVIDER="${configured}" names a retired rail and is being ignored. ` +
+          `New checkouts will use ${CHECKOUT_RAILS.join(" then ")}. Remove the variable.`,
+      );
+    } else {
+      return configured;
+    }
   }
   // Paystack first, deliberately. It is approved and can take money today, so
   // it is what a customer meets unless told otherwise.
   //
-  // Monnify second: it is the standby, chosen because it fails independently of
+  // Monnify second: the standby, chosen because it fails independently of
   // Paystack (different owner, its own bank rails) and because bank transfer is
   // how much of this market actually pays.
   //
-  // Flutterwave last, and kept as a rail rather than deleted. Its live keys are
-  // gated on a CAC amendment that has been "about to complete" for over a
-  // month, and a rail that cannot be switched on is not a default. It costs
-  // nothing while it has no key, the failover skips it automatically, and the
-  // day CAC does clear it becomes another rail for the price of pasting a key.
+  // Flutterwave appears nowhere here. See CHECKOUT_RAILS.
   if (paystack.isConfigured()) return "paystack";
   if (monnify.isConfigured()) return "monnify";
-  if (flutterwave.isConfigured()) return "flutterwave";
   // Nothing configured at all. Naming the primary makes the resulting error
   // ("PAYSTACK_SECRET_KEY not configured") point at the rail you actually want.
   return "paystack";
@@ -103,8 +133,10 @@ export function pspRef(psp: PspId, transactionId: string | number): string {
  */
 export function checkoutOrder(): PspId[] {
   const first = activeProvider();
-  const rest = PSP_IDS.filter((p) => p !== first);
-  return [first, ...rest].filter((p) => RAILS[p].isConfigured());
+  const rest = CHECKOUT_RAILS.filter((p) => p !== first);
+  // Filtered through CHECKOUT_RAILS a second time so that even a retired rail
+  // returned by activeProvider() could not reach a customer.
+  return [first, ...rest].filter((p) => canOpenCheckout(p) && RAILS[p].isConfigured());
 }
 
 export class NoRailAvailableError extends Error {
