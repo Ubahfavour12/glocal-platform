@@ -59,29 +59,54 @@ export function dialCodeForCountry(code: string | null | undefined): string {
 }
 
 /**
- * Currencies our payment rails can actually charge in.
+ * Currencies THIS MERCHANT can actually charge in.
  *
- * Flutterwave and Paystack are African rails. They settle a handful of local
- * currencies and USD, and nothing else, so a customer's display currency and a
- * chargeable currency are not the same list. Showing someone rupees and then
- * charging them naira would be worse than charging in USD and saying so.
+ * The distinction matters and getting it wrong took checkout down. Paystack as
+ * a product supports NGN, GHS, KES, ZAR and USD — but no single merchant
+ * supports all of them. A Nigerian Paystack account can charge NGN, and USD
+ * only once international payments are approved; GHS and KES require an
+ * account registered in Ghana or Kenya. Listing the product's currencies here
+ * meant a GBP customer fell back to USD, and Paystack answered "Currency not
+ * supported by merchant" — a real, live checkout failure.
+ *
+ * So this is configuration, not a constant: it describes one account's
+ * approvals, which change without any code changing. Default NGN alone,
+ * because that is what a fresh Nigerian account can do on day one. Add USD to
+ * the env var the day international payments are approved, and foreign
+ * customers are quoted dollars from that deploy on.
  */
-const PSP_CHARGEABLE = new Set(["NGN", "GHS", "KES", "ZAR", "USD"]);
+export function merchantCurrencies(): string[] {
+  const raw = process.env.PSP_MERCHANT_CURRENCIES?.trim();
+  if (!raw) return ["NGN"];
+  const parsed = raw
+    .split(",")
+    .map((c) => c.trim().toUpperCase())
+    .filter(Boolean);
+  // An empty or all-whitespace value is a misconfiguration, not an instruction
+  // to charge in nothing. Falling back keeps checkout alive.
+  return parsed.length > 0 ? parsed : ["NGN"];
+}
 
 /**
  * What to actually charge a customer in, given their signup currency.
  *
- * Their own currency when the rail supports it, USD otherwise. USD is the
- * canonical ledger amount either way; this only decides what the customer is
- * asked to pay in, and the conversion happens behind it at the buffered rate.
+ * Their own currency when the merchant is approved for it. Otherwise USD if
+ * available, because a foreign customer reading dollars understands the price;
+ * otherwise the merchant's home currency, which at least completes.
+ *
+ * USD stays the canonical ledger amount regardless. This only decides what the
+ * customer is asked to pay in, with the conversion happening behind it at the
+ * buffered rate.
  */
 export function pspChargeCurrency(businessCurrency: string | null | undefined): string {
+  const supported = merchantCurrencies();
   const c = businessCurrency?.trim().toUpperCase();
-  return c && PSP_CHARGEABLE.has(c) ? c : "USD";
+  if (c && supported.includes(c)) return c;
+  return supported.includes("USD") ? "USD" : supported[0];
 }
 
-/** Is this customer charged in their own currency, or converted to USD? */
+/** Is this customer charged in their own currency, or converted to something else? */
 export function chargesInLocalCurrency(businessCurrency: string | null | undefined): boolean {
   const c = businessCurrency?.trim().toUpperCase();
-  return Boolean(c && c !== "USD" && PSP_CHARGEABLE.has(c));
+  return Boolean(c && merchantCurrencies().includes(c));
 }
