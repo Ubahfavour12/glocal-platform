@@ -44,8 +44,19 @@ export function slotsRemaining(plannedConceptIds: readonly string[], slots: numb
  * the next pick costs something, and hiding that is how someone loses a choice
  * they had already made.
  */
-export function slotSummary(plannedConceptIds: readonly string[], slots: number): string {
+export function slotSummary(
+  plannedConceptIds: readonly string[],
+  slots: number,
+  walletEmpty = false,
+): string {
   const capacity = Math.max(0, Math.floor(slots));
+  // The wallet is checked first because it is the reason that is actually
+  // actionable. "Your budget cannot fund a test" sends someone to change a
+  // budget that was never the problem; "your wallet is empty" sends them to the
+  // one screen that fixes it.
+  if (walletEmpty) {
+    return "Your wallet is empty, so tomorrow's test is paused. Add funds and your picks start running again.";
+  }
   if (capacity === 0) return "Tomorrow's budget cannot fund a new ad to test.";
   const used = capacity - slotsRemaining(plannedConceptIds, capacity);
   const slotWord = capacity === 1 ? "slot" : "slots";

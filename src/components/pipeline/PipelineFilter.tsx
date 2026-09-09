@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { useMemo, useState } from "react";
 import { ConceptCard } from "./ConceptCard";
 import { slotSummary } from "@/lib/pipeline/slots";
@@ -33,6 +35,7 @@ export function PipelineFilter({
   videoCredits,
   plannedConceptIds,
   challengerSlots,
+  walletEmpty,
 }: {
   concepts: PipelineConcept[];
   businessId: string | null;
@@ -42,6 +45,8 @@ export function PipelineFilter({
   plannedConceptIds: string[];
   /** How many challengers tomorrow's test can fund. */
   challengerSlots: number;
+  /** No money in the wallet, so nothing can run whatever is picked. */
+  walletEmpty: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [only, setOnly] = useState<PipelineTab>("all");
@@ -87,11 +92,21 @@ export function PipelineFilter({
         had no way to know whether it joined the first or pushed it out. Saying
         the number is most of the fix.
       */}
-      {businessId && (
-        <p className="mt-3 text-xs text-ink-faint">
-          {slotSummary(plannedConceptIds, challengerSlots)}
-        </p>
-      )}
+      {businessId &&
+        (walletEmpty ? (
+          // Loud, and with the way out attached. This is the state four of five
+          // accounts were sitting in while the screen said nothing at all.
+          <p className="mt-3 rounded-card border border-accent/40 bg-accent-soft px-3 py-2 text-xs leading-relaxed text-ink">
+            {slotSummary(plannedConceptIds, challengerSlots, true)}{" "}
+            <Link href="/wallet" className="font-medium text-accent-bright underline">
+              Add funds
+            </Link>
+          </p>
+        ) : (
+          <p className="mt-3 text-xs text-ink-faint">
+            {slotSummary(plannedConceptIds, challengerSlots)}
+          </p>
+        ))}
 
       {visible.length === 0 ? (
         <p className="mt-8 text-center text-sm text-ink-muted">
