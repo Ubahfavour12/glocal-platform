@@ -62,7 +62,7 @@ export default function PrivacyPage() {
           <h2 className="mb-2 text-base font-semibold text-ink">What we never hold</h2>
           <p>
             Card and payment details go directly to our payment providers
-            (such as Stripe and Flutterwave) and never touch our servers. We
+            (Paystack, and Monnify as a backup) and never touch our servers. We
             keep a ledger of balances and transactions, not payment
             instruments.
           </p>
