@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 
 const supabaseConfigured = Boolean(
@@ -156,14 +157,31 @@ export function MagicLinkForm({ mode, linkError }: { mode: Mode; linkError?: Lin
     setState("verifying");
     rememberPolicy();
     const supabase = createClient();
-    const { error } = await supabase.auth.verifyOtp({
-      email,
-      token: code.trim(),
-      type: "email",
-    });
-    if (error) {
+
+    // The same lesson /auth/callback already learned, which I failed to apply
+    // here: the token's type depends on who is signing in. A brand-new email
+    // carries a "signup" token; a returning one carries "magiclink"/"email".
+    // Hardcoding a single type made a perfectly good code report itself as
+    // wrong -- the digits matched, the type did not, and the customer was told
+    // the code was invalid. Try each, in the order most likely for this form.
+    const types: EmailOtpType[] =
+      mode === "signup"
+        ? ["signup", "email", "magiclink"]
+        : ["email", "magiclink", "signup"];
+
+    let lastError = "";
+    let ok = false;
+    for (const type of types) {
+      const { error } = await supabase.auth.verifyOtp({ email, token: code.trim(), type });
+      if (!error) {
+        ok = true;
+        break;
+      }
+      lastError = error.message;
+    }
+    if (!ok) {
       setState("error");
-      setMessage(friendly(error.message));
+      setMessage(friendly(lastError));
       return;
     }
     // A full navigation, not a router push: the session cookie was just set and
