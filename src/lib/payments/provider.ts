@@ -1,10 +1,10 @@
 /**
  * Which money rail a charge runs on.
  *
- * Two rails exist so that one PSP having a bad day, or declining a card type,
- * is not the same as the business being unable to take money. This module is
- * the only place that decides between them, and the only place that builds the
- * ledger's idempotency reference.
+ * Several rails exist so that one PSP having a bad day, or declining a card
+ * type, is not the same as the business being unable to take money. This module
+ * is the only place that decides between them, and the only place that builds
+ * the ledger's idempotency reference.
  *
  * That second job matters more than it looks. `record_psp_topup` credits once
  * per `psp_ref`, and each charge is settled twice — once by the redirect the
@@ -15,10 +15,11 @@
  */
 
 import * as flutterwave from "./flutterwave";
+import * as monnify from "./monnify";
 import * as paystack from "./paystack";
 import type { CheckoutRequest, VerifiedTransaction } from "./shared";
 
-export const PSP_IDS = ["flutterwave", "paystack"] as const;
+export const PSP_IDS = ["flutterwave", "paystack", "monnify"] as const;
 export type PspId = (typeof PSP_IDS)[number];
 
 export function isPspId(value: unknown): value is PspId {
@@ -33,6 +34,7 @@ interface Rail {
 const RAILS: Record<PspId, Rail> = {
   flutterwave,
   paystack,
+  monnify,
 };
 
 /**
@@ -53,15 +55,20 @@ export function activeProvider(): PspId {
     }
     return configured;
   }
-  // Paystack first, deliberately. Flutterwave's live keys are gated on a CAC
-  // amendment that has been "about to complete" for over a month, and a rail
-  // that cannot be switched on is not a default. Paystack is approved and can
-  // take money today, so it is what a customer meets unless told otherwise.
+  // Paystack first, deliberately. It is approved and can take money today, so
+  // it is what a customer meets unless told otherwise.
   //
-  // Flutterwave is kept as a rail rather than deleted: it costs nothing while
-  // it has no key, the failover skips it automatically, and the day CAC does
-  // clear it becomes a second rail for the price of pasting a key.
+  // Monnify second: it is the standby, chosen because it fails independently of
+  // Paystack (different owner, its own bank rails) and because bank transfer is
+  // how much of this market actually pays.
+  //
+  // Flutterwave last, and kept as a rail rather than deleted. Its live keys are
+  // gated on a CAC amendment that has been "about to complete" for over a
+  // month, and a rail that cannot be switched on is not a default. It costs
+  // nothing while it has no key, the failover skips it automatically, and the
+  // day CAC does clear it becomes another rail for the price of pasting a key.
   if (paystack.isConfigured()) return "paystack";
+  if (monnify.isConfigured()) return "monnify";
   if (flutterwave.isConfigured()) return "flutterwave";
   // Nothing configured at all. Naming the primary makes the resulting error
   // ("PAYSTACK_SECRET_KEY not configured") point at the rail you actually want.
@@ -76,12 +83,18 @@ export function isConfigured(psp: PspId = activeProvider()): boolean {
 /**
  * The ledger's idempotency key for a settled charge.
  *
- * `flw-` is load-bearing history: entries written before Paystack existed use
- * it, so it must never change or those charges could credit a second time.
+ * These prefixes are load-bearing history: `flw-` entries were written before
+ * Paystack existed, so no prefix may ever change or those charges could credit
+ * a second time. Add rails here; never rename one.
  */
+const REF_PREFIX: Record<PspId, string> = {
+  flutterwave: "flw",
+  paystack: "ps",
+  monnify: "mnfy",
+};
+
 export function pspRef(psp: PspId, transactionId: string | number): string {
-  const prefix = psp === "flutterwave" ? "flw" : "ps";
-  return `${prefix}-${transactionId}`;
+  return `${REF_PREFIX[psp]}-${transactionId}`;
 }
 
 /**
@@ -119,8 +132,8 @@ export class NoRailAvailableError extends Error {
  *
  * A checkout that was half-created on the failed rail is abandoned unpaid. It
  * carries the same txRef, but the ledger keys on the PSP's own reference
- * (flw- / ps-), so even the impossible case of both being paid credits twice
- * for two real payments rather than double-crediting one.
+ * (flw- / ps- / mnfy-), so even the impossible case of both being paid credits
+ * twice for two real payments rather than double-crediting one.
  */
 export async function createCheckout(
   req: CheckoutRequest,
@@ -153,9 +166,13 @@ export async function createCheckout(
  * refund can never be sent to the wrong provider.
  */
 export function parsePspRef(ref: string): { psp: PspId; id: string } | null {
-  const m = /^(flw|ps)-(.+)$/.exec(ref.trim());
+  // Longest prefix first: "ps" is a prefix of nothing here, but leaving the
+  // alternation unordered is the kind of thing that breaks the day a rail
+  // named "psX" is added.
+  const m = /^(mnfy|flw|ps)-(.+)$/.exec(ref.trim());
   if (!m) return null;
-  return { psp: m[1] === "flw" ? "flutterwave" : "paystack", id: m[2] };
+  const psp = (Object.keys(REF_PREFIX) as PspId[]).find((p) => REF_PREFIX[p] === m[1]);
+  return psp ? { psp, id: m[2] } : null;
 }
 
 /** Refund part or all of a settled charge, on the rail that took it. */
@@ -165,10 +182,12 @@ export async function refund(
 ): Promise<{ refundRef: string; psp: PspId }> {
   const parsed = parsePspRef(ref);
   if (!parsed) throw new Error(`unrecognised payment reference "${ref}"`);
-  const { refundRef } =
-    parsed.psp === "paystack"
-      ? await paystack.refund(parsed.id, amountLocalMinor)
-      : await flutterwave.refund(parsed.id, amountLocalMinor);
+  const REFUNDERS: Record<PspId, (id: string, minor: number) => Promise<{ refundRef: string }>> = {
+    paystack: paystack.refund,
+    monnify: monnify.refund,
+    flutterwave: flutterwave.refund,
+  };
+  const { refundRef } = await REFUNDERS[parsed.psp](parsed.id, amountLocalMinor);
   return { refundRef, psp: parsed.psp };
 }
 
@@ -176,9 +195,12 @@ export async function verifyTransaction(
   psp: PspId,
   reference: string,
 ): Promise<VerifiedTransaction> {
-  return psp === "paystack"
-    ? paystack.verifyTransaction(reference)
-    : flutterwave.verifyTransaction(reference);
+  const VERIFIERS: Record<PspId, (ref: string) => Promise<VerifiedTransaction>> = {
+    paystack: paystack.verifyTransaction,
+    monnify: monnify.verifyTransaction,
+    flutterwave: flutterwave.verifyTransaction,
+  };
+  return VERIFIERS[psp](reference);
 }
 
 export type { CheckoutRequest, VerifiedTransaction } from "./shared";

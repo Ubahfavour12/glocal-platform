@@ -44,7 +44,14 @@ export interface CheckoutRequest {
  * which rail it is looking at.
  */
 export interface VerifiedTransaction {
-  id: number;
+  /**
+   * The PSP's own id for the charge, which becomes the ledger's idempotency
+   * key via pspRef(). A number on Paystack and Flutterwave; a STRING on
+   * Monnify, whose references look like "MNFY|50|20250205174323|000010".
+   * Widened rather than coerced: turning that into a number would collapse
+   * every Monnify charge to NaN and credit them all against one key.
+   */
+  id: number | string;
   txRef: string;
   status: "successful" | "failed" | string;
   amountLocalMinor: number;

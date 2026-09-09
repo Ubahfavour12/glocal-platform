@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { activeProvider, checkoutOrder, createCheckout, isPspId, pspRef } from "./provider";
+import {
+  PSP_IDS,
+  activeProvider,
+  checkoutOrder,
+  createCheckout,
+  isPspId,
+  parsePspRef,
+  pspRef,
+} from "./provider";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -28,6 +36,17 @@ describe("activeProvider", () => {
     vi.stubEnv("FLUTTERWAVE_SECRET_KEY", "");
     vi.stubEnv("PAYSTACK_SECRET_KEY", "sk_test_x");
     expect(activeProvider()).toBe("paystack");
+  });
+
+  it("falls to Monnify as the standby when Paystack has no key", () => {
+    vi.stubEnv("PAYMENTS_PROVIDER", "");
+    vi.stubEnv("PAYSTACK_SECRET_KEY", "");
+    vi.stubEnv("FLUTTERWAVE_SECRET_KEY", "FLWSECK_TEST");
+    vi.stubEnv("MONNIFY_API_KEY", "MK_TEST_1");
+    vi.stubEnv("MONNIFY_SECRET_KEY", "s");
+    vi.stubEnv("MONNIFY_CONTRACT_CODE", "1234567890");
+    // Monnify outranks Flutterwave: it can be switched on, Flutterwave cannot.
+    expect(activeProvider()).toBe("monnify");
   });
 
   it("prefers Paystack when both are configured", () => {
@@ -185,5 +204,36 @@ describe("createCheckout — failover", () => {
     vi.stubEnv("PAYSTACK_SECRET_KEY", "");
     stubRails("none");
     await expect(createCheckout(req)).rejects.toThrow(/No payment rail is configured/);
+  });
+});
+
+describe("pspRef / parsePspRef round-trip", () => {
+  it("gives each rail its own prefix", () => {
+    expect(pspRef("paystack", 123)).toBe("ps-123");
+    expect(pspRef("flutterwave", 123)).toBe("flw-123");
+    expect(pspRef("monnify", "MNFY|50|1")).toBe("mnfy-MNFY|50|1");
+  });
+
+  it("parses a Monnify reference back, pipes and all", () => {
+    // The id must survive intact: it is what a refund is addressed to.
+    expect(parsePspRef("mnfy-MNFY|50|20250205174323|000010")).toEqual({
+      psp: "monnify",
+      id: "MNFY|50|20250205174323|000010",
+    });
+  });
+
+  it("still parses the historical prefixes unchanged", () => {
+    expect(parsePspRef("flw-999")).toEqual({ psp: "flutterwave", id: "999" });
+    expect(parsePspRef("ps-999")).toEqual({ psp: "paystack", id: "999" });
+  });
+
+  it("round-trips every rail", () => {
+    for (const psp of PSP_IDS) {
+      expect(parsePspRef(pspRef(psp, "abc|1"))).toEqual({ psp, id: "abc|1" });
+    }
+  });
+
+  it("returns null on a reference from no known rail", () => {
+    expect(parsePspRef("stripe-1")).toBeNull();
   });
 });
