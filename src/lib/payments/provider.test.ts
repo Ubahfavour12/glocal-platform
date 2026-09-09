@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetTokenCache as resetMonnifyTokenCache } from "./monnify";
 import {
+  CHECKOUT_RAILS,
   PSP_IDS,
   activeProvider,
+  canOpenCheckout,
   checkoutOrder,
   createCheckout,
   isPspId,
@@ -14,11 +17,11 @@ afterEach(() => {
 });
 
 describe("activeProvider", () => {
-  it("obeys PAYMENTS_PROVIDER when it names a real rail", () => {
+  it("obeys PAYMENTS_PROVIDER when it names a rail that may still charge", () => {
     vi.stubEnv("PAYMENTS_PROVIDER", "paystack");
     expect(activeProvider()).toBe("paystack");
-    vi.stubEnv("PAYMENTS_PROVIDER", "flutterwave");
-    expect(activeProvider()).toBe("flutterwave");
+    vi.stubEnv("PAYMENTS_PROVIDER", "monnify");
+    expect(activeProvider()).toBe("monnify");
   });
 
   it("tolerates surrounding whitespace from a pasted env var", () => {
@@ -28,7 +31,7 @@ describe("activeProvider", () => {
 
   it("throws on a typo rather than quietly charging on the other rail", () => {
     vi.stubEnv("PAYMENTS_PROVIDER", "paystak");
-    expect(() => activeProvider()).toThrow(/flutterwave \| paystack/);
+    expect(() => activeProvider()).toThrow(/paystack \| monnify/);
   });
 
   it("prefers a rail that actually has keys when unset", () => {
@@ -58,12 +61,15 @@ describe("activeProvider", () => {
     expect(activeProvider()).toBe("paystack");
   });
 
-  it("still uses Flutterwave when it is the only rail with a key", () => {
-    // Kept as a rail rather than deleted, so a pasted key is all it takes.
+  it("does NOT use Flutterwave even when it is the only rail with a key", () => {
+    // It is retired. A key lying around in the environment must not be enough
+    // to put a customer back on it -- that is exactly how the incident
+    // happened.
     vi.stubEnv("PAYMENTS_PROVIDER", "");
     vi.stubEnv("FLUTTERWAVE_SECRET_KEY", "FLWSECK_TEST");
     vi.stubEnv("PAYSTACK_SECRET_KEY", "");
-    expect(activeProvider()).toBe("flutterwave");
+    vi.stubEnv("MONNIFY_API_KEY", "");
+    expect(activeProvider()).toBe("paystack");
   });
 
   it("names the primary when neither is configured, so the error points at it", () => {
@@ -93,8 +99,11 @@ describe("pspRef — the ledger's idempotency key", () => {
 });
 
 describe("isPspId", () => {
-  it("accepts only the two rails", () => {
+  it("accepts every known rail, retired ones included", () => {
+    // isPspId gates ref parsing and settlement, not checkout, so Flutterwave
+    // must stay valid here or old charges become unrefundable.
     expect(isPspId("flutterwave")).toBe(true);
+    expect(isPspId("monnify")).toBe(true);
     expect(isPspId("paystack")).toBe(true);
     expect(isPspId("stripe")).toBe(false);
     expect(isPspId(null)).toBe(false);
@@ -103,27 +112,31 @@ describe("isPspId", () => {
 });
 
 describe("checkoutOrder", () => {
+  beforeEach(() => {
+    vi.stubEnv("MONNIFY_API_KEY", "MK_TEST_1");
+    vi.stubEnv("MONNIFY_SECRET_KEY", "s");
+    vi.stubEnv("MONNIFY_CONTRACT_CODE", "1234567890");
+  });
+
   it("puts the preferred rail first and keeps the other as a standby", () => {
-    vi.stubEnv("PAYMENTS_PROVIDER", "flutterwave");
-    vi.stubEnv("FLUTTERWAVE_SECRET_KEY", "FLWSECK_TEST");
+    vi.stubEnv("PAYMENTS_PROVIDER", "monnify");
     vi.stubEnv("PAYSTACK_SECRET_KEY", "sk_test_x");
-    expect(checkoutOrder()).toEqual(["flutterwave", "paystack"]);
+    expect(checkoutOrder()).toEqual(["monnify", "paystack"]);
 
     vi.stubEnv("PAYMENTS_PROVIDER", "paystack");
-    expect(checkoutOrder()).toEqual(["paystack", "flutterwave"]);
+    expect(checkoutOrder()).toEqual(["paystack", "monnify"]);
   });
 
   it("leaves out a rail with no key, because it is not an option", () => {
-    vi.stubEnv("PAYMENTS_PROVIDER", "flutterwave");
-    vi.stubEnv("FLUTTERWAVE_SECRET_KEY", "FLWSECK_TEST");
+    vi.stubEnv("PAYMENTS_PROVIDER", "monnify");
     vi.stubEnv("PAYSTACK_SECRET_KEY", "");
-    expect(checkoutOrder()).toEqual(["flutterwave"]);
+    expect(checkoutOrder()).toEqual(["monnify"]);
   });
 
   it("is empty when nothing is configured, rather than offering a rail that cannot charge", () => {
     vi.stubEnv("PAYMENTS_PROVIDER", "");
-    vi.stubEnv("FLUTTERWAVE_SECRET_KEY", "");
     vi.stubEnv("PAYSTACK_SECRET_KEY", "");
+    vi.stubEnv("MONNIFY_API_KEY", "");
     expect(checkoutOrder()).toEqual([]);
   });
 });
@@ -140,18 +153,33 @@ describe("createCheckout — failover", () => {
   };
 
   /** Fail the named rail's API; let the other one answer. */
-  function stubRails(failing: "flutterwave" | "paystack" | "both" | "none") {
+  function stubRails(failing: "monnify" | "paystack" | "both" | "none") {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) => {
-        const isFlw = String(url).includes("flutterwave");
+        const isMnfy = String(url).includes("monnify");
+        // Monnify trades for a token before it can do anything; that call is
+        // not the rail failing, so it answers even when the rail is "down".
+        if (isMnfy && String(url).includes("/auth/login")) {
+          return {
+            json: async () => ({
+              requestSuccessful: true,
+              responseBody: { accessToken: "tok", expiresIn: 3600 },
+            }),
+          } as unknown as Response;
+        }
         const down =
-          failing === "both" || (failing === "flutterwave" && isFlw) || (failing === "paystack" && !isFlw);
+          failing === "both" ||
+          (failing === "monnify" && isMnfy) ||
+          (failing === "paystack" && !isMnfy);
         if (down) throw new Error("network down");
         return {
           json: async () =>
-            isFlw
-              ? { status: "success", data: { link: "https://flutterwave.test/pay" } }
+            isMnfy
+              ? {
+                  requestSuccessful: true,
+                  responseBody: { checkoutUrl: "https://monnify.test/pay" },
+                }
               : { status: true, data: { authorization_url: "https://paystack.test/pay" } },
         } as unknown as Response;
       }),
@@ -159,49 +187,64 @@ describe("createCheckout — failover", () => {
   }
 
   beforeEach(() => {
-    vi.stubEnv("FLUTTERWAVE_SECRET_KEY", "FLWSECK_TEST");
+    resetMonnifyTokenCache();
     vi.stubEnv("PAYSTACK_SECRET_KEY", "sk_test_x");
-    vi.stubEnv("PAYMENTS_PROVIDER", "flutterwave");
+    vi.stubEnv("MONNIFY_API_KEY", "MK_TEST_1");
+    vi.stubEnv("MONNIFY_SECRET_KEY", "s");
+    vi.stubEnv("MONNIFY_CONTRACT_CODE", "1234567890");
+    vi.stubEnv("PAYMENTS_PROVIDER", "paystack");
   });
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    resetMonnifyTokenCache();
+  });
 
   it("uses the preferred rail when it works", async () => {
     stubRails("none");
-    await expect(createCheckout(req)).resolves.toEqual({
-      link: "https://flutterwave.test/pay",
-      psp: "flutterwave",
-    });
-  });
-
-  it("hands the customer to Paystack when Flutterwave fails", async () => {
-    // The whole point: the customer gets a working link, not an error.
-    stubRails("flutterwave");
     await expect(createCheckout(req)).resolves.toEqual({
       link: "https://paystack.test/pay",
       psp: "paystack",
     });
   });
 
-  it("fails over the other way too", async () => {
-    vi.stubEnv("PAYMENTS_PROVIDER", "paystack");
+  it("hands the customer to Monnify when Paystack fails", async () => {
+    // The whole point: the customer gets a working link, not an error.
     stubRails("paystack");
-    await expect(createCheckout(req)).resolves.toMatchObject({ psp: "flutterwave" });
+    await expect(createCheckout(req)).resolves.toEqual({
+      link: "https://monnify.test/pay",
+      psp: "monnify",
+    });
+  });
+
+  it("fails over the other way too", async () => {
+    vi.stubEnv("PAYMENTS_PROVIDER", "monnify");
+    stubRails("monnify");
+    await expect(createCheckout(req)).resolves.toMatchObject({ psp: "paystack" });
   });
 
   it("does not fall back to a rail with no key", async () => {
-    vi.stubEnv("PAYSTACK_SECRET_KEY", "");
-    stubRails("flutterwave");
+    vi.stubEnv("MONNIFY_API_KEY", "");
+    stubRails("paystack");
     await expect(createCheckout(req)).rejects.toThrow(/Every payment rail failed/);
+  });
+
+  it("never falls back to Flutterwave, even when both live rails are down", async () => {
+    vi.stubEnv("FLUTTERWAVE_SECRET_KEY", "FLWSECK_TEST");
+    stubRails("both");
+    await expect(createCheckout(req)).rejects.toThrow(/Every payment rail failed/);
+    await expect(createCheckout(req)).rejects.not.toThrow(/flutterwave/);
   });
 
   it("reports every rail it tried when they all fail", async () => {
     stubRails("both");
-    await expect(createCheckout(req)).rejects.toThrow(/flutterwave.*paystack|paystack.*flutterwave/);
+    await expect(createCheckout(req)).rejects.toThrow(
+      /monnify.*paystack|paystack.*monnify/,
+    );
   });
 
   it("says so plainly when nothing is configured at all", async () => {
-    vi.stubEnv("FLUTTERWAVE_SECRET_KEY", "");
     vi.stubEnv("PAYSTACK_SECRET_KEY", "");
+    vi.stubEnv("MONNIFY_API_KEY", "");
     stubRails("none");
     await expect(createCheckout(req)).rejects.toThrow(/No payment rail is configured/);
   });
@@ -235,5 +278,48 @@ describe("pspRef / parsePspRef round-trip", () => {
 
   it("returns null on a reference from no known rail", () => {
     expect(parsePspRef("stripe-1")).toBeNull();
+  });
+});
+
+describe("Flutterwave is retired from checkout", () => {
+  // This is the regression test for a real production incident: customers were
+  // landing on a Flutterwave checkout page for weeks after Paystack was made
+  // "primary", because PAYMENTS_PROVIDER=flutterwave in the hosting environment
+  // outranked every default in the code.
+  it("ignores PAYMENTS_PROVIDER=flutterwave instead of obeying it", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubEnv("PAYMENTS_PROVIDER", "flutterwave");
+    vi.stubEnv("PAYSTACK_SECRET_KEY", "sk_test_x");
+    expect(activeProvider()).toBe("paystack");
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/retired rail/));
+    warn.mockRestore();
+  });
+
+  it("never puts Flutterwave in the checkout order, even with a key", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubEnv("PAYMENTS_PROVIDER", "flutterwave");
+    vi.stubEnv("FLUTTERWAVE_SECRET_KEY", "FLWSECK_TEST");
+    vi.stubEnv("PAYSTACK_SECRET_KEY", "sk_test_x");
+    expect(checkoutOrder()).not.toContain("flutterwave");
+  });
+
+  it("does not fall back to Flutterwave when no other rail has a key", () => {
+    // Better to fail loudly with "PAYSTACK_SECRET_KEY not configured" than to
+    // quietly resurrect the retired rail.
+    vi.stubEnv("PAYMENTS_PROVIDER", "");
+    vi.stubEnv("PAYSTACK_SECRET_KEY", "");
+    vi.stubEnv("MONNIFY_API_KEY", "");
+    vi.stubEnv("FLUTTERWAVE_SECRET_KEY", "FLWSECK_TEST");
+    expect(activeProvider()).toBe("paystack");
+    expect(checkoutOrder()).toEqual([]);
+  });
+
+  it("still knows Flutterwave as a rail for settling old charges", () => {
+    // Retired means "takes no new money", not "forgotten": historical charges
+    // must still verify and refund for years.
+    expect(PSP_IDS).toContain("flutterwave");
+    expect(parsePspRef("flw-12345")).toEqual({ psp: "flutterwave", id: "12345" });
+    expect(canOpenCheckout("flutterwave")).toBe(false);
+    expect(CHECKOUT_RAILS).toEqual(["paystack", "monnify"]);
   });
 });
