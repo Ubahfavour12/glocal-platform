@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ConceptCard } from "./ConceptCard";
+import { slotSummary } from "@/lib/pipeline/slots";
 import {
   filterConcepts,
   tabCounts,
@@ -31,13 +32,16 @@ export function PipelineFilter({
   videoAffordable,
   videoCredits,
   plannedConceptIds,
+  challengerSlots,
 }: {
   concepts: PipelineConcept[];
   businessId: string | null;
   videoAffordable: boolean;
   videoCredits: number;
-  /** Concept ids that tomorrow's plan actually contains. */
+  /** Concept ids tomorrow's plan actually contains, newest pick first. */
   plannedConceptIds: string[];
+  /** How many challengers tomorrow's test can fund. */
+  challengerSlots: number;
 }) {
   const [query, setQuery] = useState("");
   const [only, setOnly] = useState<PipelineTab>("all");
@@ -78,6 +82,17 @@ export function PipelineFilter({
         </div>
       </div>
 
+      {/*
+        The slots were invisible before, so a customer picking a second concept
+        had no way to know whether it joined the first or pushed it out. Saying
+        the number is most of the fix.
+      */}
+      {businessId && (
+        <p className="mt-3 text-xs text-ink-faint">
+          {slotSummary(plannedConceptIds, challengerSlots)}
+        </p>
+      )}
+
       {visible.length === 0 ? (
         <p className="mt-8 text-center text-sm text-ink-muted">
           Nothing matches that. Try a different word, or clear the filter.
@@ -92,6 +107,8 @@ export function PipelineFilter({
               videoAffordable={videoAffordable}
               videoCredits={videoCredits}
               inTomorrowsPlan={planned.has(c.id)}
+              plannedConceptIds={plannedConceptIds}
+              challengerSlots={challengerSlots}
             />
           ))}
         </div>

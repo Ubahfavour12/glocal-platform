@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { nextPickSelection, slotsRemaining } from "@/lib/pipeline/slots";
 
 /**
  * "Use this one next" — the customer hand-picks a concept from the pipeline
@@ -16,6 +17,8 @@ export function UseThisButton({
   conceptId,
   videoAffordable = false,
   videoCredits = 1,
+  plannedConceptIds = [],
+  challengerSlots = 2,
 }: {
   businessId: string;
   conceptId: string;
@@ -23,6 +26,10 @@ export function UseThisButton({
   videoAffordable?: boolean;
   /** What a video costs against that allowance, so the price is never hidden. */
   videoCredits?: number;
+  /** What tomorrow's test already holds, so a pick joins it rather than wiping it. */
+  plannedConceptIds?: string[];
+  /** How many challengers tomorrow can fund. */
+  challengerSlots?: number;
 }) {
   const router = useRouter();
   const [state, setState] = useState<"idle" | "busy">("idle");
@@ -70,7 +77,14 @@ export function UseThisButton({
     const res = await fetch("/api/plan/regenerate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ business_id: businessId, concept_ids: [conceptId], kind }),
+      // The whole selection, not just this concept. Sending one id alone was
+      // what made a second pick throw the first out: the planner honours what
+      // it is given, and it was being told the customer wanted only this one.
+      body: JSON.stringify({
+        business_id: businessId,
+        concept_ids: nextPickSelection(conceptId, plannedConceptIds, challengerSlots),
+        kind,
+      }),
     });
     if (!res.ok) {
       const data = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -96,7 +110,11 @@ export function UseThisButton({
         disabled={state === "busy"}
         className="rounded-full border border-line px-3 py-1 text-xs text-ink-muted transition-colors hover:border-accent hover:text-ink disabled:opacity-50"
       >
-        {state === "busy" ? "Adding…" : "Use this one next"}
+        {state === "busy"
+          ? "Adding…"
+          : slotsRemaining(plannedConceptIds, challengerSlots) > 0
+            ? "Use this one next"
+            : "Use this, swap out the oldest"}
       </button>
       {error && <span className="text-xs text-negative">{error}</span>}
       </span>
