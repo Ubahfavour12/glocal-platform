@@ -74,7 +74,23 @@ export default async function PipelinePage() {
    */
   const plannedConceptIds: string[] = [];
   let challengerSlots = DEFAULT_CHALLENGER_SLOTS;
+  let walletEmpty = false;
   if (business) {
+    /*
+     * An empty wallet is the real reason picking does nothing, and until now
+     * the screen never said so. The agent pauses spend when the balance hits
+     * zero, which is correct, and the resulting plan has no challengers at all.
+     * The customer then picks a concept, the rebuild still has nowhere to put
+     * it, and nothing happens with no explanation offered. Silence is the bug,
+     * not the pause.
+     */
+    const { data: balanceRow } = await supabase
+      .from("wallet_balances")
+      .select("balance_usd_minor")
+      .eq("business_id", business.id)
+      .maybeSingle();
+    walletEmpty = Number(balanceRow?.balance_usd_minor ?? 0) <= 0;
+
     // "awaiting" and "approved" are the two live states. The first version of
     // this queried "pending", which is not a value approval_status has, so the
     // query matched nothing on every account and no concept ever showed as
@@ -99,8 +115,10 @@ export default async function PipelinePage() {
     }
     // The plan's own challenger count is the real capacity: a small budget
     // funds fewer than the default, and the customer should see that number
-    // rather than one we assumed.
-    if (payload?.challengers?.length) challengerSlots = payload.challengers.length;
+    // rather than one we assumed. A plan that exists with zero challengers is
+    // a genuine nought, not a missing number, so it is not overwritten by the
+    // default -- that is precisely the paused case worth showing.
+    if (nextPlan) challengerSlots = payload?.challengers?.length ?? 0;
   }
 
   const renderedCount = concepts.filter((c) => c.rendered).length;
@@ -142,6 +160,7 @@ export default async function PipelinePage() {
           videoCredits={VIDEO_CREDIT_WEIGHT}
           plannedConceptIds={plannedConceptIds}
           challengerSlots={challengerSlots}
+          walletEmpty={walletEmpty}
         />
       )}
     </div>

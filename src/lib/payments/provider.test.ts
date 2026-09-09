@@ -30,18 +30,28 @@ describe("activeProvider", () => {
     expect(activeProvider()).toBe("paystack");
   });
 
-  it("keeps Flutterwave the default when both are configured", () => {
+  it("prefers Paystack when both are configured", () => {
+    // Paystack is approved and can charge today; Flutterwave's live keys wait
+    // on a CAC amendment. A rail that cannot be switched on is not a default.
     vi.stubEnv("PAYMENTS_PROVIDER", "");
     vi.stubEnv("FLUTTERWAVE_SECRET_KEY", "FLWSECK_TEST");
     vi.stubEnv("PAYSTACK_SECRET_KEY", "sk_test_x");
+    expect(activeProvider()).toBe("paystack");
+  });
+
+  it("still uses Flutterwave when it is the only rail with a key", () => {
+    // Kept as a rail rather than deleted, so a pasted key is all it takes.
+    vi.stubEnv("PAYMENTS_PROVIDER", "");
+    vi.stubEnv("FLUTTERWAVE_SECRET_KEY", "FLWSECK_TEST");
+    vi.stubEnv("PAYSTACK_SECRET_KEY", "");
     expect(activeProvider()).toBe("flutterwave");
   });
 
-  it("falls back to Flutterwave when neither is configured, for a familiar error", () => {
+  it("names the primary when neither is configured, so the error points at it", () => {
     vi.stubEnv("PAYMENTS_PROVIDER", "");
     vi.stubEnv("FLUTTERWAVE_SECRET_KEY", "");
     vi.stubEnv("PAYSTACK_SECRET_KEY", "");
-    expect(activeProvider()).toBe("flutterwave");
+    expect(activeProvider()).toBe("paystack");
   });
 });
 

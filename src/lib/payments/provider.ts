@@ -41,8 +41,7 @@ const RAILS: Record<PspId, Rail> = {
  * `PAYMENTS_PROVIDER` decides when set. An unrecognised value throws rather
  * than falling back: a typo there would route real money somewhere nobody
  * intended, and a loud failure at checkout is far cheaper to notice than a
- * quiet one. Unset, we prefer whichever rail actually has keys, which keeps
- * Flutterwave the default it has always been.
+ * quiet one. Unset, the order below applies.
  */
 export function activeProvider(): PspId {
   const configured = process.env.PAYMENTS_PROVIDER?.trim();
@@ -54,11 +53,19 @@ export function activeProvider(): PspId {
     }
     return configured;
   }
-  if (flutterwave.isConfigured()) return "flutterwave";
+  // Paystack first, deliberately. Flutterwave's live keys are gated on a CAC
+  // amendment that has been "about to complete" for over a month, and a rail
+  // that cannot be switched on is not a default. Paystack is approved and can
+  // take money today, so it is what a customer meets unless told otherwise.
+  //
+  // Flutterwave is kept as a rail rather than deleted: it costs nothing while
+  // it has no key, the failover skips it automatically, and the day CAC does
+  // clear it becomes a second rail for the price of pasting a key.
   if (paystack.isConfigured()) return "paystack";
-  // Neither is configured. Naming Flutterwave keeps the resulting error the
-  // familiar "FLUTTERWAVE_SECRET_KEY not configured" rather than a new one.
-  return "flutterwave";
+  if (flutterwave.isConfigured()) return "flutterwave";
+  // Nothing configured at all. Naming the primary makes the resulting error
+  // ("PAYSTACK_SECRET_KEY not configured") point at the rail you actually want.
+  return "paystack";
 }
 
 /** Is the given rail (default: the active one) able to charge? */
