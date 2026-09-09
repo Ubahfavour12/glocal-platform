@@ -80,6 +80,19 @@ describe("slotSummary — says what is actually true", () => {
     expect(slotSummary([], 0)).toMatch(/cannot fund/);
   });
 
+  it("blames the empty wallet, not the budget, because that is what to act on", () => {
+    // Four of five live accounts sat here: paused for no money, told nothing.
+    const msg = slotSummary([], 0, true);
+    expect(msg).toMatch(/wallet is empty/i);
+    expect(msg).toMatch(/Add funds/i);
+    expect(msg).not.toMatch(/budget cannot fund/);
+  });
+
+  it("puts the empty wallet ahead of any slot arithmetic", () => {
+    // Even with slots and picks present, no money means nothing runs.
+    expect(slotSummary(["a"], 2, true)).toMatch(/wallet is empty/i);
+  });
+
   it("uses singular wording for a one-slot test", () => {
     expect(slotSummary([], 1)).toContain("1 slot");
   });
