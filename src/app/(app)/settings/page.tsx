@@ -4,6 +4,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { SettingsForm } from "@/components/settings/SettingsForm";
 import { PixelCard } from "@/components/settings/PixelCard";
+import { SessionCard } from "@/components/settings/SessionCard";
 import { MediaUpload } from "@/components/settings/MediaUpload";
 import { ConnectShopify } from "@/components/settings/ConnectShopify";
 import { ConnectFlash } from "@/components/settings/ConnectFlash";
@@ -127,6 +128,7 @@ export default async function SettingsPage() {
 
         <MediaUpload businessId={bizId} existingCount={mediaCount} />
         <PixelCard businessId={bizId} origin={origin} />
+        <SessionCard />
       </div>
 
       <p className="mt-6 text-center text-xs text-ink-faint">
