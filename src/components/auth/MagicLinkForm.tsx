@@ -9,6 +9,21 @@ const supabaseConfigured = Boolean(
   process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
 );
 
+/**
+ * How long a sign-in code may be.
+ *
+ * NOT six. Supabase's OTP length is a project setting (6-10 digits) and this
+ * project issues EIGHT. The input was capped at six, so a customer pasting a
+ * correct 47661744 silently got 476617 -- two digits dropped by the field
+ * itself -- and was then told the code was wrong. The code was never wrong.
+ *
+ * Accepting the full range rather than this project's current eight means
+ * changing that setting later cannot break sign-in again. The minimum stays at
+ * six only to decide when the button stops being disabled.
+ */
+const OTP_MIN_LENGTH = 6;
+const OTP_MAX_LENGTH = 10;
+
 type Mode = "signin" | "signup";
 
 /** Why a sign-in link did not work, as diagnosed by /auth/callback. */
@@ -68,7 +83,7 @@ const COPY: Record<
   signin: {
     label: "sign in",
     title: "Welcome back",
-    subtitle: "Enter your email and we'll send a sign-in link and a 6-digit code.",
+    subtitle: "Enter your email and we'll send a sign-in link and a code.",
     button: "Send sign-in link",
     sending: "Sending…",
     sentTitle: "check your email",
@@ -225,23 +240,23 @@ export function MagicLinkForm({ mode, linkError }: { mode: Mode; linkError?: Lin
             <p className="mt-2 text-sm text-ink-muted">{c.sentBody(email)}</p>
             <form onSubmit={verify} className="mt-4 flex flex-col gap-3">
               <label htmlFor="otp" className="text-sm text-ink-muted">
-                Or type the 6-digit code from the email — this works even if you
-                opened your email somewhere else.
+                Or type the code from the email — this works even if you opened
+                your email somewhere else.
               </label>
               <input
                 id="otp"
                 inputMode="numeric"
                 autoComplete="one-time-code"
                 pattern="[0-9]*"
-                maxLength={6}
+                maxLength={OTP_MAX_LENGTH}
                 value={code}
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                placeholder="123456"
+                placeholder="12345678"
                 className="rounded-lg border border-line bg-surface px-4 py-3 text-center text-lg tracking-[0.4em] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
               />
               <button
                 type="submit"
-                disabled={state === "verifying" || code.length < 6}
+                disabled={state === "verifying" || code.length < OTP_MIN_LENGTH}
                 className="rounded-lg bg-accent px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-accent-bright disabled:opacity-50"
               >
                 {state === "verifying" ? "Signing you in…" : "Sign in with code"}
