@@ -38,6 +38,22 @@ const BRIEF_LABELS: Record<string, string> = {
   inspiration: "Style inspiration",
 };
 
+/**
+ * Free-form context, kept under a reserved key that is deliberately NOT one of
+ * the ten question ids.
+ *
+ * The ten questions are good at what they ask and blind to everything else. A
+ * shop that has just taken on a second branch, or stopped stocking a line, or
+ * had one product suddenly sell out, has nothing to type that into — and that
+ * is exactly the kind of thing that should change what the agent writes this
+ * week. This is the place for it: add a note whenever something is true, and it
+ * joins the brief with the rest.
+ *
+ * Same append-only history as every answer, so notes accumulate rather than
+ * overwrite, and the newest leads.
+ */
+export const FREEFORM_KEY = "_context";
+
 /** How many earlier answers to carry as background before we stop. */
 const MAX_HISTORY_IN_BRIEF = 3;
 /** Hard cap on stored entries per question, so the JSON cannot grow forever. */
@@ -110,6 +126,13 @@ export function totalAnswersGiven(raw: unknown): number {
   return Object.values(normaliseProfile(raw)).reduce((n, h) => n + h.length, 0);
 }
 
+/** Free-form notes, newest first, for the "what the agent knows" mirror. */
+export function contextNotes(raw: unknown): { text: string; at: string }[] {
+  return (normaliseProfile(raw)[FREEFORM_KEY] ?? [])
+    .map((e) => ({ text: answerToText(e.v), at: e.at }))
+    .filter((n) => n.text);
+}
+
 /**
  * Build the strategy context the concept prompt uses. The newest answer leads;
  * earlier ones follow as background so the agent understands how the owner's
@@ -135,6 +158,19 @@ export function buildStrategyContext(raw: unknown): string {
         : `${label}: ${newest}`,
     );
   }
+  // The loop above walks STUDIO_QUESTIONS, so free-form context would be stored
+  // faithfully and then never reach the agent — collected and silently ignored,
+  // which is worse than not offering the box at all. It is added explicitly.
+  const notes = (profile[FREEFORM_KEY] ?? [])
+    .slice(0, 1 + MAX_HISTORY_IN_BRIEF)
+    .map((e) => answerToText(e.v))
+    .filter(Boolean);
+  if (notes.length > 0) {
+    lines.push(
+      `Recent context the owner added (newest first, treat as current truth): ${notes.join(" | ")}`,
+    );
+  }
+
   if (lines.length === 0) return "";
   return `BUSINESS STRATEGY (from the owner's deep brief — weight these heavily, newest answer first):\n${lines.join("\n")}`;
 }

@@ -2,8 +2,10 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StudioForm } from "@/components/studio/StudioForm";
 import { MediaUpload } from "@/components/settings/MediaUpload";
+import { ContextFeed } from "@/components/studio/ContextFeed";
 import {
   answeredCount,
+  contextNotes,
   latestAnswer,
   normaliseProfile,
   totalAnswersGiven,
@@ -41,6 +43,8 @@ export default async function StudioPage() {
   const profile = normaliseProfile(business.strategy_profile);
   const done = answeredCount(profile);
   const total = totalAnswersGiven(profile);
+
+  const notes = contextNotes(business.strategy_profile);
 
   const { count: mediaCount } = await supabase
     .from("media_assets")
@@ -122,6 +126,40 @@ export default async function StudioPage() {
           your ads, and the more it has, the more it can vary what it makes.
         </p>
         <div className="mt-3">
+          <div className="rounded-card border border-line bg-surface-raised p-5">
+            <div className="datalabel">add more context</div>
+            <p className="mt-2 text-sm text-ink-muted">
+              The ten questions above are the shape of your business. This is for
+              what changed this week.
+            </p>
+            <ContextFeed disabled={!unlocked} />
+
+            {notes.length > 0 && (
+              <div className="mt-5 border-t border-line pt-4">
+                <div className="datalabel">what your agent has absorbed</div>
+                <ul className="mt-3 flex flex-col gap-2.5">
+                  {notes.map((n, i) => (
+                    <li key={i} className="text-sm leading-relaxed text-ink-muted">
+                      <span className="text-ink">{n.text}</span>
+                      {n.at && (
+                        <span className="ml-2 text-xs text-ink-faint">
+                          {new Date(n.at).toLocaleDateString(undefined, {
+                            day: "numeric",
+                            month: "short",
+                          })}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 text-xs text-ink-faint">
+                  The newest is treated as current truth; the rest stay as
+                  background.
+                </p>
+              </div>
+            )}
+          </div>
+
           <MediaUpload businessId={business.id as string} existingCount={mediaCount ?? 0} />
         </div>
       </section>
