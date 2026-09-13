@@ -9,6 +9,7 @@
  * Pure param builders are fixture-tested; the calls are thin.
  */
 
+import { fetchWithTimeout } from "@/lib/net/fetch";
 const GRAPH = "https://graph.facebook.com/v21.0";
 
 export interface PublishInput {
@@ -33,7 +34,7 @@ export function buildFacebookParams(input: PublishInput): {
 }
 
 async function post(url: string, params: Record<string, string>): Promise<{ id: string }> {
-  const res = await fetch(url, { method: "POST", body: new URLSearchParams(params) });
+  const res = await fetchWithTimeout(url, { method: "POST", body: new URLSearchParams(params) });
   const data = (await res.json()) as { id?: string; post_id?: string; error?: { message?: string } };
   if (data.error) throw new Error(`Meta publish: ${data.error.message ?? "error"}`);
   const id = data.id ?? data.post_id;

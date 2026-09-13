@@ -4,6 +4,7 @@
  * pure helpers there stay network-free and fixture-testable.
  */
 
+import { fetchWithTimeout } from "@/lib/net/fetch";
 const SHOPIFY_API_VERSION = "2024-10";
 
 export async function registerOrdersWebhook(
@@ -11,7 +12,7 @@ export async function registerOrdersWebhook(
   accessToken: string,
   callbackUrl: string,
 ): Promise<void> {
-  const res = await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`, {
+  const res = await fetchWithTimeout(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`, {
     method: "POST",
     headers: {
       "content-type": "application/json",

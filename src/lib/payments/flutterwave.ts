@@ -17,6 +17,7 @@
  * surface; only the implementations moved.
  */
 
+import { fetchWithTimeout } from "@/lib/net/fetch";
 import { constantTimeEquals, type CheckoutRequest, type VerifiedTransaction } from "./shared";
 
 const API = "https://api.flutterwave.com/v3";
@@ -33,7 +34,7 @@ export function isConfigured(): boolean {
 }
 
 async function fw<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API}${path}`, {
+  const res = await fetchWithTimeout(`${API}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${secretKey()}`,

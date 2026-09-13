@@ -10,6 +10,7 @@
  *   that the orchestrator gates behind wallet balance + approval.
  */
 
+import { fetchWithTimeout } from "@/lib/net/fetch";
 const GRAPH = "https://graph.facebook.com/v21.0";
 
 export interface MetaConfig {
@@ -35,8 +36,8 @@ async function graph<T>(
   const body = new URLSearchParams({ ...init.params, access_token: accessToken });
   const res =
     init.method === "POST"
-      ? await fetch(url, { method: "POST", body })
-      : await fetch(`${url}?${body}`, { method: "GET" });
+      ? await fetchWithTimeout(url, { method: "POST", body })
+      : await fetchWithTimeout(`${url}?${body}`, { method: "GET" });
   const data = (await res.json()) as T & { error?: { message: string; error_user_msg?: string } };
   if (data.error) {
     throw new Error(

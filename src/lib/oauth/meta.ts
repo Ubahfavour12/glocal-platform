@@ -10,6 +10,7 @@
  * need at launch. Pure helpers here are fixture-tested; the routes wrap them.
  */
 
+import { fetchWithTimeout } from "@/lib/net/fetch";
 const GRAPH = "https://graph.facebook.com/v21.0";
 const DIALOG = "https://www.facebook.com/v21.0/dialog/oauth";
 
@@ -109,7 +110,7 @@ export async function exchangeCodeForToken(
   url.searchParams.set("client_secret", cfg.appSecret);
   url.searchParams.set("redirect_uri", cfg.redirectUri);
   url.searchParams.set("code", code);
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url);
   return parseTokenResponse(await res.json());
 }
 
@@ -122,7 +123,7 @@ export async function exchangeForLongLivedToken(
   url.searchParams.set("client_id", cfg.appId);
   url.searchParams.set("client_secret", cfg.appSecret);
   url.searchParams.set("fb_exchange_token", shortToken);
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url);
   return parseTokenResponse(await res.json());
 }
 
@@ -130,6 +131,6 @@ export async function fetchPages(userToken: string): Promise<ConnectedPage[]> {
   const url = new URL(`${GRAPH}/me/accounts`);
   url.searchParams.set("fields", "id,name,access_token,instagram_business_account");
   url.searchParams.set("access_token", userToken);
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url);
   return parsePages(await res.json());
 }
