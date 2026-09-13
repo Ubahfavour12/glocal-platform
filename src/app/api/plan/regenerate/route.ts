@@ -1,3 +1,5 @@
+import { checkRateLimit, retryAfterSeconds } from "@/lib/net/rate-limit";
+import { log } from "@/lib/log";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { runForBusiness, type BizRow } from "@/lib/orchestrator/run-business";
@@ -32,6 +34,17 @@ export async function POST(req: NextRequest) {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) {
     return NextResponse.json({ error: "sign in first" }, { status: 401 });
+  }
+
+  // Rate limited because this route spends OUR money on every call. Scoped to
+  // the signed-in user so one person's loop cannot lock anyone else out.
+  const limit = await checkRateLimit("regenerate", userData.user.id);
+  if (!limit.allowed) {
+    log.warn("ratelimit.blocked", { route: "regenerate", userId: userData.user.id, count: limit.count });
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a moment and try again." },
+      { status: 429, headers: { "Retry-After": String(retryAfterSeconds("regenerate")) } },
+    );
   }
 
   const body = (await req.json().catch(() => null)) as

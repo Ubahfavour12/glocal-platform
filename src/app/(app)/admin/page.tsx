@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { configuredFounders, isFounder } from "@/lib/admin/access";
+import { economicsTotals, rankByMargin, type CustomerCosts } from "@/lib/admin/economics";
 import {
   HEALTH_LABEL,
   health,
@@ -62,7 +63,8 @@ export default async function AdminPage() {
 
   const svc = createServiceClient();
 
-  const [bizRes, walletRes, adsRes, journalRes, wdRes] = await Promise.all([
+  const [bizRes, walletRes, adsRes, journalRes, wdRes, creativeRes, subRes, markupRes, walletIdRes] =
+    await Promise.all([
     svc
       .from("businesses")
       .select("id, name, plan, currency, daily_budget_usd_minor, owner_id, created_at")
@@ -82,6 +84,13 @@ export default async function AdminPage() {
       .select("id, business_id, amount_usd_minor, status, requested_at, settled_at, note")
       .order("requested_at", { ascending: false })
       .limit(50),
+    // What serving each customer costs us. Recorded per creative since 0020;
+    // never added up until now, which is how "the markup IS the business model"
+    // and "we do not know our cost per customer" coexisted.
+    svc.from("creatives").select("business_id, render_cost_usd_minor"),
+    svc.from("subscriptions").select("business_id, tier, active"),
+    svc.from("ledger_entries").select("wallet_id, kind, amount_usd_minor").eq("kind", "markup_fee"),
+    svc.from("wallets").select("id, business_id"),
   ]);
 
   const businesses = bizRes.data ?? [];
@@ -132,6 +141,47 @@ export default async function AdminPage() {
     .slice(0, 25);
   const nameOf = new Map(rows.map((r) => [r.businessId, r.name]));
   const withdrawals = wdRes.data ?? [];
+
+  // Render cost and render count per business.
+  const renderCost = new Map<string, { usdMinor: number; count: number }>();
+  for (const c of creativeRes.data ?? []) {
+    const k = c.business_id as string;
+    const prev = renderCost.get(k) ?? { usdMinor: 0, count: 0 };
+    renderCost.set(k, {
+      usdMinor: prev.usdMinor + Number(c.render_cost_usd_minor ?? 0),
+      count: prev.count + 1,
+    });
+  }
+  const subs = new Map<string, { tier: string; active: boolean }>(
+    (subRes.data ?? []).map((r) => [
+      r.business_id as string,
+      { tier: (r.tier as string) ?? "free", active: Boolean(r.active) },
+    ]),
+  );
+  // Markup is recorded against a wallet, so it needs the wallet→business hop.
+  const walletOwner = new Map<string, string>(
+    (walletIdRes.data ?? []).map((w) => [w.id as string, w.business_id as string]),
+  );
+  const markup = new Map<string, number>();
+  for (const e of markupRes.data ?? []) {
+    const biz = walletOwner.get(e.wallet_id as string);
+    if (!biz) continue;
+    // Markup is a debit on the customer's wallet, so it is stored negative.
+    // Revenue to us is its magnitude.
+    markup.set(biz, (markup.get(biz) ?? 0) + Math.abs(Number(e.amount_usd_minor ?? 0)));
+  }
+
+  const costRows: CustomerCosts[] = rows.map((r) => ({
+    businessId: r.businessId,
+    name: r.name,
+    tier: r.plan,
+    renderCostUsdMinor: renderCost.get(r.businessId)?.usdMinor ?? 0,
+    renderCount: renderCost.get(r.businessId)?.count ?? 0,
+    markupRevenueUsdMinor: markup.get(r.businessId) ?? 0,
+    subscribed: subs.get(r.businessId)?.active ?? false,
+  }));
+  const margins = rankByMargin(costRows).filter((m) => m.costUsdMinor > 0 || m.revenueUsdMinor > 0);
+  const econ = economicsTotals(costRows);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -198,6 +248,49 @@ export default async function AdminPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-6 rounded-card border border-line bg-surface-raised p-5">
+        <div className="datalabel">what each customer costs to serve</div>
+        <p className="mt-2 text-sm text-ink-muted">
+          Renders bill per generation and the subscription is fixed, so a heavy
+          renderer can cost more than they pay. Worst margin first.
+        </p>
+        <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[
+            { k: "Revenue", v: usd(econ.revenueUsdMinor) },
+            { k: "Render cost", v: usd(econ.costUsdMinor) },
+            { k: "Margin", v: usd(econ.marginUsdMinor) },
+            { k: "Underwater", v: String(econ.underwaterCount) },
+          ].map((s2) => (
+            <div key={s2.k}>
+              <div className="datalabel">{s2.k}</div>
+              <div className="mt-0.5 text-lg font-semibold text-ink">{s2.v}</div>
+            </div>
+          ))}
+        </div>
+        {margins.length === 0 ? (
+          <p className="mt-4 text-sm text-ink-faint">
+            Nothing rendered and nothing charged yet.
+          </p>
+        ) : (
+          <ul className="mt-4 flex flex-col gap-2">
+            {margins.map((m) => (
+              <li key={m.businessId} className="text-sm">
+                <span className="text-ink">{m.name}</span>
+                <span className="mx-2 text-ink-faint">·</span>
+                <span className={m.underwater ? "text-negative" : "text-positive"}>
+                  {m.underwater ? "costs more than they pay" : usd(m.marginUsdMinor)}
+                </span>
+                <span className="mx-2 text-ink-faint">·</span>
+                <span className="text-ink-faint">
+                  {m.renderCount} render{m.renderCount === 1 ? "" : "s"} ={" "}
+                  {usd(m.costUsdMinor)} · pays {usd(m.revenueUsdMinor)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="mt-6 rounded-card border border-line bg-surface-raised p-5">
