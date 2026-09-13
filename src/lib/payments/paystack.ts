@@ -19,6 +19,7 @@
  *     and nothing to leave empty by accident.
  */
 
+import { fetchWithTimeout } from "@/lib/net/fetch";
 import {
   constantTimeEquals,
   hmacSha512Hex,
@@ -41,7 +42,7 @@ export function isConfigured(): boolean {
 }
 
 async function ps<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API}${path}`, {
+  const res = await fetchWithTimeout(`${API}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${secretKey()}`,

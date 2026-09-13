@@ -7,6 +7,7 @@
  * fixture-tested; live token exchange is thin.
  */
 
+import { fetchWithTimeout } from "@/lib/net/fetch";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 export const SHOPIFY_SCOPES = ["read_orders"];
@@ -95,7 +96,7 @@ export async function exchangeShopifyToken(
   shop: string,
   code: string,
 ): Promise<{ accessToken: string; scope: string }> {
-  const res = await fetch(`https://${shop}/admin/oauth/access_token`, {
+  const res = await fetchWithTimeout(`https://${shop}/admin/oauth/access_token`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ client_id: cfg.apiKey, client_secret: cfg.apiSecret, code }),

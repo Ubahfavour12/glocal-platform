@@ -5,6 +5,7 @@
  * swap happens here only, the rest of the app consumes RateSnapshot).
  */
 
+import { fetchWithTimeout } from "@/lib/net/fetch";
 import type { RateSnapshot } from "./fx";
 
 const SOURCE = "https://open.er-api.com/v6/latest/USD";
@@ -44,7 +45,7 @@ export async function fetchUsdRate(
   if (cached && now.getTime() - cached.fetchedAt.getTime() < CACHE_TTL_MS) {
     return cached;
   }
-  const res = await fetch(SOURCE, { next: { revalidate: 3600 } });
+  const res = await fetchWithTimeout(SOURCE, { next: { revalidate: 3600 } });
   if (!res.ok) throw new Error(`FX provider unreachable (${res.status})`);
   const snapshot = parseRateResponse((await res.json()) as ErApiResponse, key, now);
   cache.set(key, snapshot);

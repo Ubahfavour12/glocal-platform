@@ -9,6 +9,7 @@
  * come from the same insights row, so we parse once and derive both.
  */
 
+import { fetchWithTimeout } from "@/lib/net/fetch";
 import type { MetaConfig } from "./client";
 import type { CandidateMetrics, DailyMetrics } from "@/lib/verdicts/verdict";
 
@@ -125,7 +126,7 @@ export async function fetchAdInsights(
   url.searchParams.set("time_range", JSON.stringify({ since: sinceIso, until: untilIso }));
   url.searchParams.set("access_token", cfg.accessToken);
 
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url);
   const data = (await res.json()) as InsightsResponse;
   if (data.error) throw new Error(`Meta insights ${adAccountId}: ${data.error.message}`);
   return (data.data ?? []).map(parseInsightRow);
