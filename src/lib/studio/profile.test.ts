@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  FREEFORM_KEY,
+  MAX_ENTRIES_PER_QUESTION,
   answeredCount,
   appendAnswer,
   buildStrategyContext,
+  contextNotes,
   isStudioStarted,
   latestAnswer,
   normaliseProfile,
-  MAX_ENTRIES_PER_QUESTION,
 } from "./profile";
 import type { StudioAnswers } from "./questions";
 
@@ -89,5 +91,40 @@ describe("accumulating brief", () => {
   it("stays empty when nothing has been answered", () => {
     expect(buildStrategyContext({})).toBe("");
     expect(buildStrategyContext(null)).toBe("");
+  });
+});
+
+describe("free-form context", () => {
+  it("reaches the agent's brief, not just the database", () => {
+    // The brief is built by walking STUDIO_QUESTIONS. Free-form notes are not a
+    // question, so without an explicit branch they would be stored faithfully
+    // and silently ignored — collected and never used, which is worse than not
+    // offering the box.
+    const profile = appendAnswer({}, FREEFORM_KEY, "Second shop open in Surulere", "2026-09-13");
+    const brief = buildStrategyContext(profile);
+    expect(brief).toContain("Surulere");
+  });
+
+  it("leads with the newest note and keeps older ones as background", () => {
+    let p = appendAnswer({}, FREEFORM_KEY, "Old news", "2026-09-01");
+    p = appendAnswer(p, FREEFORM_KEY, "Newest thing", "2026-09-13");
+    const brief = buildStrategyContext(p);
+    expect(brief.indexOf("Newest thing")).toBeLessThan(brief.indexOf("Old news"));
+  });
+
+  it("does not count as one of the ten questions", () => {
+    // The "n/10" counter must not creep up because someone added a note.
+    const p = appendAnswer({}, FREEFORM_KEY, "A note", "2026-09-13");
+    expect(answeredCount(p)).toBe(0);
+  });
+
+  it("returns notes newest-first for the absorbed list", () => {
+    let p = appendAnswer({}, FREEFORM_KEY, "First", "2026-09-01");
+    p = appendAnswer(p, FREEFORM_KEY, "Second", "2026-09-13");
+    expect(contextNotes(p).map((n) => n.text)).toEqual(["Second", "First"]);
+  });
+
+  it("produces no brief at all when there is nothing but empty notes", () => {
+    expect(buildStrategyContext(appendAnswer({}, FREEFORM_KEY, "   ", "x"))).toBe("");
   });
 });
