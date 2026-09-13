@@ -1,42 +1,23 @@
-import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { NextResponse } from "next/server";
 
 /**
- * Dev top-up (Task #3 scaffolding): credits small test amounts through the
- * capped `record_dev_topup` Postgres function. The real PSP checkout replaces
- * the body of this route; the contract (POST → ledger credit → new balance)
- * stays identical, so nothing downstream changes when Stripe/Flutterwave land.
+ * RETIRED — the dev top-up route.
+ *
+ * This credited capped test money straight into a wallet with no payment, which
+ * is exactly what you want while building a payments flow and exactly what you
+ * must not have once a real customer can reach it. It is how the `ubah` wallet
+ * came to hold $10,000 that does not exist.
+ *
+ * It is answered with 410 Gone rather than deleted outright so that anything
+ * still calling it — a cached page, a bookmark, an old client — gets a clear
+ * answer instead of a 404 that reads like a routing bug.
+ *
+ * `record_dev_topup` still exists in the database. Removing it is a migration
+ * and a separate decision; what matters is that nothing reachable calls it.
  */
-export async function POST(req: NextRequest) {
-  const supabase = await createClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) {
-    return NextResponse.json({ error: "sign in first" }, { status: 401 });
-  }
-
-  const body = (await req.json().catch(() => null)) as
-    | { business_id?: string; usd_minor?: number }
-    | null;
-  if (!body?.business_id || !Number.isInteger(body.usd_minor) || body.usd_minor! <= 0) {
-    return NextResponse.json({ error: "business_id and positive usd_minor required" }, { status: 400 });
-  }
-
-  const { error } = await supabase.rpc("record_dev_topup", {
-    p_business_id: body.business_id,
-    p_usd_minor: body.usd_minor,
-  });
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
-  }
-
-  const { data: balance } = await supabase
-    .from("wallet_balances")
-    .select("balance_usd_minor")
-    .eq("business_id", body.business_id)
-    .maybeSingle();
-
-  return NextResponse.json({
-    ok: true,
-    balance_usd_minor: balance?.balance_usd_minor ?? null,
-  });
+export async function POST() {
+  return NextResponse.json(
+    { error: "Test top-ups have been removed. Add funds with a card instead." },
+    { status: 410 },
+  );
 }

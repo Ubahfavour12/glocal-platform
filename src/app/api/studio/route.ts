@@ -1,3 +1,5 @@
+import { checkRateLimit, retryAfterSeconds } from "@/lib/net/rate-limit";
+import { log } from "@/lib/log";
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { STUDIO_QUESTIONS, type StudioAnswers } from "@/lib/studio/questions";
@@ -21,6 +23,17 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ ok: false }, { status: 401 });
 
+
+  // Rate limited because this route spends OUR money on every call. Scoped to
+  // the signed-in user so one person's loop cannot lock anyone else out.
+  const limit = await checkRateLimit("studioSave", user.id);
+  if (!limit.allowed) {
+    log.warn("ratelimit.blocked", { route: "studioSave", userId: user.id, count: limit.count });
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a moment and try again." },
+      { status: 429, headers: { "Retry-After": String(retryAfterSeconds("studioSave")) } },
+    );
+  }
   let body: { answers?: StudioAnswers };
   try {
     body = (await req.json()) as { answers?: StudioAnswers };
