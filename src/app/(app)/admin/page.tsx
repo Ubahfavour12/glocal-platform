@@ -24,6 +24,14 @@ const when = (iso: string | null) => {
   return `${days}d ago`;
 };
 
+/** Open far longer than a refund should take. Module scope, like `when`, so it
+ *  is not an impure call inside the render body. */
+const STUCK_AFTER_DAYS = 3;
+function isStuck(status: string, requestedAt: string): boolean {
+  if (status !== "requested") return false;
+  return Date.now() - new Date(requestedAt).getTime() > STUCK_AFTER_DAYS * 86_400_000;
+}
+
 const TONE: Record<string, string> = {
   spending: "text-positive",
   ready: "text-accent-bright",
@@ -204,9 +212,7 @@ export default async function AdminPage() {
           <ul className="mt-4 flex flex-col gap-2.5">
             {withdrawals.map((w) => {
               const open = String(w.status) === "requested";
-              const stale =
-                open &&
-                Date.now() - new Date(w.requested_at as string).getTime() > 3 * 86_400_000;
+              const stale = isStuck(String(w.status), w.requested_at as string);
               return (
                 <li key={w.id as string} className="text-sm leading-relaxed">
                   <span className="text-ink">{nameOf.get(w.business_id as string) ?? "—"}</span>
@@ -215,7 +221,7 @@ export default async function AdminPage() {
                   <span className="mx-2 text-ink-faint">·</span>
                   <span className={stale ? "text-negative" : open ? "text-accent-bright" : "text-positive"}>
                     {String(w.status)}
-                    {stale ? " — stuck, older than 3 days" : ""}
+                    {stale ? ` — stuck, older than ${STUCK_AFTER_DAYS} days` : ""}
                   </span>
                   <span className="mx-2 text-ink-faint">·</span>
                   <span className="text-ink-faint">
