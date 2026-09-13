@@ -12,6 +12,7 @@
  * the image-to-image slug is the one field still confirmed at first live run.
  */
 
+import { fetchWithTimeout, LONG_TIMEOUT_MS } from "@/lib/net/fetch";
 const DEFAULT_BASE = "https://platform.higgsfield.ai";
 
 export interface HiggsfieldConfig {
@@ -183,7 +184,8 @@ export async function submitRender(
   input: RenderConceptInput,
 ): Promise<RenderStatus> {
   const req = buildRenderRequest(input);
-  const res = await fetch(`${cfg.baseUrl}${endpointFor(input.kind)}`, {
+  const res = await fetchWithTimeout(`${cfg.baseUrl}${endpointFor(input.kind)}`, {
+    timeoutMs: LONG_TIMEOUT_MS,
     method: "POST",
     headers: { authorization: `Key ${cfg.credentials}`, "content-type": "application/json" },
     body: JSON.stringify(toHiggsfieldBody(req)),
@@ -194,7 +196,8 @@ export async function submitRender(
 }
 
 export async function pollRender(cfg: HiggsfieldConfig, jobId: string): Promise<RenderStatus> {
-  const res = await fetch(`${cfg.baseUrl}/requests/${jobId}/status`, {
+  const res = await fetchWithTimeout(`${cfg.baseUrl}/requests/${jobId}/status`, {
+    timeoutMs: LONG_TIMEOUT_MS,
     headers: { authorization: `Key ${cfg.credentials}` },
   });
   const data = (await res.json()) as RawStatus & { message?: string };

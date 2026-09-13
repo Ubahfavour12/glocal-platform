@@ -36,6 +36,7 @@
  * is the mistake that would otherwise take real money to a test ledger.
  */
 
+import { fetchWithTimeout } from "@/lib/net/fetch";
 import {
   constantTimeEquals,
   hmacSha512Hex,
@@ -106,7 +107,7 @@ export function resetTokenCache(): void {
 
 async function login(): Promise<string> {
   const basic = Buffer.from(`${apiKey()}:${secretKey()}`, "utf8").toString("base64");
-  const res = await fetch(`${baseUrl()}/api/v1/auth/login`, {
+  const res = await fetchWithTimeout(`${baseUrl()}/api/v1/auth/login`, {
     method: "POST",
     headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/json" },
     body: "{}",
@@ -138,7 +139,7 @@ async function token(): Promise<string> {
 }
 
 async function mnfy<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${baseUrl()}${path}`, {
+  const res = await fetchWithTimeout(`${baseUrl()}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${await token()}`,

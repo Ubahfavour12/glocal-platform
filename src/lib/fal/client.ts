@@ -18,6 +18,7 @@
  * every few months, and swapping one should be an env change, not a deploy.
  */
 
+import { fetchWithTimeout, LONG_TIMEOUT_MS } from "@/lib/net/fetch";
 const DEFAULT_BASE = "https://queue.fal.run";
 
 /** Image-to-image: the customer's product photo is always the starting point. */
@@ -208,7 +209,8 @@ export async function submitRender(
   input: RenderConceptInput,
 ): Promise<RenderStatus> {
   const model = modelFor(cfg, input.kind);
-  const res = await fetch(`${cfg.baseUrl}/${model}`, {
+  const res = await fetchWithTimeout(`${cfg.baseUrl}/${model}`, {
+    timeoutMs: LONG_TIMEOUT_MS,
     method: "POST",
     headers: headers(cfg),
     body: JSON.stringify(buildFalBody(input)),
@@ -230,7 +232,8 @@ export async function pollRender(
   kind: CreativeKind = "image",
 ): Promise<RenderStatus> {
   const model = modelFor(cfg, kind);
-  const res = await fetch(`${cfg.baseUrl}/${model}/requests/${jobId}/status`, {
+  const res = await fetchWithTimeout(`${cfg.baseUrl}/${model}/requests/${jobId}/status`, {
+    timeoutMs: LONG_TIMEOUT_MS,
     headers: headers(cfg),
   });
   const data = (await res.json().catch(() => ({}))) as RawStatus & { message?: string };
@@ -240,7 +243,8 @@ export async function pollRender(
   const status = parseRenderStatus(data, jobId);
   if (status.state !== "done") return status;
 
-  const resultRes = await fetch(`${cfg.baseUrl}/${model}/requests/${jobId}`, {
+  const resultRes = await fetchWithTimeout(`${cfg.baseUrl}/${model}/requests/${jobId}`, {
+    timeoutMs: LONG_TIMEOUT_MS,
     headers: headers(cfg),
   });
   const result = (await resultRes.json().catch(() => ({}))) as RawStatus;

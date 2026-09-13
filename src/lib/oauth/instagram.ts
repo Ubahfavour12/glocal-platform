@@ -11,6 +11,7 @@
  * Gated on the Instagram app being configured + App Review, same as Meta.
  */
 
+import { fetchWithTimeout } from "@/lib/net/fetch";
 const AUTHORIZE = "https://www.instagram.com/oauth/authorize";
 const TOKEN = "https://api.instagram.com/oauth/access_token";
 const GRAPH = "https://graph.instagram.com";
@@ -97,7 +98,7 @@ export async function exchangeInstagramCode(
     redirect_uri: cfg.redirectUri,
     code,
   });
-  const res = await fetch(TOKEN, {
+  const res = await fetchWithTimeout(TOKEN, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body,
@@ -113,7 +114,7 @@ export async function exchangeInstagramLongLived(
   url.searchParams.set("grant_type", "ig_exchange_token");
   url.searchParams.set("client_secret", cfg.appSecret);
   url.searchParams.set("access_token", shortToken);
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url);
   return parseLongToken(await res.json());
 }
 
@@ -123,7 +124,7 @@ export async function fetchInstagramProfile(
   const url = new URL(`${GRAPH}/me`);
   url.searchParams.set("fields", "id,username");
   url.searchParams.set("access_token", token);
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url);
   const data = (await res.json()) as { id?: string; username?: string };
   return { id: data.id ?? "", username: data.username ?? "" };
 }

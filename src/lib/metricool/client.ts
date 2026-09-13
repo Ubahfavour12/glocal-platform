@@ -6,6 +6,7 @@
  * confirmed at integration (same confirm-at-purchase approach as pricing).
  */
 
+import { fetchWithTimeout } from "@/lib/net/fetch";
 const BASE = "https://app.metricool.com/api";
 
 export interface MetricoolConfig {
@@ -101,7 +102,7 @@ export async function schedulePost(
   url.searchParams.set("userId", cfg.userId);
   url.searchParams.set("userToken", cfg.userToken);
 
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(buildPostPayload(post, publishAtIso, timezone)),

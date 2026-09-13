@@ -5,6 +5,7 @@
  * that matter. Costs are real per token, so callers keep prompts tight.
  */
 
+import { fetchWithTimeout, LONG_TIMEOUT_MS } from "@/lib/net/fetch";
 const API = "https://api.anthropic.com/v1/messages";
 
 export const MODELS = {
@@ -35,7 +36,8 @@ interface MessagesResponse {
 
 /** Single-turn call returning the assistant's text. */
 export async function callClaude(call: ClaudeCall): Promise<string> {
-  const res = await fetch(API, {
+  const res = await fetchWithTimeout(API, {
+    timeoutMs: LONG_TIMEOUT_MS,
     method: "POST",
     headers: {
       "x-api-key": apiKey(),

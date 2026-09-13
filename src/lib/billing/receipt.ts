@@ -7,6 +7,7 @@
  * NEVER break the money path, so every send helper swallows its own errors.
  */
 
+import { fetchWithTimeout } from "@/lib/net/fetch";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export interface ReceiptInput {
@@ -90,7 +91,7 @@ export async function sendReceiptEmail(
   if (!key) return { sent: false, reason: "no RESEND_API_KEY" };
   const from = process.env.RECEIPT_FROM_EMAIL ?? "Glocal <receipts@useglocal.ai>";
   try {
-    const res = await fetch("https://api.resend.com/emails", {
+    const res = await fetchWithTimeout("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({ from, to, subject: receipt.subject, text: receipt.text, html: receipt.html }),

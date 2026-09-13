@@ -9,6 +9,7 @@
  * Free daily quota 10,000 units → keyword searches are the scarce resource.
  */
 
+import { fetchWithTimeout } from "@/lib/net/fetch";
 const API = "https://www.googleapis.com/youtube/v3";
 
 export interface ViralVideo {
@@ -65,7 +66,7 @@ async function yt<T>(path: string, params: Record<string, string>, apiKey: strin
   const url = new URL(`${API}/${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   url.searchParams.set("key", apiKey);
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url);
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`YouTube API ${path} failed (${res.status}): ${body.slice(0, 300)}`);
