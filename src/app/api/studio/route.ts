@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { STUDIO_QUESTIONS, type StudioAnswers } from "@/lib/studio/questions";
-import { appendAnswer, normaliseProfile } from "@/lib/studio/profile";
+import { FREEFORM_KEY, appendAnswer, normaliseProfile } from "@/lib/studio/profile";
 
 /**
  * Save Strategy Studio answers. RLS-scoped to the owner's business.
@@ -28,7 +28,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: "bad json" }, { status: 400 });
   }
 
-  const ids = new Set(STUDIO_QUESTIONS.map((q) => q.id));
+  // The ten questions, plus the reserved free-form key. Everything else is
+  // dropped rather than stored, so a crafted request cannot bloat the row.
+  const ids = new Set<string>([...STUDIO_QUESTIONS.map((q) => q.id), FREEFORM_KEY]);
   const incoming: StudioAnswers = {};
   for (const [k, v] of Object.entries(body.answers ?? {})) {
     if (!ids.has(k)) continue;
