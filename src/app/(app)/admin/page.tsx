@@ -54,7 +54,7 @@ export default async function AdminPage() {
 
   const svc = createServiceClient();
 
-  const [bizRes, walletRes, adsRes, journalRes] = await Promise.all([
+  const [bizRes, walletRes, adsRes, journalRes, wdRes] = await Promise.all([
     svc
       .from("businesses")
       .select("id, name, plan, currency, daily_budget_usd_minor, owner_id, created_at")
@@ -66,6 +66,14 @@ export default async function AdminPage() {
       .select("business_id, entry_type, content, created_at")
       .order("created_at", { ascending: false })
       .limit(400),
+    // Money leaving the platform. Shown whatever its state, because a
+    // withdrawal that is quietly stuck is the worst kind: the customer is out
+    // of pocket and nothing anywhere is complaining.
+    svc
+      .from("withdrawals")
+      .select("id, business_id, amount_usd_minor, status, requested_at, settled_at, note")
+      .order("requested_at", { ascending: false })
+      .limit(50),
   ]);
 
   const businesses = bizRes.data ?? [];
@@ -115,6 +123,7 @@ export default async function AdminPage() {
     .filter((j) => /fail|error|skip|reject|insufficient|awaiting/i.test(String(j.entry_type)))
     .slice(0, 25);
   const nameOf = new Map(rows.map((r) => [r.businessId, r.name]));
+  const withdrawals = wdRes.data ?? [];
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -181,6 +190,45 @@ export default async function AdminPage() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="mt-6 rounded-card border border-line bg-surface-raised p-5">
+        <div className="datalabel">withdrawals</div>
+        <p className="mt-2 text-sm text-ink-muted">
+          Money going back to customers. Refunds return to the card that paid in, sent by
+          the daily job; a request closes itself once none are still in flight.
+        </p>
+        {withdrawals.length === 0 ? (
+          <p className="mt-4 text-sm text-ink-faint">Nobody has asked for money back.</p>
+        ) : (
+          <ul className="mt-4 flex flex-col gap-2.5">
+            {withdrawals.map((w) => {
+              const open = String(w.status) === "requested";
+              const stale =
+                open &&
+                Date.now() - new Date(w.requested_at as string).getTime() > 3 * 86_400_000;
+              return (
+                <li key={w.id as string} className="text-sm leading-relaxed">
+                  <span className="text-ink">{nameOf.get(w.business_id as string) ?? "—"}</span>
+                  <span className="mx-2 text-ink-faint">·</span>
+                  <span className="text-ink-muted">{usd(Number(w.amount_usd_minor ?? 0))}</span>
+                  <span className="mx-2 text-ink-faint">·</span>
+                  <span className={stale ? "text-negative" : open ? "text-accent-bright" : "text-positive"}>
+                    {String(w.status)}
+                    {stale ? " — stuck, older than 3 days" : ""}
+                  </span>
+                  <span className="mx-2 text-ink-faint">·</span>
+                  <span className="text-ink-faint">
+                    asked {when(w.requested_at as string)}
+                  </span>
+                  {w.note ? (
+                    <div className="mt-0.5 text-xs text-ink-muted">{String(w.note)}</div>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
 
       <div className="mt-6 rounded-card border border-line bg-surface-raised p-5">
