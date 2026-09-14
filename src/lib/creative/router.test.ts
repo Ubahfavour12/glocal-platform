@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { preferenceFor, routeRender } from "./router";
 import type { RenderEngine } from "./engine";
 
-const engine = (name: "fal" | "higgsfield"): RenderEngine => ({
+const engine = (name: "fal" | "higgsfield"): RenderEngine => ({ modelFor: () => "test/model",
   name,
   submit: async () => ({ state: "queued", jobId: "j" }) as never,
   poll: async () => ({ state: "queued", jobId: "j" }) as never,

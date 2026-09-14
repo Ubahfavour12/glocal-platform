@@ -108,7 +108,16 @@ export function renderCreativeLive(supabase: SupabaseClient) {
       // wins on real money, so tagging the maker turns those verdicts into
       // engine evidence without running a single extra experiment.
       persist: (conceptId, mediaUrl) =>
-        persistRenderedCreative(supabase, businessId, conceptId, mediaUrl, usedEngine.name, kind),
+        persistRenderedCreative(
+          supabase,
+          businessId,
+          conceptId,
+          mediaUrl,
+          usedEngine.name,
+          kind,
+          usedEngine.modelFor(kind),
+          promptFromConcept(concept.hook, []),
+        ),
     };
 
     const summary = await renderConcepts(
