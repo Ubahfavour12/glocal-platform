@@ -8,24 +8,23 @@
  * Thin Supabase Storage bindings around a couple of pure, tested helpers.
  */
 
+import { recordGeneration } from "@/lib/compliance/generation-log";
+import { ALLOWED, extensionOf, validateUpload } from "./validate";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { renderCostUsdMinor } from "@/lib/creative/pricing";
 import type { RenderKind } from "@/lib/creative/quota";
 
 export const MEDIA_BUCKET = "product-media";
 
-const EXT_OK = new Set(["jpg", "jpeg", "png", "webp", "mp4", "mov", "webm"]);
-
 /** Pure: safe storage path `${businessId}/${random}.${ext}`, ext validated. */
 export function mediaStoragePath(businessId: string, filename: string, rand: string): string {
-  const ext = (filename.split(".").pop() ?? "").toLowerCase();
-  if (!EXT_OK.has(ext)) throw new Error(`unsupported media type: .${ext}`);
+  const ext = extensionOf(filename);
+  if (!ALLOWED[ext]) throw new Error(`unsupported media type: .${ext}`);
   return `${businessId}/${rand}.${ext}`;
 }
 
 export function kindFromFilename(filename: string): "image" | "video" {
-  const ext = (filename.split(".").pop() ?? "").toLowerCase();
-  return ["mp4", "mov", "webm"].includes(ext) ? "video" : "image";
+  return ALLOWED[extensionOf(filename)]?.kind ?? "image";
 }
 
 export interface MediaAsset {
@@ -41,12 +40,19 @@ export async function uploadProductMedia(
   businessId: string,
   file: File,
 ): Promise<MediaAsset> {
-  const path = mediaStoragePath(businessId, file.name, crypto.randomUUID());
-  const kind = kindFromFilename(file.name);
+  const check = validateUpload(file);
+  if (!check.ok) throw new Error(check.message);
 
-  const { error: upErr } = await supabase.storage
-    .from(MEDIA_BUCKET)
-    .upload(path, file, { upsert: false, contentType: file.type });
+  const path = mediaStoragePath(businessId, file.name, crypto.randomUUID());
+  const kind = check.kind;
+
+  const { error: upErr } = await supabase.storage.from(MEDIA_BUCKET).upload(path, file, {
+    upsert: false,
+    // DERIVED from the validated extension, never `file.type`. The browser's
+    // claim about its own file is attacker-controlled, and this bucket is
+    // public: a file served as text/html from our domain runs JavaScript.
+    contentType: check.contentType,
+  });
   if (upErr) throw new Error(upErr.message);
 
   const { data: pub } = supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path);
@@ -115,15 +121,43 @@ export async function persistRenderedCreative(
   engine?: "fal" | "higgsfield",
   /** What it cost, so the video economics stop being a guess in a chat log. */
   kind?: RenderKind,
+  /** The exact model slug, for the AI Act record. "fal" is not an answer. */
+  model?: string,
+  /** The brief this came from; hashed and excerpted by the generation log. */
+  prompt?: string,
 ): Promise<void> {
-  await supabase.from("creatives").insert({
-    business_id: businessId,
-    concept_id: conceptId,
-    state: "ready",
-    media_url: mediaUrl,
-    ...(engine ? { engine } : {}),
-    ...(engine && kind
-      ? { render_cost_usd_minor: renderCostUsdMinor(engine, kind) }
-      : {}),
-  });
+  const cost = engine && kind ? renderCostUsdMinor(engine, kind) : null;
+
+  const { data } = await supabase
+    .from("creatives")
+    .insert({
+      business_id: businessId,
+      concept_id: conceptId,
+      state: "ready",
+      media_url: mediaUrl,
+      ...(engine ? { engine } : {}),
+      ...(cost !== null ? { render_cost_usd_minor: cost } : {}),
+    })
+    .select("id")
+    .single();
+
+  // The AI Act record. Written here rather than inside each engine because
+  // this is the one point every finished render passes through, whichever
+  // engine made it -- an engine added later is logged without remembering to.
+  //
+  // Never awaited into the caller's failure path: a creative that exists but is
+  // unlogged is a gap in evidence, one that failed because the log was down is
+  // a broken product. recordGeneration swallows its own errors and reports them.
+  if (engine) {
+    await recordGeneration(supabase, {
+      businessId,
+      creativeId: (data?.id as string | undefined) ?? null,
+      provider: engine,
+      model: model ?? engine,
+      kind: kind === "video" ? "video" : "image",
+      input: prompt ?? null,
+      outputRef: mediaUrl,
+      costUsdMinor: cost,
+    });
+  }
 }

@@ -11,7 +11,8 @@ const input = {
 };
 
 function engine(name: "fal" | "higgsfield", submit: () => Promise<RenderStatus>): RenderEngine {
-  return { name, submit, poll: async () => ({ jobId: "j", state: "done" }) };
+  return { modelFor: () => "test/model",
+  name, submit, poll: async () => ({ jobId: "j", state: "done" }) };
 }
 
 const ok = (): Promise<RenderStatus> => Promise.resolve({ jobId: "j1", state: "queued" });
