@@ -20,6 +20,12 @@ export type EngineName = "fal" | "higgsfield";
 
 export interface RenderEngine {
   name: EngineName;
+  /**
+   * The exact model slug for a given kind, for the AI Act generation log.
+   * The vendor name is not an answer to "which model produced this" — models
+   * are swapped by env var, so the record has to name the one that actually ran.
+   */
+  modelFor: (kind: CreativeKind) => string;
   submit: (input: RenderConceptInput) => Promise<RenderStatus>;
   poll: (jobId: string, kind: CreativeKind) => Promise<RenderStatus>;
 }
@@ -34,6 +40,7 @@ export function falEngine(): RenderEngine | null {
   }
   return {
     name: "fal",
+    modelFor: (kind) => fal.modelFor(cfg, kind),
     submit: (input) => fal.submitRender(cfg, input),
     poll: (jobId, kind) => fal.pollRender(cfg, jobId, kind),
   };
@@ -49,6 +56,9 @@ export function higgsfieldEngine(): RenderEngine | null {
   }
   return {
     name: "higgsfield",
+    // Higgsfield exposes no per-kind model slug; the vendor plus kind is the
+    // most specific true answer available, and saying so beats inventing one.
+    modelFor: (kind) => `higgsfield/${kind}`,
     submit: async (input) => higgsfield.submitRender(cfg, input),
     // Higgsfield polls by job id alone; the kind is irrelevant to its endpoint.
     poll: async (jobId) => higgsfield.pollRender(cfg, jobId),
