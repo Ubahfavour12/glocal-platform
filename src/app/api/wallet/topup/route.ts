@@ -12,8 +12,15 @@ import { NextResponse } from "next/server";
  * still calling it — a cached page, a bookmark, an old client — gets a clear
  * answer instead of a 404 that reads like a routing bug.
  *
- * `record_dev_topup` still exists in the database. Removing it is a migration
- * and a separate decision; what matters is that nothing reachable calls it.
+ * Retiring this route was NOT enough on its own, and the earlier note here
+ * claiming "what matters is that nothing reachable calls it" was wrong.
+ * PostgREST publishes every function in `public` that has EXECUTE granted, at
+ * /rest/v1/rpc/<name>. `record_dev_topup` was still granted to `authenticated`,
+ * so it stayed callable directly with the publishable key in the browser bundle
+ * and any signed-in session — this route was never what stood in the way.
+ * Migration 0030 revokes EXECUTE from every role, which is what actually closed
+ * it. The lesson generalises: deleting a Next.js route does not remove a
+ * database function from the API surface.
  */
 export async function POST() {
   return NextResponse.json(

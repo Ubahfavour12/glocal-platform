@@ -43,3 +43,9 @@ yarn-error.log*
 next-env.d.ts
 
 .vercel
+
+# Database exports. `npm run backup` writes here: every business, every user
+# row, and the whole money ledger in plain JSON. It must never reach a remote,
+# not even a private one — a backup is only a backup if it lives somewhere you
+# control, and a git history is forever.
+/backups
