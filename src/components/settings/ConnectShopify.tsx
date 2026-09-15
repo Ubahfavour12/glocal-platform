@@ -24,6 +24,13 @@ export function ConnectShopify({ connected }: { connected: string | null }) {
   function connect() {
     const clean = shop.trim();
     if (!clean) return;
+    // A real browser navigation, not router.push(). Next 16.3 added a lint rule
+    // steering relative destinations to the router, and it is right about pages
+    // and wrong about this one: /api/oauth/shopify/start is a Route Handler
+    // whose whole job is to 302 the browser OUT to the customer's own Shopify
+    // admin to authorize. The router navigates within the app and would not
+    // follow that hand-off, which would break the connect flow silently.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.href = `/api/oauth/shopify/start?shop=${encodeURIComponent(clean)}`;
   }
 
