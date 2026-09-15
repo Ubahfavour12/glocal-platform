@@ -31,6 +31,7 @@ import { createHash } from "node:crypto";
 // the code that RUNS is then the code that is tested, rather than a compiled
 // cousin of it.
 import { verifyBackup } from "./lib/backup-integrity.mjs";
+import { restoreOrder } from "./lib/table-order.mjs";
 
 const URL_ = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -104,6 +105,26 @@ async function listTables() {
   return await res.json();
 }
 
+/** Foreign keys, so the manifest can record the order to put rows back in. */
+async function listDeps() {
+  const res = await fetch(`${URL_}/rest/v1/rpc/backup_table_deps`, {
+    method: "POST",
+    headers: {
+      apikey: KEY,
+      Authorization: `Bearer ${KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: "{}",
+  });
+  if (!res.ok) {
+    throw new Error(
+      `could not read foreign keys (${res.status}). Has migration 0031 been applied?`,
+    );
+  }
+  const rows = await res.json();
+  return rows.map((r) => ({ table: r.table_name, dependsOn: r.depends_on }));
+}
+
 async function dumpTable(table, pk) {
   const order = pk ? `&order=${encodeURIComponent(pk)}.asc` : "";
   const { rows, total } = await readAll(`${table}?select=*${order}`);
@@ -156,6 +177,7 @@ async function main() {
 
   const catalogue = await listTables();
   const tables = catalogue.map((t) => t.table_name);
+  const edges = await listDeps();
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const dir = join("backups", stamp);
   mkdirSync(dir, { recursive: true });
@@ -182,6 +204,10 @@ async function main() {
     projectUrl: URL_,
     tables: dumps.map((d) => ({ table: d.table, rows: d.rows.length })),
     schemaTables: tables,
+    // Recorded at backup time, on purpose. A restore then follows the order the
+    // schema had WHEN THE DUMP WAS TAKEN, rather than asking a database that may
+    // since have changed — or may, at the moment you need it, be gone.
+    restoreOrder: restoreOrder(tables, edges),
     balances,
     sha256: createHash("sha256")
       .update(dumps.map((d) => `${d.table}:${d.rows.length}`).join("|"))

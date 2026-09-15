@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "status": "node scripts/status.mjs",
-    "backup": "node scripts/backup.mjs"
+    "backup": "node scripts/backup.mjs",
+    "restore": "node scripts/restore.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
