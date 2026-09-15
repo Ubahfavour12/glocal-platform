@@ -1,14 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { Sidebar } from "./Sidebar";
 import { IconRail } from "./IconRail";
 import { TabBar } from "./TabBar";
 import { NotificationBell } from "./NotificationBell";
 import { ThemeToggle } from "./ThemeToggle";
 import { AskAgent } from "@/components/agent/AskAgent";
+import { createPersistedStore } from "@/lib/browser/persisted";
 
 const COLLAPSE_KEY = "glocal:nav-collapsed";
+
+/** Module scope: one store shared by every mount, so the value cannot diverge. */
+const collapseStore = createPersistedStore(COLLAPSE_KEY, (raw) => raw === "1", false);
 
 /**
  * Dashboard shell (Phase 3 polish). Holds the desktop sidebar's collapsed state
@@ -24,27 +28,18 @@ export function AppShell({
   children: React.ReactNode;
   awaitingApproval?: boolean;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
-
-  // Restore the saved preference after mount (localStorage is client-only).
-  useEffect(() => {
-    try {
-      setCollapsed(localStorage.getItem(COLLAPSE_KEY) === "1");
-    } catch {
-      /* private mode / unavailable — default to expanded */
-    }
-  }, []);
+  // Read through a store rather than useState + an effect. The effect version
+  // renders expanded, then re-renders collapsed from inside the effect — a
+  // cascading render the compiler rejects, and one you can see as the sidebar
+  // snaps shut a frame after paint.
+  const collapsed = useSyncExternalStore(
+    collapseStore.subscribe,
+    collapseStore.getSnapshot,
+    collapseStore.getServerSnapshot,
+  );
 
   function toggle() {
-    setCollapsed((c) => {
-      const next = !c;
-      try {
-        localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
+    collapseStore.set(!collapsed, (v) => (v ? "1" : "0"));
   }
 
   return (

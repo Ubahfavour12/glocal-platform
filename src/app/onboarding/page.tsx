@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { GlocalMark } from "@/components/brand/Logo";
 import { buildServiceGeo } from "@/lib/tracking/geo";
@@ -384,7 +384,12 @@ export default function OnboardingPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const [ownerId, setOwnerId] = useState<string | null>(null);
-  const draftRef = useRef<Draft | null>(null);
+  // State, not a ref. This value is READ DURING RENDER to draw the resume
+  // screen, and a ref read in render is invisible to React: nothing re-renders
+  // when it changes, so the screen can show a stale draft or none at all. It is
+  // written once, inside the hydration effect that already sets a dozen other
+  // fields, so making it state costs no extra render.
+  const [draft, setDraft] = useState<Draft | null>(null);
 
   /* -- restore a half-finished run, and infer what we can ---------------- */
 
@@ -416,7 +421,7 @@ export default function OnboardingPage() {
         if (d && d.ownerId && uid && d.ownerId !== uid) {
           localStorage.removeItem(DRAFT_KEY);
         } else if (d && typeof d.phase === "string" && FLOW.includes(d.phase)) {
-          draftRef.current = d;
+          setDraft(d);
           setName(d.name ?? "");
           setTrade(d.trade ?? "");
           setFoundedYear(d.foundedYear ?? "");
@@ -486,12 +491,20 @@ export default function OnboardingPage() {
 
   const goalOptions = useMemo(() => goalOptionsFor(door), [door]);
 
-  // Changing the door can strand the goal on something that door cannot
-  // report, so move it to the strongest signal the new door gives for free.
-  useEffect(() => {
-    if (!hydrated) return;
-    setGoal((g) => (g === null || isImpossible(g, door) ? defaultGoalFor(door) : g));
-  }, [hydrated, door]);
+  // Changing the door can strand the goal on something that door cannot report,
+  // so move it to the strongest signal the new door gives for free.
+  //
+  // Adjusted during render rather than in an effect. As an effect this painted
+  // one frame with the impossible goal still selected and then corrected it in
+  // a second render — a cascading render, and a visible one: the option you
+  // just made unavailable stays highlighted for a beat. Setting state during
+  // render of the same component is the pattern React documents for exactly
+  // this, and it re-runs before anything reaches the screen.
+  const [lastDoor, setLastDoor] = useState(door);
+  if (hydrated && door !== lastDoor) {
+    setLastDoor(door);
+    if (goal === null || isImpossible(goal, door)) setGoal(defaultGoalFor(door));
+  }
   const advice = budgetAdvice(dailyMinor);
 
   // Checked against the country's real numbering plan, so a missing digit or
@@ -673,8 +686,8 @@ export default function OnboardingPage() {
 
   /* -- returning mid-flow ------------------------------------------------ */
 
-  if (resuming && draftRef.current) {
-    const d = draftRef.current;
+  if (resuming && draft) {
+    const d = draft;
     const stopped = FLOW.indexOf(d.phase);
     const rows = [
       { label: "business name", value: d.name || "not yet", done: !!d.name },

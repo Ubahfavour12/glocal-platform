@@ -1,6 +1,7 @@
 /**
  * Live LaunchAdapters — binds the morning launcher to the Meta client and
- * Supabase. Resolves (or creates) the child ad account, page, and campaign,
+ * Supabase. Resolves (or creates) the child ad account and page, takes the
+ * campaign id from the launch context rather than creating one itself,
  * mints smart links from the business's connection door, and creates every
  * Meta object PAUSED. Meta's no-payment-method block (1359188) is caught and
  * reported as awaiting_payment, never thrown.
@@ -11,9 +12,7 @@ import {
   createLinkAdCreative,
   createPausedAd,
   createPausedAdSet,
-  createPausedCampaign,
   metaConfigFromEnv,
-  objectiveForGoal,
   type MetaConfig,
 } from "@/lib/meta/client";
 import { destinationUrl, type ConnectionMode } from "@/lib/tracking/modes";

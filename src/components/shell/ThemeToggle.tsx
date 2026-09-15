@@ -1,9 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
+import { createPersistedStore } from "@/lib/browser/persisted";
 
 export type ThemeChoice = "system" | "light" | "dark";
 export const THEME_KEY = "glocal:theme";
+
+/**
+ * Module scope, so every mount shares one store and the value cannot diverge.
+ * An unrecognised stored value falls back to "system" rather than being trusted
+ * — localStorage is editable by anyone with devtools open.
+ */
+const themeStore = createPersistedStore<ThemeChoice>(
+  THEME_KEY,
+  (raw) => (raw === "light" || raw === "dark" || raw === "system" ? raw : "system"),
+  "system",
+);
 
 /**
  * Theme control: system by default, with an explicit override that persists.
@@ -64,30 +76,24 @@ function Icon({ choice }: { choice: ThemeChoice }) {
 }
 
 export function ThemeToggle() {
-  const [choice, setChoice] = useState<ThemeChoice>("system");
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    let stored: ThemeChoice = "system";
-    try {
-      const v = localStorage.getItem(THEME_KEY);
-      if (v === "light" || v === "dark" || v === "system") stored = v;
-    } catch {
-      /* private mode: fall back to system */
-    }
-    setChoice(stored);
-    setReady(true);
-  }, []);
+  // A store rather than useState + an effect. The effect version renders the
+  // system default and then re-renders the saved choice from inside the effect,
+  // which is a cascading render — and on a theme toggle it is the visible kind:
+  // the wrong icon paints for a frame before correcting itself.
+  //
+  // `ready` is gone with it. It existed only to hide that first wrong paint,
+  // and the server snapshot now makes the first paint correct by construction,
+  // so there is nothing left to hide.
+  const choice = useSyncExternalStore(
+    themeStore.subscribe,
+    themeStore.getSnapshot,
+    themeStore.getServerSnapshot,
+  );
 
   function cycle() {
     const next = ORDER[(ORDER.indexOf(choice) + 1) % ORDER.length];
-    setChoice(next);
     applyTheme(next);
-    try {
-      localStorage.setItem(THEME_KEY, next);
-    } catch {
-      /* ignore */
-    }
+    themeStore.set(next);
   }
 
   return (
@@ -99,7 +105,7 @@ export function ThemeToggle() {
     >
       {/* Render nothing until the stored choice is known, so the icon cannot
           flash the wrong state on first paint. */}
-      {ready ? <Icon choice={choice} /> : <span className="h-4 w-4" />}
+      <Icon choice={choice} />
     </button>
   );
 }

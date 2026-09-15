@@ -23,25 +23,45 @@ export function NotificationBell() {
   const [unread, setUnread] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  async function load() {
-    try {
-      const res = await fetch("/api/notifications");
-      const data = (await res.json()) as { items: Item[] };
-      setItems(data.items ?? []);
-      const newest = data.items?.[0]?.at ?? null;
-      const seen = typeof window !== "undefined" ? localStorage.getItem(SEEN_KEY) : null;
-      setUnread(Boolean(newest) && newest !== seen);
-    } catch {
-      /* bell is best-effort */
-    } finally {
-      setLoaded(true);
-    }
-  }
-
+  // `load` lives INSIDE the effect, not in the component body. Declared outside
+  // it is a function the compiler sees called straight from an effect while
+  // calling setState, which it flags as a cascading render. It is also a fresh
+  // function on every render, so the interval would capture whichever copy
+  // happened to exist when the effect first ran — harmless today only because
+  // the dependency list is empty.
+  //
+  // `cancelled` guards the unmount case: a fetch in flight when the bell
+  // unmounts would otherwise setState on a component that is gone.
   useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      try {
+        const res = await fetch("/api/notifications");
+        const data = (await res.json()) as { items: Item[] };
+        if (cancelled) return;
+        setItems(data.items ?? []);
+        const newest = data.items?.[0]?.at ?? null;
+        let seen: string | null = null;
+        try {
+          seen = localStorage.getItem(SEEN_KEY);
+        } catch {
+          /* private mode: treat everything as unseen rather than failing */
+        }
+        setUnread(Boolean(newest) && newest !== seen);
+      } catch {
+        /* bell is best-effort */
+      } finally {
+        if (!cancelled) setLoaded(true);
+      }
+    }
+
     load();
     const id = setInterval(load, 90_000); // gentle refresh; no device push
-    return () => clearInterval(id);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, []);
 
   // Close on outside click or Escape.

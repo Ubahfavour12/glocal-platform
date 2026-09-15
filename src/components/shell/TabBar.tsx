@@ -23,7 +23,17 @@ export function TabBar({ awaitingApproval = false }: { awaitingApproval?: boolea
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
 
-  useEffect(() => setMoreOpen(false), [pathname]);
+  // Close the sheet when the route changes — adjusted during render, not in an
+  // effect. React documents this exact case: an effect would paint the new page
+  // with the old sheet still open and then close it in a second render, which
+  // is the cascading render the compiler rejects and which you can see as a
+  // flash of the menu over the page you just navigated to. Setting state during
+  // render of the SAME component is allowed and re-runs before anything paints.
+  const [lastPath, setLastPath] = useState(pathname);
+  if (pathname !== lastPath) {
+    setLastPath(pathname);
+    setMoreOpen(false);
+  }
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
