@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { log, requestId } from "@/lib/log";
+import { MEDIA_BUCKET } from "@/lib/media/storage";
 
 /**
  * Erase the signed-in customer's account (GDPR Article 17).
@@ -68,11 +69,43 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 409 });
   }
 
-  log.info("erasure.done", { rid, business: business.id });
+  // The photos themselves, which live in Storage rather than in a table.
+  //
+  // This runs AFTER the database erasure, not before, for two reasons. The
+  // guards live in the SQL — money still in the wallet, a withdrawal in flight
+  // — and deleting somebody's photos before finding out the erasure is refused
+  // would destroy data while leaving the account standing. And the paths are
+  // derivable without the `media_assets` rows the erasure has just removed,
+  // because every upload is stored under a folder named for the business.
+  //
+  // Reported rather than thrown. By this point the erasure has succeeded and is
+  // irreversible; failing the request now would tell the customer their
+  // deletion did not happen when most of it did. Leftover files are a real gap,
+  // so they are logged at error level to be chased, not swallowed.
+  let filesRemoved = 0;
+  try {
+    const { data: files } = await service.storage.from(MEDIA_BUCKET).list(business.id, {
+      limit: 1000,
+    });
+    const paths = (files ?? []).map((f) => `${business.id}/${f.name}`);
+    if (paths.length > 0) {
+      const { error: rmErr } = await service.storage.from(MEDIA_BUCKET).remove(paths);
+      if (rmErr) throw rmErr;
+      filesRemoved = paths.length;
+    }
+  } catch (e) {
+    log.error("erasure.storage_failed", {
+      rid,
+      business: business.id,
+      reason: e instanceof Error ? e.message : String(e),
+    });
+  }
+
+  log.info("erasure.done", { rid, business: business.id, filesRemoved });
 
   // Sign out last. The session belongs to a user who no longer exists; leaving
   // it live would give a token authority over an account that is gone.
   await supabase.auth.signOut();
 
-  return NextResponse.json({ erased: true, detail: data });
+  return NextResponse.json({ erased: true, detail: data, filesRemoved });
 }

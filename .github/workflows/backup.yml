@@ -1,0 +1,69 @@
+# Back the database up without needing anybody's laptop.
+#
+# The backup script was written first and needed a terminal, which meant the
+# only copy of the company's data existed when the founder happened to be at a
+# desk. That is not a backup policy. This runs it on a schedule, and can be
+# started from a phone: GitHub → Actions → Backup database → "Run workflow".
+#
+# Failures are loud. The script exits non-zero if the export fails its own
+# integrity checks, which fails the run and sends the usual GitHub notification.
+# A backup job that goes quietly green on a broken export is worse than none.
+
+name: Backup database
+
+on:
+  schedule:
+    # 03:00 UTC on Sundays — weekly is right at this size. Move to daily once
+    # real customers are paying, or buy Supabase Pro and let them do it too.
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
+
+# One at a time. Two overlapping exports would both be reading a moving
+# database, and the one that finishes second would win the artifact name.
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    # Generous: the media download is the slow part and grows with customers.
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      # The backup script has no dependencies of its own, but npm ci gives a
+      # clean, lockfile-exact tree and costs seconds against the cache.
+      - run: npm ci
+
+      - name: Export and verify
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npm run backup
+
+      - name: Name the artifact after the backup it holds
+        id: name
+        run: echo "dir=$(ls -d backups/*/ | head -1 | xargs basename)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: glocal-backup-${{ steps.name.outputs.dir }}
+          path: backups/
+          # THIS IS THE EXPIRY. Every export contains every customer record, so
+          # keeping them forever would mean a customer who asked to be erased
+          # lives on in GitHub indefinitely. Ninety days is long enough to
+          # recover from a problem noticed late, and short enough that erasure
+          # eventually means erasure. Retention is enforced by GitHub, not by a
+          # cleanup job somebody has to remember to run.
+          retention-days: 90
+          # Compressed rather than stored: these are JSON row dumps and shrink
+          # hard. Photos are already compressed and will not, which is fine.
+          compression-level: 9
+          if-no-files-found: error

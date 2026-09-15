@@ -14,15 +14,19 @@
  * is required because the point is to copy EVERY row, and row-level security
  * exists precisely to stop that.
  *
- * WHAT THIS IS NOT. It is a logical export of table contents. It does not carry
- * the schema, the RLS policies, the functions, or the auth users — those live in
- * the migrations in this repo, which is its own kind of backup and is why they
- * are committed rather than applied by hand. And it does NOT include Storage
- * objects: customers' product photos are a separate problem that even Supabase's
- * own paid backups do not solve.
+ * WHAT THIS IS NOT. It is a logical export of table contents and Storage files.
+ * It does not carry the schema, the RLS policies, the functions, or the auth
+ * users — those live in the migrations in this repo, which is its own kind of
+ * backup and is why they are committed rather than applied by hand.
+ *
+ * It DOES now include Storage. Customers' product photos are the one thing even
+ * Supabase's own paid backups do not cover, which makes them the only data here
+ * that nobody would be copying if this script did not. Pass --no-media to skip
+ * them when you only want the rows and want them quickly.
  */
 
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from "node:fs";
+import { dirname } from "node:path";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 
@@ -41,6 +45,10 @@ const PAGE = 1000;
 
 const args = process.argv.slice(2);
 const verifyOnly = args.indexOf("--verify");
+const skipMedia = args.includes("--no-media");
+
+/** The bucket holding customers' uploaded product photos. */
+const MEDIA_BUCKET = "product-media";
 
 function die(msg) {
   console.error(`\n  ${msg}\n`);
@@ -131,6 +139,53 @@ async function dumpTable(table, pk) {
   return { table, rows, reportedCount: total, ordered: Boolean(pk) };
 }
 
+/**
+ * Every object in the media bucket.
+ *
+ * Storage lists one folder at a time, and files are stored under a folder per
+ * business, so this walks: list the root to get the business folders, then list
+ * each. A file is distinguished from a folder by having an `id` — folders come
+ * back as synthetic entries with a null id, which is not obvious and is the
+ * kind of thing that silently backs up zero files if you get it wrong.
+ */
+async function listStorage(prefix = "") {
+  const out = [];
+  let offset = 0;
+  for (;;) {
+    const res = await fetch(`${URL_}/storage/v1/object/list/${MEDIA_BUCKET}`, {
+      method: "POST",
+      headers: {
+        apikey: KEY,
+        Authorization: `Bearer ${KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prefix, limit: PAGE, offset, sortBy: { column: "name", order: "asc" } }),
+    });
+    if (!res.ok) throw new Error(`storage list ${prefix}: ${res.status} ${await res.text()}`);
+    const page = await res.json();
+    for (const entry of page) {
+      const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.id) out.push({ path, size: entry.metadata?.size ?? null });
+      else out.push(...(await listStorage(path)));
+    }
+    if (page.length < PAGE) break;
+    offset += PAGE;
+  }
+  return out;
+}
+
+async function downloadObject(path, dest) {
+  const res = await fetch(
+    `${URL_}/storage/v1/object/${MEDIA_BUCKET}/${path.split("/").map(encodeURIComponent).join("/")}`,
+    { headers: { apikey: KEY, Authorization: `Bearer ${KEY}` } },
+  );
+  if (!res.ok) throw new Error(`storage get ${path}: ${res.status}`);
+  const buf = Buffer.from(await res.arrayBuffer());
+  mkdirSync(dirname(dest), { recursive: true });
+  writeFileSync(dest, buf);
+  return buf.length;
+}
+
 function loadDumps(dir) {
   const manifest = JSON.parse(readFileSync(join(dir, "manifest.json"), "utf8"));
   const dumps = readdirSync(dir)
@@ -199,8 +254,24 @@ async function main() {
     "wallet_balances?select=wallet_id,balance_usd_minor",
   );
 
+  // Storage last: it is the slow part, and a failure here should not cost the
+  // row export that already succeeded. Recorded in the manifest either way, so
+  // a backup that skipped media says so rather than looking complete.
+  let media = { skipped: true, files: 0, bytes: 0 };
+  if (!skipMedia) {
+    console.log(`\n  Backing up ${MEDIA_BUCKET}\n`);
+    const objects = await listStorage();
+    let bytes = 0;
+    for (const o of objects) {
+      bytes += await downloadObject(o.path, join(dir, "storage", MEDIA_BUCKET, o.path));
+    }
+    media = { skipped: false, files: objects.length, bytes };
+    console.log(`  ${String(objects.length).padStart(6)}  files (${(bytes / 1e6).toFixed(1)} MB)`);
+  }
+
   const manifest = {
     takenAt: new Date().toISOString(),
+    media,
     projectUrl: URL_,
     tables: dumps.map((d) => ({ table: d.table, rows: d.rows.length })),
     schemaTables: tables,

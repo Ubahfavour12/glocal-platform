@@ -15,9 +15,13 @@
  * still have.
  *
  * WHAT IT ASSUMES. The schema already exists — run the migrations first, in
- * order, into an empty project. This loads data only. It does not create
- * tables, policies or functions, and it does not restore auth users or Storage
- * objects (customers' product photos are still a separate, unsolved problem).
+ * order, into an empty project. This loads data only: it does not create
+ * tables, policies or functions, and it does not restore auth users, who live
+ * in Supabase Auth rather than in these tables.
+ *
+ * It DOES restore Storage files when the backup carries them, because a backup
+ * that saves photos and a restore that cannot put them back is a half-built
+ * thing that looks finished.
  *
  * ORDER. Rows go back parents-first, following the order recorded in the
  * manifest at backup time. Insert a child before its parent and the foreign key
@@ -25,8 +29,8 @@
  * avoids.
  */
 
-import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
+import { join, relative, sep } from "node:path";
 
 import { verifyBackup } from "./lib/backup-integrity.mjs";
 import { restoreOrder as computeOrder } from "./lib/table-order.mjs";
@@ -36,6 +40,9 @@ const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 /** Rows per request. Large enough to be quick, small enough to stay debuggable. */
 const CHUNK = 500;
+
+/** Must match the bucket the backup wrote. */
+const MEDIA_BUCKET = "product-media";
 
 const args = process.argv.slice(2);
 const dir = args.find((a) => !a.startsWith("--"));
@@ -98,6 +105,49 @@ async function insertChunk(table, rows) {
     body: JSON.stringify(rows),
   });
   if (!res.ok) throw new Error(`${table}: ${res.status} ${await res.text()}`);
+}
+
+/** Every file under a directory, as paths relative to it. */
+function walkFiles(dir) {
+  const out = [];
+  for (const e of readdirSync(dir)) {
+    const full = join(dir, e);
+    if (statSync(full).isDirectory()) out.push(...walkFiles(full));
+    else out.push(full);
+  }
+  return out;
+}
+
+/**
+ * Put the photos back.
+ *
+ * `upsert` is on because a restore is the one time overwriting is the intent:
+ * if a partial run already placed a file, the correct behaviour is to replace
+ * it with the backup's copy rather than fail and leave the object store half
+ * populated with no obvious way to finish.
+ */
+async function restoreStorage(dir) {
+  const root = join(dir, "storage", MEDIA_BUCKET);
+  if (!existsSync(root)) return 0;
+  const files = walkFiles(root);
+  for (const f of files) {
+    const path = relative(root, f).split(sep).join("/");
+    const res = await fetch(
+      `${URL_}/storage/v1/object/${MEDIA_BUCKET}/${path.split("/").map(encodeURIComponent).join("/")}`,
+      {
+        method: "POST",
+        headers: {
+          apikey: KEY,
+          Authorization: `Bearer ${KEY}`,
+          "x-upsert": "true",
+          "Content-Type": "application/octet-stream",
+        },
+        body: readFileSync(f),
+      },
+    );
+    if (!res.ok) throw new Error(`storage put ${path}: ${res.status} ${await res.text()}`);
+  }
+  return files.length;
 }
 
 async function main() {
@@ -181,8 +231,18 @@ async function main() {
   }
 
   if (dryRun) {
-    console.log(`\n  Dry run — nothing written. ${total} rows would be loaded.\n`);
+    const root = join(dir, "storage", MEDIA_BUCKET);
+    const media = existsSync(root) ? walkFiles(root).length : 0;
+    console.log(
+      `\n  Dry run — nothing written. ${total} rows and ${media} file(s) would be loaded.\n`,
+    );
     return;
+  }
+
+  const restored = await restoreStorage(dir);
+  if (restored > 0) console.log(`\n  ${restored} Storage file(s) restored`);
+  else if (manifest.media?.skipped) {
+    console.log("\n  This backup was taken with --no-media, so there are no photos to restore.");
   }
 
   // Count what actually landed. An insert that silently dropped rows is the
