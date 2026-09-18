@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseAdRejections, verifyMetaSignature } from "@/lib/quarantine/webhook";
 import { handleRejection, type Strike } from "@/lib/quarantine/rejection";
 import { createServiceClient } from "@/lib/supabase/server";
+import { parseLeadgenEvents } from "@/lib/leads/capture";
+import { fetchLabel, toLeadRow } from "@/lib/leads/ingest";
+import { log } from "@/lib/log";
 
 /**
  * Meta webhook, ad review events (Blueprint §6.2 post-rejection loop).
@@ -12,6 +15,11 @@ import { createServiceClient } from "@/lib/supabase/server";
  * The webhook body is authenticated with X-Hub-Signature-256 over the RAW
  * body. Events for ads we don't know are acknowledged and skipped (Meta
  * retries on non-200, and unknown ads are not an error condition).
+ *
+ * It also receives LEAD FORM submissions, because Meta delivers every
+ * subscription for a page to one callback URL. Those are handled here rather
+ * than at a second endpoint so there is one signature check and one place that
+ * can be got wrong.
  */
 
 export async function GET(req: NextRequest) {
@@ -40,8 +48,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true, processed: 0 });
   }
 
+  // Leads first: the two event kinds arrive on the same endpoint and a payload
+  // that carries one carries no instances of the other.
+  const leads = await handleLeadgen(payload);
+
   const events = parseAdRejections(payload);
-  if (events.length === 0) return NextResponse.json({ received: true, processed: 0 });
+  if (events.length === 0) {
+    return NextResponse.json({ received: true, processed: 0, leads });
+  }
 
   const supabase = createServiceClient();
   const now = new Date();
@@ -102,5 +116,69 @@ export async function POST(req: NextRequest) {
     processed++;
   }
 
-  return NextResponse.json({ received: true, processed });
+  return NextResponse.json({ received: true, processed, leads });
+}
+
+/**
+ * Record lead-form submissions.
+ *
+ * Insert is upsert-on-conflict rather than a read-then-write, because Meta
+ * retries until it gets a 200 and two retries can be in flight at once. A
+ * check-then-insert loses that race and double-counts the lead, which inflates
+ * cost-per-won and sends budget to the wrong creative. The unique index in
+ * migration 0034 is what actually settles it; this just asks the database to
+ * resolve the conflict instead of failing.
+ *
+ * Errors are swallowed per lead and logged. A page whose token has expired
+ * must not cause a non-200, because Meta would then retry the WHOLE batch,
+ * including the ad-rejection events that processed correctly.
+ */
+async function handleLeadgen(payload: unknown): Promise<number> {
+  const events = parseLeadgenEvents(payload);
+  if (events.length === 0) return 0;
+
+  const supabase = createServiceClient();
+  let stored = 0;
+
+  for (const event of events) {
+    try {
+      // The ad tells us whose lead this is. Without it we cannot attribute the
+      // lead to a business, and an unattributable lead is not ours to keep.
+      if (!event.platformAdId) continue;
+      const { data: ad } = await supabase
+        .from("ads")
+        .select("id, creative_id, campaigns!inner(business_id)")
+        .eq("platform_ad_id", event.platformAdId)
+        .maybeSingle();
+      if (!ad) continue;
+
+      const businessId = (ad.campaigns as unknown as { business_id: string }).business_id;
+
+      const { data: conn } = await supabase
+        .from("social_connections")
+        .select("access_token")
+        .eq("business_id", businessId)
+        .eq("provider", "meta")
+        .maybeSingle();
+
+      const label = conn?.access_token
+        ? await fetchLabel(event.leadgenId, conn.access_token as string)
+        : null;
+
+      const { error } = await supabase
+        .from("leads")
+        .upsert(
+          toLeadRow(event, businessId, { id: ad.id as string, creative_id: ad.creative_id as string | null }, label),
+          { onConflict: "business_id,external_ref", ignoreDuplicates: true },
+        );
+      if (error) throw error;
+      stored++;
+    } catch (e) {
+      log.error("lead.ingest_failed", {
+        leadgenId: event.leadgenId,
+        reason: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+  return stored;
 }

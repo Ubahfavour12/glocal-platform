@@ -4,6 +4,8 @@
  * types so the UI has a stable, serialisable contract (Blueprint §2.2).
  */
 
+import type { MetricUsed } from "@/lib/verdicts/verdict";
+
 export interface PlanChallengerPayload {
   conceptId: string;
   hook: string;
@@ -13,7 +15,12 @@ export interface PlanChallengerPayload {
 }
 
 export interface PlanScoreboardPayload {
-  metricUsed?: "roas" | "cpci" | "engagement";
+  /**
+   * Imported rather than restated. This union was previously hand-copied here,
+   * so adding a metric to the verdict engine broke the build in an unrelated
+   * file — the compiler caught it, but only after the drift already existed.
+   */
+  metricUsed?: MetricUsed;
   winnerHook?: string;
   note: string;
 }

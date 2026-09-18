@@ -2,7 +2,8 @@
  * A/B verdict engine — Blueprint §4.2.
  * - Verdict threshold: minimum 24 hours AND 5,000 impressions per candidate.
  * - Evaluation window: rolling 3 days (absorbs attribution lag).
- * - Metric hierarchy: ROAS (store connected) → CPCI → engagement tiebreaker.
+ * - Metric hierarchy: ROAS (store connected) → cost per WON lead → CPCI →
+ *   engagement tiebreaker.
  * Never early-kills on thin data.
  */
 
@@ -20,10 +21,27 @@ export interface DailyMetrics {
   revenueUsdMinor: number;
 }
 
+/**
+ * What happened to the leads this ad produced, once a human said so.
+ *
+ * Kept OUTSIDE the daily series on purpose. A lead closes days or weeks after
+ * the ad that produced it ran, so booking the win against a date would credit
+ * whichever ad happened to be live the day the deal closed. The outcome belongs
+ * to the ad that CREATED the lead, whenever it eventually resolves.
+ */
+export interface LeadOutcome {
+  /** Leads that reached won or lost. Open leads are excluded deliberately. */
+  decided: number;
+  won: number;
+  revenueUsdMinor: number;
+}
+
 export interface CandidateMetrics {
   adId: string;
   startedAt: Date;
   daily: DailyMetrics[];
+  /** Absent until the business has settled at least some of this ad's leads. */
+  leadOutcome?: LeadOutcome;
 }
 
 export interface WindowAggregate {
@@ -34,7 +52,7 @@ export interface WindowAggregate {
   revenueUsdMinor: number;
 }
 
-export type MetricUsed = "roas" | "cpci" | "engagement";
+export type MetricUsed = "roas" | "cost_per_won" | "cpci" | "engagement";
 
 export type Verdict =
   | { status: "pending"; reason: string }
@@ -114,6 +132,33 @@ export function decideVerdict(
     );
     const winner = pickHighest(scores);
     if (winner) return { status: "decided", winnerAdId: winner, metricUsed: "roas", scores };
+  }
+
+  // Cost per WON lead — the whole point of asking the owner which leads became
+  // customers. It outranks CPCI because CPCI counts enquiries, and the ad that
+  // produces the cheapest enquiries is routinely not the one that produces
+  // business. Preferring CPCI here would spend the budget on the wrong ad and
+  // look rigorous doing it.
+  //
+  // Requires EVERY candidate to have settled leads, so a slow-to-follow-up week
+  // does not hand the duel to whichever ad the owner happened to review first,
+  // and at least one win somewhere, because with none the comparison is only
+  // between different ways of failing.
+  const outcomes = candidates.map((c) => c.leadOutcome);
+  const allSettled = outcomes.every((o) => o !== undefined && o.decided > 0);
+  const anyWon = outcomes.some((o) => (o?.won ?? 0) > 0);
+  if (allSettled && anyWon) {
+    const scores: Record<string, number> = {};
+    for (const c of candidates) {
+      const won = c.leadOutcome?.won ?? 0;
+      const spend = aggs.get(c.adId)?.spendUsdMinor ?? 0;
+      // No wins means no cost per win. Infinity sorts last, and two ads that
+      // both closed nothing tie — which correctly yields no verdict rather
+      // than a coin flip between two failures.
+      scores[c.adId] = won > 0 ? spend / won : Number.POSITIVE_INFINITY;
+    }
+    const winner = pickLowest(scores);
+    if (winner) return { status: "decided", winnerAdId: winner, metricUsed: "cost_per_won", scores };
   }
 
   // CPCI: cost per conversion intent — LOWER is better. Requires intents.

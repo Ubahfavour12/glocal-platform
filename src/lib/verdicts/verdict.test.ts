@@ -107,3 +107,96 @@ describe("decideVerdict", () => {
     expect(v.status).toBe("pending");
   });
 });
+
+describe("cost per WON lead — budget follows closed business", () => {
+  const day = (over: Partial<DailyMetrics> = {}): DailyMetrics => ({
+    date: new Date("2026-03-10T00:00:00Z"),
+    impressions: 10_000,
+    clicks: 100,
+    intents: 10,
+    spendUsdMinor: 10_000,
+    revenueUsdMinor: 0,
+    ...over,
+  });
+  const now = new Date("2026-03-11T00:00:00Z");
+  const started = new Date("2026-03-08T00:00:00Z");
+
+  const cand = (adId: string, spend: number, outcome?: {decided: number; won: number; revenueUsdMinor: number}) => ({
+    adId,
+    startedAt: started,
+    daily: [day({ spendUsdMinor: spend })],
+    leadOutcome: outcome,
+  });
+
+  it("prefers the ad that closed business over the one with cheap enquiries", () => {
+    // The whole point. "cheap" produces enquiries at a third of the cost and
+    // closes almost none of them; "good" is dearer per enquiry and actually
+    // sells. CPCI would pick the wrong one and look rigorous doing it.
+    const v = decideVerdict(
+      [
+        cand("cheap", 30_000, { decided: 10, won: 1, revenueUsdMinor: 5_000 }),
+        cand("good", 30_000, { decided: 10, won: 6, revenueUsdMinor: 200_000 }),
+      ],
+      { storeConnected: false, now },
+    );
+    expect(v.status).toBe("decided");
+    if (v.status === "decided") {
+      expect(v.metricUsed).toBe("cost_per_won");
+      expect(v.winnerAdId).toBe("good");
+    }
+  });
+
+  it("falls back to CPCI until every ad has settled leads", () => {
+    // Otherwise a slow follow-up week hands the duel to whichever ad the owner
+    // happened to review first.
+    const v = decideVerdict(
+      [
+        cand("a", 10_000, { decided: 4, won: 2, revenueUsdMinor: 90_000 }),
+        cand("b", 10_000),
+      ],
+      { storeConnected: false, now },
+    );
+    if (v.status === "decided") expect(v.metricUsed).not.toBe("cost_per_won");
+  });
+
+  it("falls back when leads are settled but nothing anywhere has closed", () => {
+    // With no wins the comparison is only between different ways of failing.
+    const v = decideVerdict(
+      [
+        cand("a", 10_000, { decided: 5, won: 0, revenueUsdMinor: 0 }),
+        cand("b", 10_000, { decided: 5, won: 0, revenueUsdMinor: 0 }),
+      ],
+      { storeConnected: false, now },
+    );
+    if (v.status === "decided") expect(v.metricUsed).not.toBe("cost_per_won");
+  });
+
+  it("beats one ad that closed nothing against one that did", () => {
+    // Closing nothing IS the discriminating fact here, not missing data.
+    const v = decideVerdict(
+      [
+        cand("dud", 20_000, { decided: 8, won: 0, revenueUsdMinor: 0 }),
+        cand("real", 20_000, { decided: 8, won: 2, revenueUsdMinor: 80_000 }),
+      ],
+      { storeConnected: false, now },
+    );
+    expect(v.status).toBe("decided");
+    if (v.status === "decided") {
+      expect(v.metricUsed).toBe("cost_per_won");
+      expect(v.winnerAdId).toBe("real");
+    }
+  });
+
+  it("still lets trusted revenue (ROAS) outrank it", () => {
+    // A connected store measures money directly; cost-per-won is a proxy built
+    // from a human tapping buttons.
+    const v = decideVerdict(
+      [
+        { ...cand("a", 10_000, { decided: 5, won: 5, revenueUsdMinor: 1_000 }), daily: [day({ spendUsdMinor: 10_000, revenueUsdMinor: 90_000 })] },
+        { ...cand("b", 10_000, { decided: 5, won: 1, revenueUsdMinor: 1_000 }), daily: [day({ spendUsdMinor: 10_000, revenueUsdMinor: 10_000 })] },
+      ],
+      { storeConnected: true, now },
+    );
+    if (v.status === "decided") expect(v.metricUsed).toBe("roas");
+  });
+});
