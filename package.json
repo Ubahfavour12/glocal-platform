@@ -10,7 +10,9 @@
     "test": "vitest run",
     "status": "node scripts/status.mjs",
     "backup": "node scripts/backup.mjs",
-    "restore": "node scripts/restore.mjs"
+    "restore": "node scripts/restore.mjs",
+    "hooks:install": "git config core.hooksPath .githooks",
+    "scan:secrets": "gitleaks detect --config .gitleaks.toml --redact --verbose"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.0",

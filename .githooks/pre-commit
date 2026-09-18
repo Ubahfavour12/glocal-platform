@@ -1,0 +1,24 @@
+#!/bin/sh
+# Refuse to commit a secret.
+#
+# The CI scan is the backstop; this is the one that saves you the rotation.
+# Once a key reaches the remote it must be rotated at the provider even if you
+# delete the commit, because it is in every clone and in GitHub's reflog.
+#
+# Skippable with `git commit --no-verify`, deliberately: a hook you cannot
+# escape is a hook people delete. CI is not skippable.
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "  gitleaks not installed — skipping local secret scan."
+  echo "  Install it (brew install gitleaks) for a check before every commit."
+  echo "  CI will scan regardless."
+  exit 0
+fi
+
+if ! gitleaks protect --staged --config .gitleaks.toml --redact --verbose; then
+  echo
+  echo "  A secret was found in what you are about to commit."
+  echo "  Remove it and put the value in Vercel's environment variables instead."
+  echo "  If it is a false positive, add it to [allowlist] in .gitleaks.toml."
+  exit 1
+fi

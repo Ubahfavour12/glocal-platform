@@ -1,0 +1,77 @@
+# Secret scanning config.
+#
+# We are clean today — this exists to keep us clean. A leaked key is not like a
+# bug: you cannot fix it by pushing a commit, because the value is in the git
+# history and in every clone forever. The only real fix is rotating the key at
+# the provider, which means noticing fast.
+#
+# The keys that would hurt most here, in order:
+#   - SUPABASE_SERVICE_ROLE_KEY   reads and writes every row of every customer
+#   - PAYSTACK_SECRET_KEY         moves real money
+#   - MONNIFY secret + contract   same
+#   - META access tokens          spends the ad budget
+#   - ANTHROPIC / FAL keys        spends our money
+
+[extend]
+# Start from gitleaks' own ruleset rather than reinventing detection for
+# every provider, then add the ones specific to this stack.
+useDefault = true
+
+[[rules]]
+id = "supabase-service-role-jwt"
+description = "Supabase service_role key (full database access, bypasses RLS)"
+# Supabase keys are JWTs; the service_role one carries that role in the payload.
+regex = '''eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]*?(?:service_role|c2VydmljZV9yb2xl)[A-Za-z0-9_-]*\.[A-Za-z0-9_-]{10,}'''
+keywords = ["service_role", "eyJ"]
+
+[[rules]]
+id = "paystack-secret-key"
+description = "Paystack secret key (live or test) — moves real money"
+regex = '''sk_(?:live|test)_[0-9a-zA-Z]{20,}'''
+keywords = ["sk_live_", "sk_test_"]
+
+[[rules]]
+id = "monnify-api-key"
+description = "Monnify API key — the prefix also selects live vs sandbox"
+regex = '''MK_(?:PROD|TEST)_[0-9A-Z]{10,}'''
+keywords = ["MK_PROD_", "MK_TEST_"]
+# Two things learned by RUNNING this rather than reasoning about it:
+#   1. Custom rules do not inherit the global [allowlist] in gitleaks v8, so
+#      each one carries its own.
+#   2. Every group here is non-capturing. Gitleaks treats capture group 1 as
+#      "the secret", so `MK_(PROD|TEST)_...` made the secret the word TEST —
+#      which silently broke both the allowlist and the redacted output.
+[rules.allowlist]
+regexes = ['''MK_(?:TEST|PROD)_ABCDEF1234''']
+
+[[rules]]
+id = "anthropic-api-key"
+description = "Anthropic API key"
+regex = '''sk-ant-[0-9A-Za-z_-]{20,}'''
+keywords = ["sk-ant-"]
+
+[[rules]]
+id = "fal-key"
+description = "fal.ai key (id:secret pair)"
+regex = '''[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[0-9a-f]{32}'''
+keywords = ["fal"]
+
+[allowlist]
+description = "Things that look like secrets and are not"
+paths = [
+  # The example file holds NAMES only, never values — that is the point of it.
+  '''\.env\.example''',
+  # Lockfiles are full of long base64-looking integrity hashes.
+  '''package-lock\.json''',
+]
+regexes = [
+  # The EXACT fixture values used in tests, not "any secret in a test file".
+  # That distinction matters: exempting test files wholesale would mean a real
+  # key pasted into a test — which is how it usually happens — sails through.
+  # These literals are obvious alphabet dummies; a genuine key differs and is
+  # still caught. Found by running the scanner rather than assumed.
+  '''MK_(TEST|PROD)_ABCDEF1234''',
+  '''monnify_test_secret''',
+  '''sk_(?:live|test)_(?:fake|dummy|example|stub)''',
+  '''placeholder|example\.test''',
+]
