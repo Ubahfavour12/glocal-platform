@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { log, requestId } from "@/lib/log";
+import { extractRefCode } from "@/lib/tracking/attribution";
+import { currentBusiness } from "@/lib/business/current";
 
 /**
  * Move a lead along, or add one by hand.
@@ -32,32 +34,71 @@ export async function POST(req: NextRequest) {
     valueUsdMinor?: number;
     note?: string;
     label?: string;
+    /**
+     * A pasted WhatsApp message, or the bare ref code from one. This is how a
+     * WhatsApp lead gets ATTRIBUTED rather than merely recorded.
+     */
+    ref?: string;
   } | null;
   if (!body) return NextResponse.json({ error: "bad request" }, { status: 400 });
 
-  // Adding a lead by hand — someone who walked in, or messaged the page.
-  // Real business, and deliberately attributed to no creative: it is not
-  // evidence about any ad, and pinning it to one would corrupt the comparison.
+  // Adding a lead by hand.
+  //
+  // WHY THERE IS NO LEAD PER CLICK. A WhatsApp smart link could create a lead
+  // the moment it is tapped, and it would be wrong. Most people who tap a
+  // wa.me link never send the message, so a lead per click floods the list
+  // with people who were never leads — and since lead counts feed cost-per-won,
+  // it would corrupt the very quality signal this feature exists to produce.
+  //
+  // Instead the owner pastes the message they actually received. The prefilled
+  // text carries "(ref GL-XXXXXX)", so a real message attributes itself to the
+  // exact ad that produced it. A human confirms something happened; the machine
+  // does the attribution. Someone who typed their own message has no code, and
+  // the lead is recorded unattributed rather than guessed at.
   if (!body.leadId) {
-    const { data: business } = await supabase
-      .from("businesses")
-      .select("id")
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
+    const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
+    supabase,
+    "id",
+  );
     if (!business) return NextResponse.json({ error: "no business" }, { status: 404 });
+
+    const code = body.ref ? extractRefCode(body.ref) ?? body.ref.trim().toUpperCase() : null;
+
+    let smartLinkId: string | null = null;
+    let adId: string | null = null;
+    let creativeId: string | null = null;
+
+    if (code) {
+      const { data: link } = await supabase
+        .from("smart_links")
+        .select("id, ad_id, ads(creative_id)")
+        .eq("business_id", business.id)
+        .eq("code", code)
+        .maybeSingle();
+      if (link) {
+        smartLinkId = link.id as string;
+        adId = (link.ad_id as string | null) ?? null;
+        creativeId =
+          (link.ads as unknown as { creative_id: string | null } | null)?.creative_id ?? null;
+      }
+    }
 
     const { data, error } = await supabase
       .from("leads")
       .insert({
         business_id: business.id,
-        source: "manual",
+        // Attributed when a code resolved, manual when it did not. The source
+        // is the truth about where it came from, not about how it was typed in.
+        source: smartLinkId ? "whatsapp" : "manual",
+        smart_link_id: smartLinkId,
+        ad_id: adId,
+        creative_id: creativeId,
         label: (body.label ?? "").trim().slice(0, 80) || "Lead",
       })
       .select()
       .single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    return NextResponse.json({ lead: data });
+    return NextResponse.json({ lead: data, attributed: Boolean(smartLinkId) });
   }
 
   if (!body.status || !STATUSES.has(body.status)) {

@@ -8,6 +8,7 @@ import { adEfficiency, formatAgainstOrder, formatCostPerCustomer } from "@/lib/m
 import { fetchUsdRate } from "@/lib/money/rates";
 import { currencyForCountry } from "@/lib/money/currency";
 import { fmtDual, fmtRoas, fmtUsd } from "@/lib/money/format";
+import { currentBusiness } from "@/lib/business/current";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Today" };
@@ -16,12 +17,13 @@ const PIPELINE_TARGET = 50;
 
 export default async function TodayPage() {
   const supabase = await createClient();
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id, name, daily_budget_usd_minor, country, currency")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const business = await currentBusiness<{
+    id: string;
+    name: string;
+    daily_budget_usd_minor: number;
+    country: string | null;
+    currency: string;
+  }>(supabase, "id, name, daily_budget_usd_minor, country, currency");
 
   if (!business) {
     return (

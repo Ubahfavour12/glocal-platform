@@ -3,6 +3,7 @@ import type { SellableAd } from "@/components/approval/SalesCheckIn";
 import type { ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
 import { createClient } from "@/lib/supabase/server";
 import { minFirstDepositUsdMinor } from "@/lib/money/ledger";
+import { currentBusiness } from "@/lib/business/current";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Approve" };
@@ -69,12 +70,10 @@ export default async function ApprovePage() {
   let balanceUsdMinor = 0;
   let requiredUsdMinor = 0;
   if (userData.user) {
-    const { data: business } = await supabase
-      .from("businesses")
-      .select("id, full_auto, daily_budget_usd_minor")
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
+    const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
+    supabase,
+    "id, full_auto, daily_budget_usd_minor",
+  );
     fullAuto = Boolean(business?.full_auto);
     if (business) {
       const { data } = await supabase

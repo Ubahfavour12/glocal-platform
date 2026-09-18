@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/shell/AppShell";
 import { createClient } from "@/lib/supabase/server";
+import { currentBusiness, listBusinesses } from "@/lib/business/current";
 
 /**
  * The dashboard shell also guards it: every (app) route requires a signed-in
@@ -19,12 +20,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // The phone tab bar and tablet rail both need to show the Approve badge
   // without each re-querying it, so it is read once here and passed down.
   let awaitingApproval = false;
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
+    supabase,
+    "id",
+  );
   if (business) {
     const { count } = await supabase
       .from("approvals")
@@ -34,5 +33,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     awaitingApproval = (count ?? 0) > 0;
   }
 
-  return <AppShell awaitingApproval={awaitingApproval}>{children}</AppShell>;
+  // Fetched here rather than in the header so the switcher and the pages agree
+  // about which business is current — one read, one answer.
+  const businesses = await listBusinesses(supabase);
+
+  return (
+    <AppShell
+      awaitingApproval={awaitingApproval}
+      businesses={businesses}
+      currentBusinessId={(business?.id as string | undefined) ?? null}
+    >
+      {children}
+    </AppShell>
+  );
 }

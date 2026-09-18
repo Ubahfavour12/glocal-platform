@@ -12,6 +12,7 @@ import { ConnectFlash } from "@/components/settings/ConnectFlash";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { PlanCard } from "@/components/billing/PlanCard";
 import { asPlan } from "@/lib/billing/plan";
+import { currentBusiness } from "@/lib/business/current";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Settings" };
@@ -21,12 +22,10 @@ type Persona = "conservative" | "smart" | "aggressive";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id, daily_budget_usd_minor, goal, persona, full_auto, plan, free_render_used, launch_hour")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
+    supabase,
+    "id, daily_budget_usd_minor, goal, persona, full_auto, plan, free_render_used, launch_hour",
+  );
 
   if (!business) {
     return (

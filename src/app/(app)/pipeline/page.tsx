@@ -6,6 +6,7 @@ import { asPlan } from "@/lib/billing/plan";
 import { PipelineFilter } from "@/components/pipeline/PipelineFilter";
 import type { PipelineConcept } from "@/lib/pipeline/filter";
 import type { ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
+import { currentBusiness } from "@/lib/business/current";
 
 /** Slots the duel runs when the plan does not say otherwise. */
 const DEFAULT_CHALLENGER_SLOTS = 2;
@@ -31,12 +32,10 @@ function clean(text: string | null | undefined): string {
 
 export default async function PipelinePage() {
   const supabase = await createClient();
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id, plan")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
+    supabase,
+    "id, plan",
+  );
 
   // Whether a video is affordable today, worked out here rather than guessed
   // in the browser, so the option is disabled with a reason instead of failing

@@ -8,6 +8,8 @@ import { NotificationBell } from "./NotificationBell";
 import { ThemeToggle } from "./ThemeToggle";
 import { AskAgent } from "@/components/agent/AskAgent";
 import { createPersistedStore } from "@/lib/browser/persisted";
+import { BusinessSwitcher } from "@/components/business/BusinessSwitcher";
+import type { BusinessRef } from "@/lib/business/current";
 
 const COLLAPSE_KEY = "glocal:nav-collapsed";
 
@@ -24,9 +26,13 @@ const collapseStore = createPersistedStore(COLLAPSE_KEY, (raw) => raw === "1", f
 export function AppShell({
   children,
   awaitingApproval = false,
+  businesses = [],
+  currentBusinessId = null,
 }: {
   children: React.ReactNode;
   awaitingApproval?: boolean;
+  businesses?: BusinessRef[];
+  currentBusinessId?: string | null;
 }) {
   // Read through a store rather than useState + an effect. The effect version
   // renders expanded, then re-renders collapsed from inside the effect — a
@@ -63,6 +69,7 @@ export function AppShell({
             </button>
           </div>
           <div className="ml-auto flex items-center gap-2">
+            <BusinessSwitcher businesses={businesses} currentId={currentBusinessId} />
             <ThemeToggle />
             <NotificationBell />
           </div>

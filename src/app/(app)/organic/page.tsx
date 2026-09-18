@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { relativeTime } from "@/lib/dashboard/activity";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { CalendarIcon, FacebookIcon, InstagramIcon, TikTokIcon } from "@/components/ui/icons";
+import { currentBusiness } from "@/lib/business/current";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Organic" };
@@ -25,12 +26,10 @@ function networkIcon(name: string, cls = "h-4 w-4"): ReactNode {
 
 export default async function OrganicPage() {
   const supabase = await createClient();
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
+    supabase,
+    "id",
+  );
   const bizId = business?.id as string | undefined;
 
   const [connRes, postsRes] = bizId

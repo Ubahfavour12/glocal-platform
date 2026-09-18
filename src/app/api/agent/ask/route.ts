@@ -6,6 +6,7 @@ import { callClaude, MODELS } from "@/lib/ai/anthropic";
 import { AGENT_SYSTEM, factsToBrief, type AgentFacts } from "@/lib/agent/context";
 import { asPlan } from "@/lib/billing/plan";
 import { describeActivity, type RawEntry } from "@/lib/dashboard/activity";
+import { currentBusiness } from "@/lib/business/current";
 
 export const maxDuration = 60;
 
@@ -60,12 +61,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id, name, category, goal, persona, plan, daily_budget_usd_minor")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
+    supabase,
+    "id, name, category, goal, persona, plan, daily_budget_usd_minor",
+  );
   if (!business) {
     return NextResponse.json({ error: "finish onboarding first" }, { status: 404 });
   }

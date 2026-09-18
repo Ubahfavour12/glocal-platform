@@ -5,6 +5,7 @@ import {
   isEligible,
   type CandidateMetrics,
   type DailyMetrics,
+  MIN_DECIDED_LEADS,
 } from "./verdict";
 
 const now = new Date("2026-07-10T18:00:00Z");
@@ -198,5 +199,79 @@ describe("cost per WON lead — budget follows closed business", () => {
       { storeConnected: true, now },
     );
     if (v.status === "decided") expect(v.metricUsed).toBe("roas");
+  });
+});
+
+describe("MIN_DECIDED_LEADS — refusing to decide on noise", () => {
+  const day = (spend: number): DailyMetrics => ({
+    date: new Date("2026-03-10T00:00:00Z"),
+    impressions: 10_000,
+    clicks: 100,
+    intents: 10,
+    spendUsdMinor: spend,
+    revenueUsdMinor: 0,
+  });
+  const now = new Date("2026-03-11T00:00:00Z");
+  const cand = (adId: string, decided: number, won: number) => ({
+    adId,
+    startedAt: new Date("2026-03-08T00:00:00Z"),
+    daily: [day(10_000)],
+    leadOutcome: { decided, won, revenueUsdMinor: won * 50_000 },
+  });
+
+  it("does NOT decide on one win out of two leads", () => {
+    // The case that prompted the guard: a 50% win rate on a sample where one
+    // customer changing their mind flips the answer, and the agent would move
+    // real budget on it.
+    const v = decideVerdict([cand("a", 2, 1), cand("b", 2, 0)], {
+      storeConnected: false,
+      now,
+    });
+    if (v.status === "decided") expect(v.metricUsed).not.toBe("cost_per_won");
+  });
+
+  it("decides once both ads clear the threshold", () => {
+    const v = decideVerdict(
+      [cand("a", MIN_DECIDED_LEADS, 4), cand("b", MIN_DECIDED_LEADS, 1)],
+      { storeConnected: false, now },
+    );
+    expect(v.status).toBe("decided");
+    if (v.status === "decided") {
+      expect(v.metricUsed).toBe("cost_per_won");
+      expect(v.winnerAdId).toBe("a");
+    }
+  });
+
+  it("holds back when only ONE ad has enough settled leads", () => {
+    // Otherwise the ad whose leads happened to be reviewed first wins by
+    // being reviewed first.
+    const v = decideVerdict([cand("a", 20, 9), cand("b", 2, 1)], {
+      storeConnected: false,
+      now,
+    });
+    if (v.status === "decided") expect(v.metricUsed).not.toBe("cost_per_won");
+  });
+
+  it("still falls through to a weaker metric rather than stalling", () => {
+    // Below the bar the engine must not simply refuse to pick anything — a
+    // duel with no verdict never rotates the budget at all. The two ads are
+    // given DIFFERENT spend here on purpose: with identical spend and intents
+    // every metric ties, and refusing to separate two identical ads is correct
+    // behaviour rather than the fallback being tested.
+    const thin = (adId: string, spend: number) => ({
+      adId,
+      startedAt: new Date("2026-03-08T00:00:00Z"),
+      daily: [day(spend)],
+      leadOutcome: { decided: 1, won: 1, revenueUsdMinor: 50_000 },
+    });
+    const v = decideVerdict([thin("a", 8_000), thin("b", 20_000)], {
+      storeConnected: false,
+      now,
+    });
+    expect(v.status).toBe("decided");
+    if (v.status === "decided") {
+      expect(v.metricUsed).toBe("cpci");
+      expect(v.winnerAdId).toBe("a");
+    }
   });
 });

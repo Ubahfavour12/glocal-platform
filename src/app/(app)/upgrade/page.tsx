@@ -2,18 +2,17 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SubscribeCta } from "@/components/billing/SubscribeCta";
 import { TIERS, EXTRA_RENDER_NOTE } from "@/lib/billing/tiers";
+import { currentBusiness } from "@/lib/business/current";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Plans" };
 
 export default async function UpgradePage() {
   const supabase = await createClient();
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id, plan")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
+    supabase,
+    "id, plan",
+  );
 
   const businessId = (business?.id as string) ?? undefined;
   const currentPlan = (business?.plan as string) ?? "free";

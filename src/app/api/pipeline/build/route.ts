@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { buildPipelineBatch } from "@/lib/research/pipeline";
 import { livePipelineDeps } from "@/lib/research/pipeline-live";
 import { runForBusiness, type BizRow } from "@/lib/orchestrator/run-business";
+import { currentBusiness } from "@/lib/business/current";
 
 export const maxDuration = 300;
 
@@ -26,12 +27,10 @@ export async function POST() {
   }
 
   // Ownership via the user-scoped client (RLS), work via the service client.
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
+    supabase,
+    "id",
+  );
   if (!business) {
     return NextResponse.json({ error: "finish onboarding first" }, { status: 404 });
   }

@@ -5,6 +5,7 @@ import {
   TENURE_LABEL,
   tenureBand,
   tenureYears,
+  tenureGuidance,
 } from "./tenure";
 
 const NOW = new Date("2026-09-05T12:00:00Z"); // year 2026
@@ -70,5 +71,41 @@ describe("tenureBand", () => {
     for (const band of ["new", "establishing", "established", "institution"] as const) {
       expect(TENURE_LABEL[band].length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("tenureGuidance — what the ad writer is told", () => {
+  const now = new Date("2026-09-20T00:00:00Z");
+
+  it("says nothing at all when the year was not given", () => {
+    // A model told "tenure unknown" writes around the uncertainty, which is
+    // worse than never raising it.
+    expect(tenureGuidance(null, now)).toBe("");
+    expect(tenureGuidance(undefined, now)).toBe("");
+  });
+
+  it("forbids a new business from implying a track record", () => {
+    // The honesty rule that also keeps ad accounts unbanned.
+    const g = tenureGuidance(2026, now);
+    expect(g).toContain("Do NOT imply a track record");
+  });
+
+  it("tells a long-standing business to lead with its age", () => {
+    const g = tenureGuidance(2005, now);
+    expect(g).toContain("21 years");
+    expect(g.toLowerCase()).toContain("longevity");
+  });
+
+  it("gets the singular year right", () => {
+    expect(tenureGuidance(2025, now)).toContain("trading 1 year (");
+  });
+
+  it("says 'less than a year' rather than '0 years'", () => {
+    expect(tenureGuidance(2026, now)).toContain("less than a year");
+  });
+
+  it("ignores an impossible future year rather than trusting it", () => {
+    // Accepting it would quietly corrupt every tenure figure derived from it.
+    expect(tenureGuidance(2030, now)).toBe("");
   });
 });

@@ -2,18 +2,17 @@ import { createClient } from "@/lib/supabase/server";
 import { relativeTime } from "@/lib/dashboard/activity";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { CrownIcon, FlagIcon, TrophyIcon } from "@/components/ui/icons";
+import { currentBusiness } from "@/lib/business/current";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "The Duel" };
 
 export default async function DuelPage() {
   const supabase = await createClient();
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
+    supabase,
+    "id",
+  );
 
   const bizId = business?.id as string | undefined;
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
 import { createClient } from "@/lib/supabase/server";
+import { currentBusiness } from "@/lib/business/current";
 
 /**
  * DEV ONLY: seed a sample awaiting plan for the signed-in user's first
@@ -14,12 +15,10 @@ export async function POST() {
     return NextResponse.json({ error: "sign in first" }, { status: 401 });
   }
 
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id, name")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
+    supabase,
+    "id, name",
+  );
   if (!business) {
     return NextResponse.json({ error: "finish onboarding first" }, { status: 404 });
   }

@@ -1,3 +1,4 @@
+import { currentBusiness } from "@/lib/business/current";
 import type { ReactNode } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { describeActivity, relativeTime, type RawEntry } from "@/lib/dashboard/activity";
@@ -53,12 +54,10 @@ function dayLabel(iso: string): string {
 
 export default async function ActivityPage() {
   const supabase = await createClient();
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
+    supabase,
+    "id",
+  );
 
   const entries: RawEntry[] = business
     ? ((

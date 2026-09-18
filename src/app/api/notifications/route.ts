@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { describeActivity, relativeTime, type RawEntry } from "@/lib/dashboard/activity";
+import { currentBusiness } from "@/lib/business/current";
 
 /**
  * Recent agent activity for the in-app notification bell (Phase 3). Reuses the
@@ -16,12 +17,10 @@ export async function GET() {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ items: [] }, { status: 401 });
 
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
+    supabase,
+    "id",
+  );
   if (!business) return NextResponse.json({ items: [] });
 
   const { data } = await supabase

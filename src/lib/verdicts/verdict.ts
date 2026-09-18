@@ -11,6 +11,23 @@ export const MIN_HOURS = 24;
 export const MIN_IMPRESSIONS = 5_000;
 export const WINDOW_DAYS = 3;
 
+/**
+ * How many settled leads an ad needs before cost-per-won may decide a duel.
+ *
+ * Impressions already have a threshold; lead outcomes had none, so one win out
+ * of two leads read as a 50% win rate and could win the duel outright. At that
+ * sample a single customer changing their mind flips the answer, and the agent
+ * would move real budget on it with no way to know it was noise.
+ *
+ * Five is deliberately modest. A stricter bar would be statistically nicer and
+ * would mean the metric almost never fires for a small business running two ads
+ * on $10 a day — a correct answer nobody ever gets is worth less than a
+ * reasonable one they get this month. Below this the engine does not guess; it
+ * falls through to cost per enquiry, which is weaker but honest about being a
+ * proxy.
+ */
+export const MIN_DECIDED_LEADS = 5;
+
 export interface DailyMetrics {
   date: Date;
   impressions: number;
@@ -145,7 +162,9 @@ export function decideVerdict(
   // and at least one win somewhere, because with none the comparison is only
   // between different ways of failing.
   const outcomes = candidates.map((c) => c.leadOutcome);
-  const allSettled = outcomes.every((o) => o !== undefined && o.decided > 0);
+  const allSettled = outcomes.every(
+    (o) => o !== undefined && o.decided >= MIN_DECIDED_LEADS,
+  );
   const anyWon = outcomes.some((o) => (o?.won ?? 0) > 0);
   if (allSettled && anyWon) {
     const scores: Record<string, number> = {};

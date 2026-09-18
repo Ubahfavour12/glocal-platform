@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { log, requestId } from "@/lib/log";
 import { MEDIA_BUCKET } from "@/lib/media/storage";
+import { currentBusiness } from "@/lib/business/current";
 
 /**
  * Erase the signed-in customer's account (GDPR Article 17).
@@ -47,12 +48,10 @@ export async function POST(req: NextRequest) {
 
   // Read through the USER's client, not the service client: RLS then proves
   // ownership rather than this route asserting it.
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
+    supabase,
+    "id",
+  );
   if (!business) return NextResponse.json({ error: "no business" }, { status: 404 });
 
   const service = createServiceClient();

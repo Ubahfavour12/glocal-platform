@@ -7,6 +7,7 @@
  */
 
 import { callClaudeJson, MODELS } from "@/lib/ai/anthropic";
+import { tenureGuidance } from "@/lib/onboarding/tenure";
 import type { ViralVideo } from "./youtube";
 
 export interface ProductBrief {
@@ -15,6 +16,15 @@ export interface ProductBrief {
   goal: "sales" | "leads" | "whatsapp" | "visits";
   /** free-text the owner gave at onboarding */
   description?: string;
+  /**
+   * The year the business started trading, asked at onboarding.
+   *
+   * It changes the honest angle available to an ad more than almost anything
+   * else in this brief: a shop of fifteen years and one of three months cannot
+   * truthfully say the same thing. Optional, because the question can be
+   * skipped.
+   */
+  foundedYear?: number | null;
 }
 
 export interface AdConcept {
@@ -58,6 +68,7 @@ Business: ${product.businessName}
 Category: ${product.category}
 Goal: ${goalText(product.goal)}
 Notes: ${product.description ?? "n/a"}
+${tenureGuidance(product.foundedYear)}
 
 TOP VIRAL ADS IN THIS SPACE (ranked by views/day):
 ${patterns.join("\n")}

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { STUDIO_QUESTIONS, type StudioAnswers } from "@/lib/studio/questions";
 import { FREEFORM_KEY, appendAnswer, normaliseProfile } from "@/lib/studio/profile";
+import { currentBusiness } from "@/lib/business/current";
 
 /**
  * Save Strategy Studio answers. RLS-scoped to the owner's business.
@@ -55,12 +56,10 @@ export async function POST(req: Request) {
     }
   }
 
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id, strategy_profile")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
+    supabase,
+    "id, strategy_profile",
+  );
   if (!business) return NextResponse.json({ ok: false, error: "no business" }, { status: 404 });
 
   const savedCount = Object.keys(incoming).length;

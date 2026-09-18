@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { MIN_DAILY_BUDGET_USD_MINOR } from "@/lib/money/ledger";
 import { runForBusiness, type BizRow } from "@/lib/orchestrator/run-business";
+import { currentBusiness } from "@/lib/business/current";
 
 export const maxDuration = 300;
 
@@ -35,12 +36,10 @@ export async function POST(req: NextRequest) {
   } | null;
   if (!body) return NextResponse.json({ error: "bad request" }, { status: 400 });
 
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
+    supabase,
+    "id",
+  );
   if (!business) return NextResponse.json({ error: "no business" }, { status: 404 });
 
   const update: Record<string, unknown> = {};

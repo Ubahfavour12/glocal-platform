@@ -8,6 +8,7 @@ import {
   verifyShopifyHmac,
 } from "@/lib/oauth/shopify";
 import { registerOrdersWebhook } from "@/lib/oauth/shopify-live";
+import { currentBusiness } from "@/lib/business/current";
 
 /**
  * Shopify OAuth landing. Verifies the CSRF state + Shopify's callback HMAC,
@@ -45,12 +46,10 @@ export async function GET(request: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.redirect(`${origin}/login`);
 
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
+    supabase,
+    "id",
+  );
   if (!business) return fail("no_business");
 
   try {

@@ -11,18 +11,17 @@ import {
   totalAnswersGiven,
 } from "@/lib/studio/profile";
 import { STUDIO_QUESTIONS } from "@/lib/studio/questions";
+import { currentBusiness } from "@/lib/business/current";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Strategy Studio" };
 
 export default async function StudioPage() {
   const supabase = await createClient();
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id, strategy_profile, plan")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
+    supabase,
+    "id, strategy_profile, plan",
+  );
 
   if (!business) {
     return (

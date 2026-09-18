@@ -16,7 +16,7 @@ export function livePipelineDeps(supabase: SupabaseClient): PipelineDeps {
     async getBusiness(businessId) {
       const { data } = await supabase
         .from("businesses")
-        .select("name, category, goal, strategy_profile")
+        .select("name, category, goal, strategy_profile, founded_year")
         .eq("id", businessId)
         .maybeSingle();
       if (!data) return null;
@@ -28,6 +28,7 @@ export function livePipelineDeps(supabase: SupabaseClient): PipelineDeps {
         category: data.category,
         goal: data.goal,
         description: strategy || undefined,
+        foundedYear: (data.founded_year as number | null) ?? null,
       } as ProductBrief;
     },
 

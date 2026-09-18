@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { LeadList } from "@/components/leads/LeadList";
+import { AddLead } from "@/components/leads/AddLead";
+import { nudgeMessage, shouldNudge } from "@/lib/leads/nudge";
 import type { Lead } from "@/components/leads/LeadRow";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +32,23 @@ export default async function LeadsPage() {
 
   const leads = (data ?? []) as Lead[];
 
+  // The prompt is computed from the leads themselves rather than stored, so
+  // there is no separate piece of state to fall out of step with reality.
+  const open = leads.filter((l) => l.status !== "won" && l.status !== "lost");
+  const settledDates = leads
+    .filter((l) => l.status === "won" || l.status === "lost")
+    .map((l) => new Date(l.created_at).getTime());
+  const nudge = shouldNudge({
+    openCount: open.length,
+    oldestOpenAt:
+      open.length > 0
+        ? new Date(Math.min(...open.map((l) => new Date(l.created_at).getTime())))
+        : null,
+    lastAnsweredAt: settledDates.length > 0 ? new Date(Math.max(...settledDates)) : null,
+    now: new Date(),
+  });
+  const prompt = nudgeMessage(nudge);
+
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="datalabel">leads</div>
@@ -38,8 +57,25 @@ export default async function LeadsPage() {
       </h1>
       <p className="mt-2 max-w-prose text-sm leading-relaxed text-ink-muted">
         Every lead here came from one of your ads, so answering tells Glocal
-        which ad brought real customers — not just the most enquiries.
+        which ad brought real customers — not just the most enquiries. Come and
+        fill these in whenever you like; Glocal only brings it up every few days.
       </p>
+
+      {prompt ? (
+        <div
+          className={`mt-6 rounded-card border p-4 ${
+            nudge.show && nudge.tone === "stale"
+              ? "border-negative bg-surface-raised"
+              : "border-accent bg-surface-raised"
+          }`}
+        >
+          <p className="text-sm text-ink">{prompt}</p>
+        </div>
+      ) : null}
+
+      <div className="mt-6">
+        <AddLead />
+      </div>
 
       <div className="mt-8">
         <LeadList leads={leads} />

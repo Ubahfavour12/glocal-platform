@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { createClient } from "@/lib/supabase/server";
+import { currentBusiness } from "@/lib/business/current";
 
 export const dynamic = "force-dynamic"; // statement must always be current
 export const metadata = { title: "Statement" };
@@ -27,12 +28,10 @@ async function statementData() {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return null;
 
-  const { data: business } = await supabase
-    .from("businesses")
-    .select("id, name")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
+    supabase,
+    "id, name",
+  );
   if (!business) return null;
 
   const { data: balanceRow } = await supabase
