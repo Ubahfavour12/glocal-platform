@@ -90,6 +90,9 @@ export async function POST(req: NextRequest) {
         // Attributed when a code resolved, manual when it did not. The source
         // is the truth about where it came from, not about how it was typed in.
         source: smartLinkId ? "whatsapp" : "manual",
+        // A resolved ref code came from text the sender could have edited or
+        // deleted, so it is recorded as a hint rather than as evidence.
+        attribution: smartLinkId ? "prefill" : "manual",
         smart_link_id: smartLinkId,
         ad_id: adId,
         creative_id: creativeId,
