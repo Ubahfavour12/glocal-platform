@@ -1,0 +1,24 @@
+-- A fourth way a lead gets tied to an ad, and it belongs between the others.
+--
+-- A website enquiry form can now report a lead through the pixel the customer
+-- already pastes on their site. The click id travels in the URL our own
+-- redirect stamped, is stored by the pixel, and is sent back server-side when
+-- the form is submitted.
+--
+-- That is stronger than the WhatsApp prefill and weaker than a Meta click id,
+-- and the ranking should say so rather than rounding it to either:
+--
+--   ctwa     Meta minted it, attached it server to server, sender never sees
+--            it. Cannot be altered.
+--   pixel    WE minted it and the visitor never types or sees it. Editing the
+--            URL would break it, but nobody has a reason to, and no part of
+--            the flow invites it.
+--   prefill  Sits in the sender's compose box, presented for editing. Plenty
+--            will delete it because it reads like clutter.
+--   manual   A person's word.
+--
+-- Added as a separate value rather than reusing 'prefill' because the whole
+-- point of this column is that confidence differs, and collapsing two levels
+-- into one throws away the distinction it exists to record.
+
+alter type lead_attribution add value if not exists 'pixel';
