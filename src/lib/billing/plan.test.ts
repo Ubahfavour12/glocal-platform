@@ -1,15 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  asPlan,
-  isPaid,
-  launchGate,
-  planAllowsLaunch,
-  planAllowsRender,
-  planSummary,
-  rendersRemaining,
-  renderGate,
-  type PlanState,
-} from "./plan";
+import { asPlan, isPaid, launchGate, planAllowsLaunch, planAllowsRender, planSummary, rendersRemaining, renderGate, type PlanState, asTier } from "./plan";
 
 const freeFresh: PlanState = { plan: "free", freeRenderUsed: false };
 const freeUsed: PlanState = { plan: "free", freeRenderUsed: true };
@@ -63,5 +53,35 @@ describe("planSummary", () => {
     expect(planSummary(freeFresh)).toMatch(/render one ad/i);
     expect(planSummary(freeUsed)).toMatch(/used your free preview/i);
     expect(planSummary(paid)).toMatch(/full plan/i);
+  });
+});
+
+describe("asTier", () => {
+  it("keeps each paid tier whole, where asPlan collapses them", () => {
+    for (const t of ["starter", "growth", "scale"] as const) {
+      expect(asTier(t)).toBe(t);
+      expect(asPlan(t)).toBe("paid"); // the distinction asTier exists to keep
+    }
+  });
+
+  it("reads free and absent values as free", () => {
+    expect(asTier("free")).toBe("free");
+    expect(asTier(null)).toBe("free");
+    expect(asTier(undefined)).toBe("free");
+    expect(asTier("")).toBe("free");
+  });
+
+  it("resolves an unmapped paid value to the cheapest tier, not the dearest", () => {
+    // A legacy bare "paid", or a tier added to pricing before the engine table,
+    // must not quietly start spending the expensive vendor's credits.
+    expect(asTier("paid")).toBe("starter");
+    expect(asTier("enterprise")).toBe("starter");
+    expect(asTier("SCALE")).toBe("starter"); // case-sensitive by design: not a known id
+  });
+
+  it("agrees with asPlan about who is paying", () => {
+    for (const raw of ["free", null, undefined, "", "starter", "growth", "scale", "paid"]) {
+      expect(asTier(raw) === "free").toBe(asPlan(raw) === "free");
+    }
   });
 });

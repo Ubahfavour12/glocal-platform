@@ -9,7 +9,21 @@
  * whole app gates consistently.
  */
 
+import { isTierId, type TierId } from "./subscription";
+
 export type Plan = "free" | "paid";
+
+/**
+ * The tier, kept whole, for decisions that need to tell paid tiers apart.
+ *
+ * `Plan` deliberately collapses every paid tier into "paid", which is right for
+ * the render *permission* gate — a paying customer may render, and which tier
+ * they are on does not change that. It is wrong for anything that differs
+ * between tiers, and render-engine routing is now one of those things, so that
+ * question gets its own type rather than widening `Plan` and making every
+ * caller of `asPlan` think about tiers it does not care about.
+ */
+export type RenderTier = "free" | TierId;
 
 /** One free render on the free tier — the single taste of the product. */
 export const FREE_RENDER_LIMIT = 1;
@@ -27,6 +41,21 @@ export interface PlanState {
  */
 export function asPlan(raw: string | null | undefined): Plan {
   return raw && raw !== "free" ? "paid" : "free";
+}
+
+/**
+ * Normalise a raw `businesses.plan` value into a tier.
+ *
+ * `activateSubscription` writes the tier id straight into `businesses.plan`, so
+ * the value is normally "starter", "growth" or "scale". A paid-but-unrecognised
+ * value — a legacy bare "paid", or a tier added to the pricing page before this
+ * table — resolves to the LOWEST paid tier. That direction is deliberate: it
+ * errs toward the cheaper engine, so a value nobody has mapped yet cannot
+ * quietly start spending the expensive vendor's credits.
+ */
+export function asTier(raw: string | null | undefined): RenderTier {
+  if (!raw || raw === "free") return "free";
+  return isTierId(raw) ? raw : "starter";
 }
 
 export function isPaid(s: PlanState): boolean {

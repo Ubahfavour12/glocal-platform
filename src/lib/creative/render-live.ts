@@ -11,6 +11,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   enginesForJob,
   orderedEngines,
+  primaryOverride,
   falEngine,
   higgsfieldEngine,
   submitWithFailover,
@@ -25,7 +26,7 @@ import {
 import { promptFromConcept, renderConcepts, type RenderDeps } from "./render";
 import { routeRender } from "./router";
 import { canRenderKind, type RenderKind } from "./quota";
-import { asPlan, planAllowsRender, type PlanState } from "@/lib/billing/plan";
+import { asPlan, asTier, planAllowsRender, type PlanState, type RenderTier } from "@/lib/billing/plan";
 
 interface OrchestratorConcept {
   id: string;
@@ -60,10 +61,15 @@ export function renderCreativeLive(supabase: SupabaseClient) {
       .select("plan, free_render_used")
       .eq("id", businessId)
       .maybeSingle();
+    const rawPlan = (biz?.plan as string | null) ?? null;
     const planState: PlanState = {
-      plan: asPlan(biz?.plan as string | null),
+      plan: asPlan(rawPlan),
       freeRenderUsed: Boolean(biz?.free_render_used),
     };
+    // The same column answers two different questions: may this business
+    // render at all (collapsed to free/paid), and which engine does it get
+    // (the tier, kept whole). Routing needs the second.
+    const tier: RenderTier = asTier(rawPlan);
     if (!planAllowsRender(planState)) return empty; // free preview used up -> paywall
 
     const { data: sub } = await supabase
@@ -85,7 +91,7 @@ export function renderCreativeLive(supabase: SupabaseClient) {
     // The paid-for engine leads and the other sits behind it as failover; a
     // free account gets one engine and no failover. routeRender has the final
     // say on order, so `engines` above only decides what is on the table.
-    const route = routeRender({ kind, plan: planState.plan, available: engines });
+    const route = routeRender({ kind, tier, available: engines, primary: primaryOverride() });
     const ordered: RenderEngine[] = enginesForJob(engines, route);
 
     // Whichever engine accepted the job has to be the one polled: job ids are
@@ -128,6 +134,21 @@ export function renderCreativeLive(supabase: SupabaseClient) {
       { sourceImageUrl, kind, placement: "reel", quota: { usedToday, dailyLimit } },
       deps,
     );
+
+    // Record a route that did not get the engine the tier policy asked for.
+    // Without this the policy can be entirely inoperative -- every tier landing
+    // on one engine because the other has no key -- and look fine from the app.
+    // That has already happened once here, so it gets written down.
+    if (route.degraded) {
+      await supabase.from("journal_entries").insert({
+        business_id: businessId,
+        entry_type: "note",
+        content: {
+          action: "render_route_degraded",
+          detail: { tier, kind, ran_on: ordered[0]?.name ?? null, routing: route.reason },
+        },
+      });
+    }
 
     // Record a failover so a silent vendor outage is visible in the journal
     // rather than only showing up as a slow night.

@@ -1,46 +1,60 @@
 /**
  * Which engine renders which job.
  *
- * The engine that gets paid for does the work. `preferredPrimary()` in
- * engine.ts names it — Higgsfield since 5 Nov 2026 — and this module orders
- * every job primary-first, with the other engine behind it as failover.
+ * FOUNDER DECISION, 5 Nov 2026: Higgsfield access is a tier benefit, and
+ * images are the cheap lane. The table below is the whole policy:
  *
- * This replaced a split by kind ("Higgsfield for cinematic video, fal for
- * cheap images"). That rule was recorded in its own header as an untested
- * assumption, and it had a consequence nobody had traced: the first render on
- * every account is always an image, so an image rule is in practice the rule
- * for first contact with a new business. While both engines were configured it
- * sent every one of those to fal, which meant a paid Higgsfield subscription
- * could sit untouched and look broken. An assumption is not worth that, so the
- * paid-for engine leads and output gets compared on real duels instead.
+ *            images        video
+ *   free     fal           fal            <- no Higgsfield at all
+ *   starter  fal           Higgsfield
+ *   growth   fal           Higgsfield
+ *   scale    Higgsfield    Higgsfield     <- "higher account, all higgs"
  *
- * One rule here is an economic fact rather than a preference: a free account
- * gets one render and no failover shopping, because a 5-second video costs
- * 10-40x an image and an unpaid account has not paid for either. It is now
- * expressed as "the primary, and only the primary" rather than "fal", because
- * naming a vendor made the restriction collapse the moment that vendor was the
- * one removed — see the note in routeRender.
+ * Free accounts additionally get NO failover: one engine, one render, so an
+ * unpaid preview cannot become two attempts at two vendors. Paid tiers fail
+ * over to the other engine, because a vendor outage mid-launch should cost a
+ * render's quality, not the render.
  *
- * What stops the primary-first choice being an assumption forever: every
- * render records the engine that made it, so the duel that already decides
- * which creative wins on money becomes engine evidence for free. See
- * `scoreboard.ts`. Routing only shifts on that evidence once there is enough of
- * it; flipping engines on three renders would be worse than a fixed rule
- * honestly labelled.
+ * READ THIS BEFORE TRUSTING THE TABLE. It only takes effect while BOTH engines
+ * are configured. With no FAL_KEY set there is nothing to route to, so every
+ * row above collapses onto Higgsfield and every render spends Higgsfield
+ * credits — the table becomes a comment that happens to be false. That is not
+ * hypothetical: it is the second time this exact shape of bug has appeared
+ * here. The old free-tier rule said "a free account renders on fal", named the
+ * vendor, and silently stopped restricting anything the moment fal was the
+ * vendor removed. So routing no longer fails silently: when the preferred
+ * engine is not configured the route says so in `reason`, and render-live
+ * writes that to the journal, where a policy that is not happening is visible
+ * instead of merely true-on-paper.
+ *
+ * RENDER_PRIMARY, when set, overrides the whole table and leads every job with
+ * that engine. It is the emergency lever, not the normal path: the case it
+ * exists for is "stop spending Higgsfield credits now" (set it to `fal`), which
+ * with a credit-metered plan is a live concern, not a theoretical one.
+ *
+ * What stops the table being an assumption forever: every render records the
+ * engine that made it, so the duel that already decides which creative wins on
+ * money becomes engine evidence for free. See `scoreboard.ts`. Nobody has
+ * compared the two vendors' output yet — this table is a cost and packaging
+ * decision, which is a good reason, just not an evidential one.
  *
  * Pure, so the whole policy is testable without a vendor or a database.
  */
 
-import type { Plan } from "@/lib/billing/plan";
+import type { RenderTier } from "@/lib/billing/plan";
 import type { CreativeKind } from "@/lib/fal/client";
-import { preferredPrimary, standbyFor, type EngineName, type RenderEngine } from "./engine";
+import { standbyFor, type EngineName, type RenderEngine } from "./engine";
 
 export interface RouteInput {
   kind: CreativeKind;
-  plan: Plan;
+  /** The business's tier. Paid tiers are NOT interchangeable here. */
+  tier: RenderTier;
   /** Engines that are actually configured, in no particular order. */
   available: readonly RenderEngine[];
-  /** Which engine leads; defaults to the configured primary. */
+  /**
+   * Override the tier table and lead with this engine instead. Normally
+   * undefined; comes from RENDER_PRIMARY.
+   */
   primary?: EngineName;
 }
 
@@ -49,24 +63,43 @@ export interface Route {
   order: RenderEngine[];
   /** Why this order, in plain language, for the journal. */
   reason: string;
+  /**
+   * True when the engine this job was supposed to run on is not configured, so
+   * it is running somewhere else. The policy is not in force for this render,
+   * and the caller records it rather than letting it pass unnoticed.
+   */
+  degraded: boolean;
+}
+
+/** Higgsfield access by tier and kind. The founder decision, in one table. */
+const ENGINE_FOR: Record<RenderTier, Record<CreativeKind, EngineName>> = {
+  free: { image: "fal", video: "fal" },
+  starter: { image: "fal", video: "higgsfield" },
+  // To give Growth Higgsfield images too, change this one line to match scale.
+  growth: { image: "fal", video: "higgsfield" },
+  scale: { image: "higgsfield", video: "higgsfield" },
+};
+
+/** Free accounts get one engine and no second attempt. */
+function allowsFailover(tier: RenderTier): boolean {
+  return tier !== "free";
 }
 
 /**
  * Preference order by name, before availability is considered.
  *
- * `kind` no longer changes the order — it is kept because it belongs to the
- * question being asked, and because the reason strings still name it.
+ * `primary` overrides the tier table entirely when given — that is the
+ * RENDER_PRIMARY escape hatch, and it deliberately ignores tier and kind,
+ * because the situation it exists for ("stop spending that vendor's credits")
+ * is not one where a per-tier exception helps.
  */
 export function preferenceFor(
   kind: CreativeKind,
-  plan: Plan,
-  primary: EngineName = preferredPrimary(),
+  tier: RenderTier,
+  primary?: EngineName,
 ): EngineName[] {
-  void kind;
-  // Free: the primary alone. No failover, so one unpaid render cannot become
-  // two attempts across two vendors.
-  if (plan === "free") return [primary];
-  return [primary, standbyFor(primary)];
+  const lead = primary ?? ENGINE_FOR[tier][kind];
+  return allowsFailover(tier) ? [lead, standbyFor(lead)] : [lead];
 }
 
 /**
@@ -88,47 +121,47 @@ export function preferenceFor(
  * drops the part that only named a vendor.
  */
 export function routeRender(input: RouteInput): Route {
-  const primary = input.primary ?? preferredPrimary();
+  const override = input.primary;
+  const wanted = preferenceFor(input.kind, input.tier, override);
+  const intended = wanted[0];
   const byName = new Map(input.available.map((e) => [e.name, e]));
-  const wanted = preferenceFor(input.kind, input.plan, primary);
   const order = wanted.map((n) => byName.get(n)).filter((e): e is RenderEngine => !!e);
 
-  if (input.plan === "free") {
-    if (order.length > 0) {
-      return {
-        order,
-        reason: `Free account, so this ${input.kind} renders on ${order[0].name} alone, with no failover.`,
-      };
-    }
-    // The primary is not configured. Render on what there is rather than
-    // refusing — but still only one engine, which is what the tier restricts.
-    const only = input.available[0];
-    return only
-      ? {
-          order: [only],
-          reason: `Free account and ${primary} is not configured, so this ${input.kind} renders on ${only.name} alone instead.`,
-        }
-      : { order: [], reason: "No render engine is configured." };
+  // A free account never gets a second attempt, so its list is capped at one
+  // engine whichever engine that turns out to be.
+  const cap = allowsFailover(input.tier) ? Infinity : 1;
+
+  // Anything configured is better than refusing to render. The tier decides
+  // how many engines may be tried, never whether a render happens at all.
+  const rest = input.available.filter((e) => !order.includes(e));
+  const full = [...order, ...rest].slice(0, cap);
+
+  if (full.length === 0) {
+    return { order: [], reason: "No render engine is configured.", degraded: true };
   }
 
-  // Paid: anything configured is better than refusing to render.
-  const rest = input.available.filter((e) => !order.includes(e));
-  const full = [...order, ...rest];
+  const ran = full[0].name;
+  const where = override ? `${ran} (RENDER_PRIMARY override)` : ran;
 
-  if (full.length === 0) return { order: [], reason: "No render engine is configured." };
-
-  const first = full[0].name;
-  if (first !== primary) {
+  if (ran !== intended) {
     return {
       order: full,
-      reason: `${primary} is not configured, so this ${input.kind} renders on ${first} instead.`,
+      // Named loudly: this is the policy NOT being in force. render-live writes
+      // it to the journal so it is visible rather than silently true-on-paper.
+      reason: `${input.tier} ${input.kind} should render on ${intended}, but ${intended} is not configured, so it renders on ${ran} instead. The tier routing policy is not in force.`,
+      degraded: true,
     };
   }
+
+  const tail =
+    full.length > 1
+      ? `, with ${full[1].name} behind it as failover`
+      : input.tier === "free"
+        ? ", alone, with no failover"
+        : ", the only engine configured";
   return {
     order: full,
-    reason:
-      full.length > 1
-        ? `This ${input.kind} renders on ${primary}, with ${full[1].name} behind it as failover.`
-        : `This ${input.kind} renders on ${primary}, the only engine configured.`,
+    reason: `A ${input.tier} ${input.kind} renders on ${where}${tail}.`,
+    degraded: false,
   };
 }

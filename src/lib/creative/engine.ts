@@ -81,7 +81,13 @@ export function availableEngines(
   return [primary, standby].filter((e): e is RenderEngine => e !== null);
 }
 
-/** Which engine leads. Default reflects the subscription being paid for. */
+/**
+ * Fallback primary, used only where no tier is in hand.
+ *
+ * NOT the normal routing path: a real render knows its business's tier and goes
+ * through `routeRender`, which reads the tier table. This is the answer for
+ * code that has to name one engine without a tier to look up.
+ */
 export const DEFAULT_PRIMARY: EngineName = "higgsfield";
 
 /** Pure: the other engine. Two vendors, so this is total, not a lookup. */
@@ -109,12 +115,32 @@ export function preferredPrimary(
 }
 
 /**
+ * The RENDER_PRIMARY override, or undefined when it is not set.
+ *
+ * Distinct from `preferredPrimary()`, which always answers with an engine.
+ * Routing needs to tell "nothing configured, use the tier policy" apart from
+ * "an engine was explicitly demanded" -- collapsing those two was how the
+ * tier table could have been overridden by its own default.
+ */
+export function primaryOverride(
+  raw = process.env.RENDER_PRIMARY,
+): EngineName | undefined {
+  const value = (raw ?? "").trim().toLowerCase();
+  return value === "fal" || value === "higgsfield" ? value : undefined;
+}
+
+/**
  * Order the two engines by preference, primary first.
  *
  * Takes both engines and decides, rather than making every caller remember
  * which argument position means "primary" — the previous arrangement, where
  * priority was argument order alone, is how fal stayed primary silently after
  * the decision to pay for Higgsfield.
+ *
+ * Since the tier policy landed this order is no longer what a job runs on:
+ * `router.ts` decides that per job, from the business's tier. What this still
+ * answers is "what is on the table", and the order is the sensible default for
+ * the one case the router has nothing to say about.
  */
 export function orderedEngines(
   fal: RenderEngine | null,
