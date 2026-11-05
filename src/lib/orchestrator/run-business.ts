@@ -17,6 +17,7 @@ import { llmGatewayScan } from "@/lib/compliance/llm";
 import { buildPipelineBatch } from "@/lib/research/pipeline";
 import { livePipelineDeps } from "@/lib/research/pipeline-live";
 import { renderCreativeLive } from "@/lib/creative/render-live";
+import { higgsfieldConfigProblem, resolveCredentials } from "@/lib/higgsfield/client";
 import { scheduleOrganicForBusiness } from "@/lib/organic/posting-live";
 import type { ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
 import type { PersonaMode } from "@/lib/guardrails/budget";
@@ -73,15 +74,15 @@ export function approvalStatusFor(
   return planStatus === "auto_approved" && !requireApproval ? "approved" : "awaiting";
 }
 
-// Either engine being configured is enough; the render lane fails over between
-// them (see lib/creative/engine.ts).
+// Either engine being configured is enough; the render lane routes between them
+// per tier and fails over (see lib/creative/router.ts).
+//
+// The Higgsfield half delegates to resolveCredentials rather than repeating the
+// env logic. It used to repeat it, and the two copies disagreed: this gate
+// demanded a key AND a secret while the client accepted other shapes, so a key
+// could look present to one and absent to the other. One function, one answer.
 const renderConfigured = () =>
-  Boolean(
-    process.env.FAL_KEY ||
-      process.env.FAL_API_KEY ||
-      process.env.HIGGSFIELD_CREDENTIALS ||
-      (process.env.HIGGSFIELD_API_KEY && process.env.HIGGSFIELD_API_SECRET),
-  );
+  Boolean(process.env.FAL_KEY || process.env.FAL_API_KEY || resolveCredentials());
 
 export async function runForBusiness(
   supabase: Supa,
@@ -97,6 +98,24 @@ export async function runForBusiness(
       await buildPipelineBatch(livePipelineDeps(supabase), biz.id);
     } catch {
       /* plan continues on the existing pool */
+    }
+
+    // A render engine that was configured but cannot be used is the one failure
+    // that used to be completely silent: the engine builder swallows the error
+    // and returns null, so a broken key looks exactly like a deliberate "no
+    // Higgsfield". Writing it down is the difference between a five-minute fix
+    // and an evening wondering why the key does nothing.
+    const configProblem = higgsfieldConfigProblem();
+    if (configProblem) {
+      try {
+        await supabase.from("journal_entries").insert({
+          business_id: biz.id,
+          entry_type: "note",
+          content: { action: "render_engine_misconfigured", detail: { engine: "higgsfield", problem: configProblem } },
+        });
+      } catch {
+        /* diagnostics must never break the nightly run */
+      }
     }
   }
 

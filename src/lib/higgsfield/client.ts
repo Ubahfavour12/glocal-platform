@@ -6,51 +6,127 @@
  * the lane is verifiable offline and lights up the moment the key lands.
  *
  * HOW MUCH OF THIS IS ACTUALLY VERIFIED (read before debugging a failure).
- * This header used to say "Verified against Higgsfield's official API
- * 2026-07-24". That claim was too broad and one part of it is now known wrong,
- * so here is the honest state, checked 5 Nov 2026:
+ * Checked 5 Nov 2026 against the official SDK README
+ * (github.com/higgsfield-ai/higgsfield-js) and Higgsfield's API docs index.
  *
- *   Auth header `Key <id>:<secret>` — corroborated by Higgsfield's own
- *     quick-start and by third-party write-ups. Treat as right.
- *   Status values (queued, in_progress, nsfw, failed, completed) — mapped
- *     defensively either way: an unknown status reads as "processing" rather
- *     than throwing, so a renamed status delays a job, never loses one.
- *   Base URL — SUSPECT. Higgsfield's quick-start points REST at
- *     api.higgsfield.ai and calls platform/open the website, and warns that
- *     its own docs still link older domains. DEFAULT_BASE below is the old
- *     one. HIGGSFIELD_BASE_URL overrides it without a deploy.
- *   Image path — WRONG, almost certainly. `/v1/flux-pro/kontext/max/
- *     image-to-image` is fal.ai's slug shape (`fal-ai/flux-pro/kontext/max`),
- *     and Higgsfield's live model catalogue lists no flux-kontext model at
- *     all — it has flux_2 and flux_3_image, addressed by model id. This looks
- *     copied from the fal client, which is why it was never confirmable.
- *   Video path and the poll path — unconfirmed, same provenance.
+ *   CONFIRMED
+ *     Base URL  https://api.higgsfield.ai  — the SDK sets this as its default.
+ *       An earlier version of this file used platform.higgsfield.ai, which is
+ *       the website, not the API. That broke every call, video included.
+ *     Auth      `Authorization: Key <credential>`. The credential is a
+ *       KEY_ID:KEY_SECRET pair in the SDK and a single key in the quick-start.
+ *       Both are real; the account decides. resolveCredentials takes either.
+ *     Video     /v1/image2video/dop, with `model: "dop-turbo"` in the input.
+ *     Poll      /requests/{id}/status
+ *     Body      { input: { prompt, aspect_ratio, input_images: [...] } }, where
+ *       each input image is { type: "image_url", image_url: "..." }.
+ *     Statuses  queued, in_progress, nsfw, failed, completed — and mapped
+ *       defensively either way, so an unknown status reads as "processing"
+ *       rather than throwing: a renamed status delays a job, never loses one.
  *
- * Every path is therefore overridable by env (see PATHS below) so a wrong slug
- * is a 30-second fix in the hosting dashboard, not a code change and a deploy.
- * The pure mappers are fixture-tested, so what is tested here is the shape of
- * the request and the reading of the response, NOT the addresses.
+ *   NOT CONFIRMED — the image endpoint's last segment.
+ *     The docs show v2 model endpoints as the base plus an endpoint id with NO
+ *     /v1 prefix (marketing-studio/image, xai/grok-imagine-image-2.0), while v1
+ *     endpoints keep theirs. The Kontext family is real: the SDK uses
+ *     `flux-pro/kontext/max/text-to-image`. So the default below drops the /v1
+ *     this file used to carry, and `image-to-image` is inferred from the
+ *     text-to-image sibling. If it 404s, the sibling is the fallback to try.
+ *
+ *     An earlier note here claimed the slug was "almost certainly wrong"
+ *     because Higgsfield's model catalogue lists no flux-kontext model. That
+ *     reasoning was wrong: the catalogue is the consumer app's surface, not the
+ *     REST API's, so it was never evidence about this.
+ *
+ * Every path is overridable by env (see PATHS) so a wrong slug is a 30-second
+ * fix in the hosting dashboard, not a code change and a deploy. The pure
+ * mappers are fixture-tested, so what is tested here is the shape of the
+ * request and the reading of the response, NOT the addresses.
  */
 
 import { fetchWithTimeout, LONG_TIMEOUT_MS } from "@/lib/net/fetch";
-const DEFAULT_BASE = "https://platform.higgsfield.ai";
+const DEFAULT_BASE = "https://api.higgsfield.ai";
 
 export interface HiggsfieldConfig {
-  /** "KEY_ID:KEY_SECRET" from cloud.higgsfield.ai → API */
+  /** Whatever follows "Key " in the Authorization header, verbatim. */
   credentials: string;
   baseUrl: string;
 }
 
-export function higgsfieldConfigFromEnv(): HiggsfieldConfig {
-  const credentials =
-    process.env.HIGGSFIELD_CREDENTIALS ||
-    (process.env.HIGGSFIELD_API_KEY && process.env.HIGGSFIELD_API_SECRET
-      ? `${process.env.HIGGSFIELD_API_KEY}:${process.env.HIGGSFIELD_API_SECRET}`
-      : "");
-  if (!credentials) {
-    throw new Error("HIGGSFIELD_CREDENTIALS (KEY_ID:KEY_SECRET) not configured");
+/**
+ * Which shape the configured credential turned out to be. Diagnostics only —
+ * it never changes the header, which is always `Key ` + the resolved value.
+ */
+export type CredentialShape = "pair" | "combined" | "single";
+
+export interface ResolvedCredentials {
+  credentials: string;
+  shape: CredentialShape;
+}
+
+const str = (v: string | undefined): string => (v ?? "").trim();
+
+/**
+ * Pure: work out the credential from whatever the dashboard handed over.
+ *
+ * WHY THIS IS NOT JUST A PAIR. Higgsfield documents its auth two different
+ * ways: the official SDK uses `Key KEY_ID:KEY_SECRET`, and the quick-start uses
+ * `Key <api-key>`, a single value. Both appear to be real and the account
+ * decides which you get — this one issues a single key with no colon.
+ *
+ * The previous version accepted only the pair, so a lone key resolved to the
+ * empty string, `higgsfieldConfigFromEnv` threw, `higgsfieldEngine()` caught it
+ * and returned null, and a correctly-configured key was indistinguishable from
+ * no key at all. Every render went to fal and nothing said why.
+ *
+ * So all four shapes resolve, and the founder never has to care which one his
+ * dashboard gives him — now or on a key rotation.
+ */
+export function resolveCredentials(
+  env: Record<string, string | undefined> = process.env,
+): ResolvedCredentials | null {
+  const combined = str(env.HIGGSFIELD_CREDENTIALS);
+  if (combined) {
+    return { credentials: combined, shape: combined.includes(":") ? "combined" : "single" };
   }
-  return { credentials, baseUrl: process.env.HIGGSFIELD_BASE_URL || DEFAULT_BASE };
+  const key = str(env.HIGGSFIELD_API_KEY);
+  const secret = str(env.HIGGSFIELD_API_SECRET);
+  if (key && secret) return { credentials: `${key}:${secret}`, shape: "pair" };
+  // A whole pair pasted into the key field, or a single key. Either way the
+  // value is already exactly what goes after "Key ".
+  if (key) return { credentials: key, shape: key.includes(":") ? "combined" : "single" };
+  return null;
+}
+
+/**
+ * Pure: a plain-language reason the configuration is unusable, or null.
+ *
+ * Nothing configured is NOT a problem — leaving an engine off is a choice. This
+ * is only for configuration that was attempted and cannot work, which is the
+ * case that used to be silent.
+ */
+export function higgsfieldConfigProblem(
+  env: Record<string, string | undefined> = process.env,
+): string | null {
+  if (resolveCredentials(env)) return null;
+  const present = ["HIGGSFIELD_CREDENTIALS", "HIGGSFIELD_API_KEY", "HIGGSFIELD_API_SECRET"].filter(
+    (n) => (env[n] ?? "") !== "",
+  );
+  if (present.length === 0) return null; // deliberately not configured
+  return `${present.join(" and ")} set but empty or whitespace, so Higgsfield cannot be used.`;
+}
+
+export function higgsfieldConfigFromEnv(): HiggsfieldConfig {
+  const resolved = resolveCredentials();
+  if (!resolved) {
+    throw new Error(
+      "Higgsfield not configured: set HIGGSFIELD_API_KEY (a single key is fine), " +
+        "or HIGGSFIELD_API_KEY + HIGGSFIELD_API_SECRET, or HIGGSFIELD_CREDENTIALS.",
+    );
+  }
+  return {
+    credentials: resolved.credentials,
+    baseUrl: str(process.env.HIGGSFIELD_BASE_URL) || DEFAULT_BASE,
+  };
 }
 
 /**
@@ -63,7 +139,7 @@ export function higgsfieldConfigFromEnv(): HiggsfieldConfig {
  */
 const PATHS = {
   video: { env: "HIGGSFIELD_VIDEO_PATH", fallback: "/v1/image2video/dop" },
-  image: { env: "HIGGSFIELD_IMAGE_PATH", fallback: "/v1/flux-pro/kontext/max/image-to-image" },
+  image: { env: "HIGGSFIELD_IMAGE_PATH", fallback: "/flux-pro/kontext/max/image-to-image" },
   poll: { env: "HIGGSFIELD_POLL_PATH", fallback: "/requests/{id}/status" },
 } as const;
 

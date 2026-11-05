@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   aspectRatioFor,
   buildRenderRequest,
@@ -7,6 +7,9 @@ import {
   describeFailure,
   pathFromEnv,
   pollPathFor,
+  resolveCredentials,
+  higgsfieldConfigProblem,
+  higgsfieldConfigFromEnv,
 } from "./client";
 
 const base = (over: Partial<RenderConceptInput> = {}): RenderConceptInput => ({
@@ -120,7 +123,7 @@ describe("pathFromEnv", () => {
     // A full URL or bare host here would be concatenated onto the base.
     for (const bad of ["https://api.higgsfield.ai/v1/x", "api.higgsfield.ai", "v1/x"]) {
       expect(pathFromEnv("image", { HIGGSFIELD_IMAGE_PATH: bad })).toBe(
-        "/v1/flux-pro/kontext/max/image-to-image",
+        "/flux-pro/kontext/max/image-to-image",
       );
     }
   });
@@ -179,5 +182,128 @@ describe("describeFailure", () => {
     const msg = describeFailure("submit", 403, "/p", '{"message":"key kid:secret rejected"}');
     expect(msg).toContain("403");
     expect(msg).not.toContain("HIGGSFIELD_CREDENTIALS=");
+  });
+});
+
+describe("resolveCredentials", () => {
+  it("accepts a lone key with no colon", () => {
+    // THE REGRESSION. Higgsfield issued this account a single key; the old code
+    // demanded a pair, resolved to "", threw, and the engine builder turned
+    // that into "Higgsfield is not installed". A correct key did nothing and
+    // said nothing.
+    expect(resolveCredentials({ HIGGSFIELD_API_KEY: "hf_abc123" })).toEqual({
+      credentials: "hf_abc123",
+      shape: "single",
+    });
+  });
+
+  it("joins a key and secret into a pair", () => {
+    expect(
+      resolveCredentials({ HIGGSFIELD_API_KEY: "kid", HIGGSFIELD_API_SECRET: "sec" }),
+    ).toEqual({ credentials: "kid:sec", shape: "pair" });
+  });
+
+  it("takes a whole pair pasted into the key field", () => {
+    expect(resolveCredentials({ HIGGSFIELD_API_KEY: "kid:sec" })).toEqual({
+      credentials: "kid:sec",
+      shape: "combined",
+    });
+  });
+
+  it("lets HIGGSFIELD_CREDENTIALS win over everything else", () => {
+    const r = resolveCredentials({
+      HIGGSFIELD_CREDENTIALS: "explicit:wins",
+      HIGGSFIELD_API_KEY: "kid",
+      HIGGSFIELD_API_SECRET: "sec",
+    });
+    expect(r?.credentials).toBe("explicit:wins");
+  });
+
+  it("prefers the pair over a lone key when both are available", () => {
+    const r = resolveCredentials({ HIGGSFIELD_API_KEY: "kid", HIGGSFIELD_API_SECRET: "sec" });
+    expect(r?.credentials).toBe("kid:sec");
+    expect(r?.shape).toBe("pair");
+  });
+
+  it("returns null when nothing is configured", () => {
+    expect(resolveCredentials({})).toBeNull();
+  });
+
+  it("treats whitespace-only values as absent", () => {
+    expect(resolveCredentials({ HIGGSFIELD_API_KEY: "   " })).toBeNull();
+    expect(
+      resolveCredentials({ HIGGSFIELD_API_KEY: " kid ", HIGGSFIELD_API_SECRET: " sec " }),
+    ).toEqual({ credentials: "kid:sec", shape: "pair" });
+  });
+
+  it("passes the value through verbatim, inventing no colon", () => {
+    // Whatever resolves goes straight after "Key " in the header.
+    for (const v of ["abc", "a:b", "a:b:c", "Key-Looking-Value"]) {
+      expect(resolveCredentials({ HIGGSFIELD_CREDENTIALS: v })?.credentials).toBe(v);
+    }
+  });
+});
+
+describe("higgsfieldConfigProblem", () => {
+  it("is silent when nothing is configured, because that is a choice", () => {
+    expect(higgsfieldConfigProblem({})).toBeNull();
+  });
+
+  it("is silent when the credential resolves, in any shape", () => {
+    expect(higgsfieldConfigProblem({ HIGGSFIELD_API_KEY: "k" })).toBeNull();
+    expect(higgsfieldConfigProblem({ HIGGSFIELD_API_KEY: "k", HIGGSFIELD_API_SECRET: "s" })).toBeNull();
+    expect(higgsfieldConfigProblem({ HIGGSFIELD_CREDENTIALS: "k:s" })).toBeNull();
+  });
+
+  it("names the variables when configuration was attempted but cannot work", () => {
+    const problem = higgsfieldConfigProblem({ HIGGSFIELD_API_KEY: "   " });
+    expect(problem).toMatch(/HIGGSFIELD_API_KEY/);
+    expect(problem).toMatch(/cannot be used/);
+  });
+
+  it("flags a secret with no key, which authenticates nothing on its own", () => {
+    expect(higgsfieldConfigProblem({ HIGGSFIELD_API_SECRET: "sec" })).toMatch(
+      /HIGGSFIELD_API_SECRET/,
+    );
+  });
+});
+
+describe("the confirmed addresses", () => {
+  it("defaults to the API host, not the website", () => {
+    // platform.higgsfield.ai is the site; api.higgsfield.ai is the API. Getting
+    // this wrong broke every call, video included.
+    vi.stubEnv("HIGGSFIELD_API_KEY", "hf_test");
+    vi.stubEnv("HIGGSFIELD_BASE_URL", "");
+    try {
+      const cfg = higgsfieldConfigFromEnv();
+      expect(cfg.baseUrl).toBe("https://api.higgsfield.ai");
+      expect(cfg.credentials).toBe("hf_test"); // a lone key survives the round trip
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("still lets the base URL be overridden without a deploy", () => {
+    vi.stubEnv("HIGGSFIELD_API_KEY", "hf_test");
+    vi.stubEnv("HIGGSFIELD_BASE_URL", "https://elsewhere.example");
+    try {
+      expect(higgsfieldConfigFromEnv().baseUrl).toBe("https://elsewhere.example");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("keeps the confirmed video and poll paths", () => {
+    expect(pathFromEnv("video", {})).toBe("/v1/image2video/dop");
+    expect(pathFromEnv("poll", {})).toBe("/requests/{id}/status");
+  });
+
+  it("gives the image endpoint no /v1 prefix", () => {
+    // v2 model endpoints are the base plus an endpoint id, with no /v1;
+    // v1 endpoints (video) keep theirs.
+    const image = pathFromEnv("image", {});
+    expect(image).toBe("/flux-pro/kontext/max/image-to-image");
+    expect(image.startsWith("/v1/")).toBe(false);
+    expect(pathFromEnv("video", {}).startsWith("/v1/")).toBe(true);
   });
 });
