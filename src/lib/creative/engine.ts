@@ -1,15 +1,20 @@
 /**
  * Render engine selection + failover.
  *
- * fal.ai is primary. Higgsfield stays configured as a standby and is used only
- * when fal cannot be reached. This is the one routing rule that needs no
- * evidence to justify: it is about reliability, not taste. If the primary is
- * down mid-launch, ads should fall back rather than silently stop rendering.
+ * HIGGSFIELD IS PRIMARY, fal is the standby. Changed 5 Nov 2026 when the
+ * founder subscribed to Higgsfield: it is the engine being paid for, so it is
+ * the engine that should do the work, and fal exists to catch a failure rather
+ * than to be the default.
+ *
+ * Failover itself needs no evidence to justify — it is about reliability, not
+ * taste. If the primary is down mid-launch, ads should fail over rather than
+ * silently stop rendering.
  *
  * Quality-based routing ("Higgsfield for cinematic video, fal for product
- * images") is deliberately NOT here. That rule requires knowing which engine is
- * actually better at what, and nobody has compared their output yet. See
- * 01-FOUNDING-DOCS/18-Render-Engine-Routing.md.
+ * images") used to live in router.ts and has been removed, not moved here. It
+ * required knowing which engine is better at what, nobody had compared their
+ * output, and its image half silently kept every first render away from the
+ * engine being paid for. See 01-FOUNDING-DOCS/18-Render-Engine-Routing.md.
  */
 
 import * as fal from "@/lib/fal/client";
@@ -74,6 +79,67 @@ export function availableEngines(
   standby: RenderEngine | null,
 ): RenderEngine[] {
   return [primary, standby].filter((e): e is RenderEngine => e !== null);
+}
+
+/** Which engine leads. Default reflects the subscription being paid for. */
+export const DEFAULT_PRIMARY: EngineName = "higgsfield";
+
+/** Pure: the other engine. Two vendors, so this is total, not a lookup. */
+export function standbyFor(primary: EngineName): EngineName {
+  return primary === "fal" ? "higgsfield" : "fal";
+}
+
+/**
+ * Pure: read the preferred primary from configuration.
+ *
+ * Config is allowed to decide this, unlike the payment rail, and the
+ * difference is worth stating because that distinction was learned the hard
+ * way here. `PAYMENTS_PROVIDER` could once route real customer money to a
+ * retired processor, so that setting is now ignored by code. Choosing a render
+ * engine cannot lose anyone's money: the worst an incorrect value can do is
+ * fall through to the default, and the worst a wrong-but-valid one can do is
+ * render on the other paid engine. So this stays switchable without a deploy,
+ * which is exactly what you want while comparing two engines' output.
+ */
+export function preferredPrimary(
+  raw = process.env.RENDER_PRIMARY,
+): EngineName {
+  const value = (raw ?? "").trim().toLowerCase();
+  return value === "fal" || value === "higgsfield" ? value : DEFAULT_PRIMARY;
+}
+
+/**
+ * Order the two engines by preference, primary first.
+ *
+ * Takes both engines and decides, rather than making every caller remember
+ * which argument position means "primary" — the previous arrangement, where
+ * priority was argument order alone, is how fal stayed primary silently after
+ * the decision to pay for Higgsfield.
+ */
+export function orderedEngines(
+  fal: RenderEngine | null,
+  higgsfield: RenderEngine | null,
+  primary: EngineName = preferredPrimary(),
+): RenderEngine[] {
+  return primary === "fal"
+    ? availableEngines(fal, higgsfield)
+    : availableEngines(higgsfield, fal);
+}
+
+/**
+ * Engines in order for a job, honouring the tier restriction.
+ *
+ * This exists so one function answers "what does this job run on", instead of
+ * the ordering here being quietly overruled by the per-job router downstream —
+ * which is exactly what happened to the last engine decision. `router.ts`
+ * decides; the fallback to the plain configured order only covers the case
+ * where it has nothing to say.
+ */
+export function enginesForJob(
+  engines: readonly RenderEngine[],
+  route: { order: RenderEngine[] },
+): RenderEngine[] {
+  return route.order.length > 0 ? route.order : [...engines];
 }
 
 export interface FailoverResult {

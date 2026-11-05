@@ -4,6 +4,9 @@ import {
   buildRenderRequest,
   parseRenderStatus,
   type RenderConceptInput,
+  describeFailure,
+  pathFromEnv,
+  pollPathFor,
 } from "./client";
 
 const base = (over: Partial<RenderConceptInput> = {}): RenderConceptInput => ({
@@ -97,5 +100,84 @@ describe("parseRenderStatus", () => {
     expect(nsfw.error).toMatch(/unsafe/i);
     const done = parseRenderStatus({ request_id: "r", status: "completed", video_url: "https://cdn/v.mp4" });
     expect(done).toMatchObject({ state: "done", mediaUrl: "https://cdn/v.mp4" });
+  });
+});
+
+describe("pathFromEnv", () => {
+  it("falls back to the compiled-in default when unset or blank", () => {
+    expect(pathFromEnv("video", {})).toBe("/v1/image2video/dop");
+    expect(pathFromEnv("video", { HIGGSFIELD_VIDEO_PATH: "   " })).toBe("/v1/image2video/dop");
+  });
+
+  it("takes an override so a wrong slug is fixed without a deploy", () => {
+    expect(pathFromEnv("image", { HIGGSFIELD_IMAGE_PATH: "/v1/flux_3_image" })).toBe(
+      "/v1/flux_3_image",
+    );
+    expect(pathFromEnv("video", { HIGGSFIELD_VIDEO_PATH: " /v1/other " })).toBe("/v1/other");
+  });
+
+  it("ignores a value that is not a path, rather than building a nonsense URL", () => {
+    // A full URL or bare host here would be concatenated onto the base.
+    for (const bad of ["https://api.higgsfield.ai/v1/x", "api.higgsfield.ai", "v1/x"]) {
+      expect(pathFromEnv("image", { HIGGSFIELD_IMAGE_PATH: bad })).toBe(
+        "/v1/flux-pro/kontext/max/image-to-image",
+      );
+    }
+  });
+});
+
+describe("pollPathFor", () => {
+  it("substitutes the job id", () => {
+    expect(pollPathFor("abc123", {})).toBe("/requests/abc123/status");
+  });
+
+  it("encodes a job id so it cannot escape its path segment", () => {
+    expect(pollPathFor("a/b?c", {})).toBe("/requests/a%2Fb%3Fc/status");
+  });
+
+  it("appends the id when an override has no placeholder", () => {
+    expect(pollPathFor("j1", { HIGGSFIELD_POLL_PATH: "/v1/requests" })).toBe("/v1/requests/j1");
+    expect(pollPathFor("j1", { HIGGSFIELD_POLL_PATH: "/v1/requests/" })).toBe("/v1/requests/j1");
+  });
+});
+
+describe("describeFailure", () => {
+  it("names the status and the path, because the path is the suspect", () => {
+    const msg = describeFailure("submit", 404, "/v1/flux-pro/kontext/max/image-to-image", "");
+    expect(msg).toContain("404");
+    expect(msg).toContain("/v1/flux-pro/kontext/max/image-to-image");
+    expect(msg).toContain("HIGGSFIELD_IMAGE_PATH");
+  });
+
+  it("survives an HTML error page instead of losing the status code", () => {
+    // The old code called res.json() first, so this case reached the journal
+    // as "Unexpected token '<'" with no status, no path and no vendor message.
+    const msg = describeFailure("submit", 404, "/v1/wrong", "<html><body>Not Found</body></html>");
+    expect(msg).toContain("404");
+    expect(msg).toContain("/v1/wrong");
+  });
+
+  it("reads the vendor's own message out of a JSON body", () => {
+    const msg = describeFailure("poll", 400, "/requests/j/status", '{"message":"bad request id"}');
+    expect(msg).toContain("bad request id");
+  });
+
+  it("tells auth and credit failures apart from a wrong path", () => {
+    expect(describeFailure("submit", 401, "/p", "")).toContain("HIGGSFIELD_CREDENTIALS");
+    expect(describeFailure("submit", 402, "/p", "")).toContain("credits");
+    expect(describeFailure("submit", 429, "/p", "")).toContain("rate limited");
+    expect(describeFailure("submit", 500, "/p", "")).not.toContain("path is wrong");
+  });
+
+  it("caps the body so an error page cannot flood the journal", () => {
+    const msg = describeFailure("submit", 500, "/p", "x".repeat(5000));
+    expect(msg.length).toBeLessThan(500);
+  });
+
+  it("never repeats the credentials", () => {
+    // This text lands in logs and sometimes in the journal.
+    const msg = describeFailure("submit", 403, "/p", '{"message":"key kid:secret rejected"}');
+    expect(msg).toContain("403");
+    expect(msg).not.toContain("HIGGSFIELD_CREDENTIALS=");
   });
 });

@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { availableEngines, submitWithFailover, type RenderEngine } from "./engine";
+import {
+  DEFAULT_PRIMARY,
+  availableEngines,
+  enginesForJob,
+  orderedEngines,
+  preferredPrimary,
+  standbyFor,
+  submitWithFailover,
+  type RenderEngine,
+} from "./engine";
 import type { RenderStatus } from "@/lib/fal/client";
 
 const input = {
@@ -29,6 +38,80 @@ describe("availableEngines", () => {
 
   it("returns nothing when neither is configured, keeping the lane dormant", () => {
     expect(availableEngines(null, null)).toEqual([]);
+  });
+});
+
+describe("preferredPrimary", () => {
+  it("defaults to the engine the subscription is for", () => {
+    expect(DEFAULT_PRIMARY).toBe("higgsfield");
+    expect(preferredPrimary(undefined)).toBe("higgsfield");
+    expect(preferredPrimary("")).toBe("higgsfield");
+  });
+
+  it("accepts either engine name, however it is cased or padded", () => {
+    expect(preferredPrimary("fal")).toBe("fal");
+    expect(preferredPrimary(" FAL ")).toBe("fal");
+    expect(preferredPrimary("Higgsfield")).toBe("higgsfield");
+  });
+
+  it("falls back to the default on anything it does not recognise", () => {
+    // A typo in config must not leave the product with no primary at all.
+    for (const bad of ["fal.ai", "higgs", "openai", "true", "1"]) {
+      expect(preferredPrimary(bad)).toBe("higgsfield");
+    }
+  });
+});
+
+describe("standbyFor", () => {
+  it("names the other engine", () => {
+    expect(standbyFor("higgsfield")).toBe("fal");
+    expect(standbyFor("fal")).toBe("higgsfield");
+  });
+});
+
+describe("orderedEngines", () => {
+  const fal = engine("fal", ok);
+  const hf = engine("higgsfield", ok);
+
+  it("puts the primary first whichever argument it arrived in", () => {
+    // The whole point: priority is no longer argument order, which is how fal
+    // stayed primary silently after the decision to pay for Higgsfield.
+    expect(orderedEngines(fal, hf, "higgsfield").map((e) => e.name)).toEqual([
+      "higgsfield",
+      "fal",
+    ]);
+    expect(orderedEngines(fal, hf, "fal").map((e) => e.name)).toEqual(["fal", "higgsfield"]);
+  });
+
+  it("drops anything unconfigured and never leaves a gap", () => {
+    expect(orderedEngines(fal, null, "higgsfield").map((e) => e.name)).toEqual(["fal"]);
+    expect(orderedEngines(null, hf, "fal").map((e) => e.name)).toEqual(["higgsfield"]);
+    expect(orderedEngines(null, null, "higgsfield")).toEqual([]);
+  });
+
+  it("defaults to Higgsfield with no primary passed", () => {
+    expect(orderedEngines(fal, hf)[0].name).toBe("higgsfield");
+  });
+});
+
+describe("enginesForJob", () => {
+  const fal = engine("fal", ok);
+  const hf = engine("higgsfield", ok);
+
+  it("lets the route decide, not the configured order", () => {
+    const order = enginesForJob([fal, hf], { order: [hf] });
+    expect(order.map((e) => e.name)).toEqual(["higgsfield"]);
+  });
+
+  it("falls back to the configured engines only when the route is empty", () => {
+    const order = enginesForJob([fal, hf], { order: [] });
+    expect(order.map((e) => e.name)).toEqual(["fal", "higgsfield"]);
+  });
+
+  it("returns a copy, so a caller cannot mutate the engine list", () => {
+    const engines = [fal, hf];
+    enginesForJob(engines, { order: [] }).pop();
+    expect(engines).toHaveLength(2);
   });
 });
 

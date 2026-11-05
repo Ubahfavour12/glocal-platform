@@ -1,15 +1,16 @@
 /**
- * Live render adapter — binds the render lane (render.ts) to fal.ai, the media
- * store, and the subscription quota. Exposes the `renderCreative` function the
- * nightly orchestrator expects. Entirely dormant until FAL_KEY is set AND the
- * business has a stored source image; in every not-ready case it returns an
- * empty mediaUrl so the launcher simply makes a link ad without a custom
- * creative (still valid).
+ * Live render adapter — binds the render lane (render.ts) to a render engine,
+ * the media store, and the subscription quota. Exposes the `renderCreative`
+ * function the nightly orchestrator expects. Entirely dormant until at least
+ * one engine is configured (Higgsfield or fal) AND the business has a stored
+ * source image; in every not-ready case it returns an empty mediaUrl so the
+ * launcher simply makes a link ad without a custom creative (still valid).
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  availableEngines,
+  enginesForJob,
+  orderedEngines,
   falEngine,
   higgsfieldEngine,
   submitWithFailover,
@@ -43,9 +44,10 @@ export function renderCreativeLive(supabase: SupabaseClient) {
   return async (businessId: string, concept: OrchestratorConcept): Promise<RenderedForPlan> => {
     const empty: RenderedForPlan = { conceptId: concept.id, mediaUrl: "", copy: concept.copy };
 
-    // fal primary, Higgsfield standby. Empty when neither is configured, which
-    // leaves the lane dormant instead of throwing.
-    const engines = availableEngines(falEngine(), higgsfieldEngine());
+    // Higgsfield primary, fal standby — see engine.ts, and RENDER_PRIMARY to
+    // flip it without a deploy. Empty when neither is configured, which leaves
+    // the lane dormant instead of throwing.
+    const engines = orderedEngines(falEngine(), higgsfieldEngine());
     if (engines.length === 0) return empty;
 
     const sourceImageUrl = await getSourceImageUrl(supabase, businessId);
@@ -80,11 +82,11 @@ export function renderCreativeLive(supabase: SupabaseClient) {
       ? wantedKind
       : "image";
 
-    // Both engines are live and the job picks between them: video to Higgsfield
-    // for its motion work, images to fal where they are cheapest, and a free
-    // account never reaches the expensive engine whatever it asked for.
+    // The paid-for engine leads and the other sits behind it as failover; a
+    // free account gets one engine and no failover. routeRender has the final
+    // say on order, so `engines` above only decides what is on the table.
     const route = routeRender({ kind, plan: planState.plan, available: engines });
-    const ordered: RenderEngine[] = route.order.length > 0 ? route.order : engines;
+    const ordered: RenderEngine[] = enginesForJob(engines, route);
 
     // Whichever engine accepted the job has to be the one polled: job ids are
     // not portable between vendors.
