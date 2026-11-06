@@ -248,6 +248,26 @@ export function decideVerdict(
   }
 
   const aggs = new Map(candidates.map((c) => [c.adId, aggregateWindow(c.daily, opts.now)]));
+  return pickWinner(aggs, candidates, opts);
+}
+
+/**
+ * Apply the metric hierarchy to already-aggregated candidates.
+ *
+ * Split out of decideVerdict so sequential testing (verdicts/sequential.ts)
+ * uses the SAME hierarchy rather than a second copy of it. Two copies would
+ * drift, and the one that drifted would be the one nobody was looking at --
+ * the cheap tier's.
+ *
+ * Takes aggregates rather than computing them, because the duel sums a rolling
+ * window ending now while a sequential block sums a fixed past period. That is
+ * the only real difference between the two; everything below is shared.
+ */
+export function pickWinner(
+  aggs: Map<string, WindowAggregate>,
+  candidates: CandidateMetrics[],
+  opts: { storeConnected: boolean; revenueTrusted?: boolean; awareness?: boolean },
+): Verdict {
 
   // Hierarchy: ROAS when revenue attribution is trustworthy — automatic
   // (store connected) or manual/pixel that passed the consistency gate.
