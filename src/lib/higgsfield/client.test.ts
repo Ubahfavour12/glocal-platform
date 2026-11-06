@@ -10,6 +10,7 @@ import {
   resolveCredentials,
   higgsfieldConfigProblem,
   higgsfieldConfigFromEnv,
+  toHiggsfieldBody,
 } from "./client";
 
 const base = (over: Partial<RenderConceptInput> = {}): RenderConceptInput => ({
@@ -123,7 +124,7 @@ describe("pathFromEnv", () => {
     // A full URL or bare host here would be concatenated onto the base.
     for (const bad of ["https://api.higgsfield.ai/v1/x", "api.higgsfield.ai", "v1/x"]) {
       expect(pathFromEnv("image", { HIGGSFIELD_IMAGE_PATH: bad })).toBe(
-        "/flux-pro/kontext/max/image-to-image",
+        "/higgsfield-ai/soul/v2/image-to-image",
       );
     }
   });
@@ -299,11 +300,74 @@ describe("the confirmed addresses", () => {
   });
 
   it("gives the image endpoint no /v1 prefix", () => {
-    // v2 model endpoints are the base plus an endpoint id, with no /v1;
+    // v2 model endpoints are the base plus a model slug, with no /v1;
     // v1 endpoints (video) keep theirs.
     const image = pathFromEnv("image", {});
-    expect(image).toBe("/flux-pro/kontext/max/image-to-image");
+    expect(image).toBe("/higgsfield-ai/soul/v2/image-to-image");
     expect(image.startsWith("/v1/")).toBe(false);
     expect(pathFromEnv("video", {}).startsWith("/v1/")).toBe(true);
+  });
+});
+
+describe("toHiggsfieldBody", () => {
+  const base = {
+    conceptId: "c1",
+    prompt: "Bottle on dark wood",
+    sourceImageUrl: "https://cdn.example.com/bottle.jpg",
+    placement: "reel" as const,
+  };
+
+  it("sends the image body FLAT, with image_url as a string", () => {
+    // Probed 5 Nov 2026: /higgsfield-ai/soul/v2/image-to-image requires
+    // `prompt` and `image_url` at the top level.
+    const body = toHiggsfieldBody(buildRenderRequest({ ...base, kind: "image" }));
+    expect(body).toEqual({
+      prompt: "Bottle on dark wood",
+      image_url: "https://cdn.example.com/bottle.jpg",
+      aspect_ratio: "9:16",
+    });
+    expect(body.input).toBeUndefined(); // the key neither route actually has
+    expect(body.params).toBeUndefined();
+  });
+
+  it("sends the video body NESTED under params, with input_images as a list", () => {
+    // Probed: /v1/image2video/dop reports prompt and input_images missing at
+    // loc ["body","params",...] — a different shape from the image route.
+    const body = toHiggsfieldBody(
+      buildRenderRequest({ ...base, kind: "video", durationSeconds: 8 }),
+    ) as { params: Record<string, unknown> };
+    expect(body.params).toMatchObject({
+      prompt: "Bottle on dark wood",
+      input_images: [{ type: "image_url", image_url: "https://cdn.example.com/bottle.jpg" }],
+      model: "dop-turbo",
+      duration: 8,
+    });
+    expect((body as Record<string, unknown>).input).toBeUndefined();
+  });
+
+  it("never nests the image body or flattens the video body", () => {
+    // The old code sent { input: {...} } for both, which no route accepts.
+    const image = toHiggsfieldBody(buildRenderRequest({ ...base, kind: "image" }));
+    const video = toHiggsfieldBody(buildRenderRequest({ ...base, kind: "video" }));
+    expect(Object.keys(image).sort()).toEqual(["aspect_ratio", "image_url", "prompt"]);
+    expect(Object.keys(video)).toEqual(["params"]);
+  });
+
+  it("carries the placement's aspect ratio into both shapes", () => {
+    const feedImage = toHiggsfieldBody(
+      buildRenderRequest({ ...base, kind: "image", placement: "feed" }),
+    );
+    expect(feedImage.aspect_ratio).toBe("4:5");
+    const feedVideo = toHiggsfieldBody(
+      buildRenderRequest({ ...base, kind: "video", placement: "feed" }),
+    ) as { params: { aspect_ratio: string } };
+    expect(feedVideo.params.aspect_ratio).toBe("4:5");
+  });
+
+  it("defaults the image endpoint to a model that actually exists", () => {
+    // GET /models lists 95 slugs and not one contains "flux" or "kontext".
+    const path = pathFromEnv("image", {});
+    expect(path).toBe("/higgsfield-ai/soul/v2/image-to-image");
+    expect(path).not.toMatch(/kontext|flux/);
   });
 });

@@ -5,42 +5,44 @@
  * when unconfigured, pure request/response helpers that are fixture-tested so
  * the lane is verifiable offline and lights up the moment the key lands.
  *
- * HOW MUCH OF THIS IS ACTUALLY VERIFIED (read before debugging a failure).
- * Checked 5 Nov 2026 against the official SDK README
- * (github.com/higgsfield-ai/higgsfield-js) and Higgsfield's API docs index.
+ * VERIFIED AGAINST THE LIVE API, 5 Nov 2026. Earlier versions of this header
+ * claimed more than had been checked, so this one says how each line was
+ * established. Everything below was probed directly against api.higgsfield.ai
+ * with a real key, using invalid bodies so that nothing was ever generated.
  *
- *   CONFIRMED
- *     Base URL  https://api.higgsfield.ai  — the SDK sets this as its default.
- *       An earlier version of this file used platform.higgsfield.ai, which is
- *       the website, not the API. That broke every call, video included.
- *     Auth      `Authorization: Key <credential>`. The credential is a
- *       KEY_ID:KEY_SECRET pair in the SDK and a single key in the quick-start.
- *       Both are real; the account decides. resolveCredentials takes either.
- *     Video     /v1/image2video/dop, with `model: "dop-turbo"` in the input.
- *     Poll      /requests/{id}/status
- *     Body      { input: { prompt, aspect_ratio, input_images: [...] } }, where
- *       each input image is { type: "image_url", image_url: "..." }.
- *     Statuses  queued, in_progress, nsfw, failed, completed — and mapped
- *       defensively either way, so an unknown status reads as "processing"
- *       rather than throwing: a renamed status delays a job, never loses one.
+ *   Base URL  https://api.higgsfield.ai
+ *     Was platform.higgsfield.ai, which is the website. That alone broke every
+ *     call, video included.
+ *   Auth      `Authorization: Key <credential>`
+ *     A SINGLE key authenticates — probes returned 404/422, never 401. The SDK
+ *     documents a KEY_ID:KEY_SECRET pair and the quick-start a single key;
+ *     both are real and the account decides. resolveCredentials takes either.
+ *   Discovery GET /models returns all 95 models with slugs. Worth knowing:
+ *     it is how the image model below was found, and how to find a new one.
+ *   Image     POST /higgsfield-ai/soul/v2/image-to-image
+ *     Body is FLAT: { prompt, image_url }, image_url a plain string.
+ *     There is NO flux-kontext model on this API — the slug this file used to
+ *     carry was fal's, and /models confirms it: no slug contains "flux" or
+ *     "kontext" at all. Alternatives with the same contract if Soul 2
+ *     disappoints: alibaba/qwen-image-3/edit (takes image_urls, an array), or
+ *     marketing-studio/image, which is purpose-built for product ads and is
+ *     worth trying once there is output to compare.
+ *   Video     POST /v1/image2video/dop
+ *     Body is NESTED: { params: { prompt, input_images: [...] } }. A different
+ *     shape from the image route, which is why toHiggsfieldBody branches.
+ *   Poll      /requests/{id}/status
+ *     A random id returns {"detail":"Not found"} rather than the
+ *     {"detail":"model_not_found"} a bad route gives, so the route is real.
+ *     Not confirmed end to end, which needs a real job id.
+ *   Extras    Unknown keys are ignored, not rejected, so aspect_ratio / model /
+ *     duration are safe to send even where they are not documented.
+ *   Statuses  queued, in_progress, nsfw, failed, completed — mapped
+ *     defensively either way, so an unknown status reads as "processing"
+ *     rather than throwing: a renamed status delays a job, never loses one.
  *
- *   NOT CONFIRMED — the image endpoint's last segment.
- *     The docs show v2 model endpoints as the base plus an endpoint id with NO
- *     /v1 prefix (marketing-studio/image, xai/grok-imagine-image-2.0), while v1
- *     endpoints keep theirs. The Kontext family is real: the SDK uses
- *     `flux-pro/kontext/max/text-to-image`. So the default below drops the /v1
- *     this file used to carry, and `image-to-image` is inferred from the
- *     text-to-image sibling. If it 404s, the sibling is the fallback to try.
- *
- *     An earlier note here claimed the slug was "almost certainly wrong"
- *     because Higgsfield's model catalogue lists no flux-kontext model. That
- *     reasoning was wrong: the catalogue is the consumer app's surface, not the
- *     REST API's, so it was never evidence about this.
- *
- * Every path is overridable by env (see PATHS) so a wrong slug is a 30-second
- * fix in the hosting dashboard, not a code change and a deploy. The pure
- * mappers are fixture-tested, so what is tested here is the shape of the
- * request and the reading of the response, NOT the addresses.
+ * Every path stays overridable by env (see PATHS) so a model that is retired
+ * upstream is a 30-second dashboard fix, not a code change and a deploy. A
+ * failed render names the status, the path it tried and the variable to change.
  */
 
 import { fetchWithTimeout, LONG_TIMEOUT_MS } from "@/lib/net/fetch";
@@ -139,7 +141,7 @@ export function higgsfieldConfigFromEnv(): HiggsfieldConfig {
  */
 const PATHS = {
   video: { env: "HIGGSFIELD_VIDEO_PATH", fallback: "/v1/image2video/dop" },
-  image: { env: "HIGGSFIELD_IMAGE_PATH", fallback: "/flux-pro/kontext/max/image-to-image" },
+  image: { env: "HIGGSFIELD_IMAGE_PATH", fallback: "/higgsfield-ai/soul/v2/image-to-image" },
   poll: { env: "HIGGSFIELD_POLL_PATH", fallback: "/requests/{id}/status" },
 } as const;
 
@@ -297,18 +299,46 @@ export function parseRenderStatus(raw: RawStatus): RenderStatus {
 
 // ---------- network (thin; the mappers above hold the logic) ----------
 
-/** Map our validated request into Higgsfield's `input` body. */
-function toHiggsfieldBody(req: ReturnType<typeof buildRenderRequest>) {
-  const input: Record<string, unknown> = {
-    prompt: req.prompt,
-    aspect_ratio: req.aspect_ratio,
-    input_images: [{ type: "image_url", image_url: req.image_url }],
-  };
+/**
+ * Map our validated request into Higgsfield's body.
+ *
+ * THE TWO SHAPES ARE NOT THE SAME, which is why this branches. Probed against
+ * the live API on 5 Nov 2026:
+ *
+ *   v1 video  POST /v1/image2video/dop
+ *     { params: { prompt, input_images: [...] } }
+ *     422 names exactly those two as required, nested under `params`.
+ *
+ *   v2 image  POST /higgsfield-ai/soul/v2/image-to-image
+ *     { prompt, image_url }
+ *     Flat, top level, and `image_url` is a plain string — not the
+ *     `input_images` array the video route wants.
+ *
+ * The previous version sent `{ input: { ... } }` for both, a key neither route
+ * has. Video would have failed validation and every image would have 404'd on
+ * a model that does not exist. Both were written from the SDK README without
+ * anything checking them against the API.
+ *
+ * Extra keys are ignored rather than rejected (probed: a bogus key alongside an
+ * invalid one produced only the invalid one's error), so aspect_ratio, model
+ * and duration are safe to send even where they are not documented.
+ */
+export function toHiggsfieldBody(req: RenderRequest): Record<string, unknown> {
   if (req.output === "video") {
-    input.model = "dop-turbo";
-    if (req.duration_seconds) input.duration = req.duration_seconds;
+    const params: Record<string, unknown> = {
+      prompt: req.prompt,
+      input_images: [{ type: "image_url", image_url: req.image_url }],
+      aspect_ratio: req.aspect_ratio,
+      model: "dop-turbo",
+    };
+    if (req.duration_seconds) params.duration = req.duration_seconds;
+    return { params };
   }
-  return { input };
+  return {
+    prompt: req.prompt,
+    image_url: req.image_url,
+    aspect_ratio: req.aspect_ratio,
+  };
 }
 
 /**
