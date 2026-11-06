@@ -47,15 +47,22 @@ export function asPlan(raw: string | null | undefined): Plan {
  * Normalise a raw `businesses.plan` value into a tier.
  *
  * `activateSubscription` writes the tier id straight into `businesses.plan`, so
- * the value is normally "starter", "growth" or "scale". A paid-but-unrecognised
+ * the value is normally "spark", "growth" or "scale". A paid-but-unrecognised
  * value — a legacy bare "paid", or a tier added to the pricing page before this
  * table — resolves to the LOWEST paid tier. That direction is deliberate: it
- * errs toward the cheaper engine, so a value nobody has mapped yet cannot
- * quietly start spending the expensive vendor's credits.
+ * errs toward the cheaper engine and the smaller concept pool, so a value
+ * nobody has mapped yet cannot quietly start spending the expensive vendor's
+ * credits.
+ *
+ * "starter" is handled by that same fallback rather than by a special case.
+ * The tier was retired 6 Nov 2026 and no row in production ever carried it
+ * (checked: 12 free, 1 scale), but a row written by an older deploy would
+ * otherwise be a silent surprise — and spark is exactly where such a row
+ * belongs, being the tier that replaced it.
  */
 export function asTier(raw: string | null | undefined): RenderTier {
   if (!raw || raw === "free") return "free";
-  return isTierId(raw) ? raw : "starter";
+  return isTierId(raw) ? raw : "spark";
 }
 
 export function isPaid(s: PlanState): boolean {

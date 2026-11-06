@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { MIN_DAILY_BUDGET_USD_MINOR } from "@/lib/money/ledger";
+import { minDailyBudgetFor } from "@/lib/money/ledger";
 import { runForBusiness, type BizRow } from "@/lib/orchestrator/run-business";
 import { currentBusiness } from "@/lib/business/current";
 import { asAdLanguage } from "@/lib/copy/language";
@@ -45,16 +45,18 @@ export async function POST(req: NextRequest) {
   } | null;
   if (!body) return NextResponse.json({ error: "bad request" }, { status: 400 });
 
-  const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
+  // The tier decides the budget floor: Spark does not run a duel, so the $10
+  // arithmetic that produced the global floor does not apply to it.
+  const business = await currentBusiness<{ id: string; plan?: string | null } & Record<string, unknown>>(
     supabase,
-    "id",
+    "id, plan",
   );
   if (!business) return NextResponse.json({ error: "no business" }, { status: 404 });
 
   const update: Record<string, unknown> = {};
   if (typeof body.daily_budget_usd_minor === "number") {
     update.daily_budget_usd_minor = Math.max(
-      MIN_DAILY_BUDGET_USD_MINOR,
+      minDailyBudgetFor(business.plan),
       Math.round(body.daily_budget_usd_minor),
     );
   }

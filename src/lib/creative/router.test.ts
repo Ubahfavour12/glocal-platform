@@ -11,14 +11,14 @@ const engine = (name: "fal" | "higgsfield"): RenderEngine => ({ modelFor: () => 
 const FAL = engine("fal");
 const HF = engine("higgsfield");
 const BOTH = [FAL, HF];
-const TIERS: RenderTier[] = ["free", "starter", "growth", "scale"];
+const TIERS: RenderTier[] = ["free", "spark", "growth", "scale"];
 
 describe("the tier policy", () => {
   // The founder decision of 5 Nov 2026, case by case. If one of these changes,
   // it should be because the policy changed, not because something leaked.
   const expected: Record<RenderTier, { image: string; video: string }> = {
     free: { image: "fal", video: "fal" },
-    starter: { image: "fal", video: "higgsfield" },
+    spark: { image: "fal", video: "higgsfield" },
     growth: { image: "fal", video: "higgsfield" },
     scale: { image: "higgsfield", video: "higgsfield" },
   };
@@ -65,7 +65,7 @@ describe("failover by tier", () => {
   });
 
   it("gives every paid tier the other engine as failover", () => {
-    for (const tier of ["starter", "growth", "scale"] as const) {
+    for (const tier of ["spark", "growth", "scale"] as const) {
       const r = routeRender({ kind: "video", tier, available: BOTH });
       expect(r.order).toHaveLength(2);
       expect(r.order[1].name).not.toBe(r.order[0].name);
@@ -77,7 +77,7 @@ describe("when the policy cannot be honoured", () => {
   it("still renders, and says the policy is not in force", () => {
     // Starter images are meant to go to fal. With no fal key there is nothing
     // to route to, so the render happens on Higgsfield and is flagged.
-    const r = routeRender({ kind: "image", tier: "starter", available: [HF] });
+    const r = routeRender({ kind: "image", tier: "spark", available: [HF] });
     expect(r.order.map((e) => e.name)).toEqual(["higgsfield"]);
     expect(r.degraded).toBe(true);
     expect(r.reason).toMatch(/not in force/);
@@ -89,7 +89,7 @@ describe("when the policy cannot be honoured", () => {
     const degraded = TIERS.filter(
       (t) => routeRender({ kind: "image", tier: t, available: [HF] }).degraded,
     );
-    expect(degraded).toEqual(["free", "starter", "growth"]);
+    expect(degraded).toEqual(["free", "spark", "growth"]);
   });
 
   it("does not flag a route that got what it asked for", () => {
@@ -154,8 +154,8 @@ describe("the RENDER_PRIMARY override", () => {
 
 describe("preferenceFor", () => {
   it("reads the table by tier and kind", () => {
-    expect(preferenceFor("video", "starter")).toEqual(["higgsfield", "fal"]);
-    expect(preferenceFor("image", "starter")).toEqual(["fal", "higgsfield"]);
+    expect(preferenceFor("video", "spark")).toEqual(["higgsfield", "fal"]);
+    expect(preferenceFor("image", "spark")).toEqual(["fal", "higgsfield"]);
     expect(preferenceFor("image", "scale")).toEqual(["higgsfield", "fal"]);
     expect(preferenceFor("video", "free")).toEqual(["fal"]);
   });

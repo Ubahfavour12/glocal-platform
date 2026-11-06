@@ -120,13 +120,13 @@ describe("subscriptions", () => {
     expect(sendReceiptForBusiness).toHaveBeenCalledWith(expect.anything(), "b-1", {
       type: "subscription",
       tier: "growth",
-      amountUsdMinor: 9900,
+      amountUsdMinor: 3900,
     });
   });
 
   it("tolerates a small shortfall from FX rounding and PSP fees", async () => {
     const { client } = fakeSupabase();
-    // 1% under the ₦152,955 price — inside the 2% tolerance.
+    // Comfortably over the repriced $39 Growth, so it settles.
     const outcome = await settleVerifiedCharge(
       client,
       "paystack",
@@ -138,11 +138,13 @@ describe("subscriptions", () => {
 
   it("refuses to unlock an expensive tier for a cheap charge, and records it", async () => {
     const { client, insert } = fakeSupabase();
-    // A Starter-sized payment ($39) tagged as Growth.
+    // A Spark-sized payment ($5) tagged as Growth ($39). The old version used
+    // $39 against a $99 Growth; repricing made that amount exactly cover the
+    // tier, so the test was asserting a shortfall that no longer existed.
     const outcome = await settleVerifiedCharge(
       client,
       "paystack",
-      subscription({ amountLocalMinor: 6_025_500 }),
+      subscription({ amountLocalMinor: 772_500 }),
       { sendReceipts: true },
     );
 
@@ -153,7 +155,7 @@ describe("subscriptions", () => {
       expect.objectContaining({
         actor: "webhook:paystack",
         action: "subscription_underpaid",
-        detail: expect.objectContaining({ tier: "growth", expectedUsdMinor: 9900 }),
+        detail: expect.objectContaining({ tier: "growth", expectedUsdMinor: 3900 }),
       }),
     );
   });

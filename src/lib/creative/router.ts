@@ -74,7 +74,10 @@ export interface Route {
 /** Higgsfield access by tier and kind. The founder decision, in one table. */
 const ENGINE_FOR: Record<RenderTier, Record<CreativeKind, EngineName>> = {
   free: { image: "fal", video: "fal" },
-  starter: { image: "fal", video: "higgsfield" },
+  // Spark cannot render video at all (2 credits/day against a cost of 4), so
+  // its video row is reachable only if that cap ever rises. It points at the
+  // paid engine so a cap change does not silently also change the engine.
+  spark: { image: "fal", video: "higgsfield" },
   // To give Growth Higgsfield images too, change this one line to match scale.
   growth: { image: "fal", video: "higgsfield" },
   scale: { image: "higgsfield", video: "higgsfield" },

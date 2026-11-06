@@ -8,9 +8,9 @@ import {
 
 describe("subscriptionPriceUsdMinor", () => {
   it("returns each tier's monthly price in minor units", () => {
-    expect(subscriptionPriceUsdMinor("starter")).toBe(3900);
-    expect(subscriptionPriceUsdMinor("growth")).toBe(9900);
-    expect(subscriptionPriceUsdMinor("scale")).toBe(24900);
+    expect(subscriptionPriceUsdMinor("spark")).toBe(500);
+    expect(subscriptionPriceUsdMinor("growth")).toBe(3900);
+    expect(subscriptionPriceUsdMinor("scale")).toBe(9900);
   });
 });
 
@@ -55,13 +55,13 @@ describe("coversSubscription — no tier without payment", () => {
 
   it("rejects paying a cheaper tier's price for an expensive tier", () => {
     // Starter money must never unlock Growth or Scale.
+    expect(coversSubscription(500, 3900)).toBe(false);
     expect(coversSubscription(3900, 9900)).toBe(false);
-    expect(coversSubscription(9900, 24900)).toBe(false);
   });
 
   it("rejects zero, negative and nonsense amounts", () => {
-    expect(coversSubscription(0, 3900)).toBe(false);
-    expect(coversSubscription(-1, 3900)).toBe(false);
-    expect(coversSubscription(Number.NaN, 3900)).toBe(false);
+    expect(coversSubscription(0, 500)).toBe(false);
+    expect(coversSubscription(-1, 500)).toBe(false);
+    expect(coversSubscription(Number.NaN, 500)).toBe(false);
   });
 });

@@ -92,11 +92,44 @@ export function runwayDays(entries: readonly LedgerEntry[], dailyBudgetUsdMinor:
   return Math.floor(Math.max(0, balance(entries)) / dailyBudgetUsdMinor);
 }
 
-/** $10/day floor (late-locked decision): minimum first deposit = 7 days runway. */
+/**
+ * The $10/day floor, and the single line that excluded the micro market.
+ *
+ * It was never a pricing choice. It falls out of the duel: the default persona
+ * splits 70/30 and MIN_CHALLENGER_USD_MINOR is $3, so below $10/day the
+ * challenger pool cannot fund even one challenger and no testing happens.
+ *
+ * Which is only binding for tiers that RUN a duel. Spark does not -- it rotates
+ * one ad at a time -- so the arithmetic that produced this number does not
+ * apply to it, and applying it anyway priced out the overwhelming majority of
+ * businesses in this market for a reason that was not about them.
+ */
 export const MIN_DAILY_BUDGET_USD_MINOR = 1_000;
+
+/**
+ * Spark's floor: about N2,000/day. Low enough for a market trader, high enough
+ * that a day's spend still buys a meaningful number of impressions rather than
+ * dribbling out too thin for the ad to be served at all.
+ */
+export const SPARK_MIN_DAILY_BUDGET_USD_MINOR = 150;
+
 export const MIN_FIRST_DEPOSIT_DAYS = 7;
 
-export function minFirstDepositUsdMinor(dailyBudgetUsdMinor: number): number {
-  const daily = Math.max(dailyBudgetUsdMinor, MIN_DAILY_BUDGET_USD_MINOR);
+/**
+ * Pure: the daily-budget floor for a tier.
+ *
+ * Anything that is not Spark keeps the duel floor, including an unrecognised
+ * value: a tier nobody has mapped must not silently inherit the lowest floor
+ * in the product.
+ */
+export function minDailyBudgetFor(tier: string | null | undefined): number {
+  return tier === "spark" ? SPARK_MIN_DAILY_BUDGET_USD_MINOR : MIN_DAILY_BUDGET_USD_MINOR;
+}
+
+export function minFirstDepositUsdMinor(
+  dailyBudgetUsdMinor: number,
+  tier?: string | null,
+): number {
+  const daily = Math.max(dailyBudgetUsdMinor, minDailyBudgetFor(tier));
   return daily * MIN_FIRST_DEPOSIT_DAYS;
 }

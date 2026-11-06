@@ -11,7 +11,7 @@ describe("asPlan", () => {
     expect(asPlan(null)).toBe("free");
     expect(asPlan("")).toBe("free");
     expect(asPlan("paid")).toBe("paid");
-    expect(asPlan("starter")).toBe("paid");
+    expect(asPlan("spark")).toBe("paid");
     expect(asPlan("growth")).toBe("paid");
     expect(asPlan("scale")).toBe("paid");
   });
@@ -58,7 +58,7 @@ describe("planSummary", () => {
 
 describe("asTier", () => {
   it("keeps each paid tier whole, where asPlan collapses them", () => {
-    for (const t of ["starter", "growth", "scale"] as const) {
+    for (const t of ["spark", "growth", "scale"] as const) {
       expect(asTier(t)).toBe(t);
       expect(asPlan(t)).toBe("paid"); // the distinction asTier exists to keep
     }
@@ -74,13 +74,16 @@ describe("asTier", () => {
   it("resolves an unmapped paid value to the cheapest tier, not the dearest", () => {
     // A legacy bare "paid", or a tier added to pricing before the engine table,
     // must not quietly start spending the expensive vendor's credits.
-    expect(asTier("paid")).toBe("starter");
-    expect(asTier("enterprise")).toBe("starter");
-    expect(asTier("SCALE")).toBe("starter"); // case-sensitive by design: not a known id
+    expect(asTier("paid")).toBe("spark");
+    expect(asTier("enterprise")).toBe("spark");
+    expect(asTier("SCALE")).toBe("spark"); // case-sensitive by design: not a known id
+    // The retired tier lands on the one that replaced it, via the same
+    // fallback rather than a special case.
+    expect(asTier("starter")).toBe("spark");
   });
 
   it("agrees with asPlan about who is paying", () => {
-    for (const raw of ["free", null, undefined, "", "starter", "growth", "scale", "paid"]) {
+    for (const raw of ["free", null, undefined, "", "starter", "spark", "growth", "scale", "paid"]) {
       expect(asTier(raw) === "free").toBe(asPlan(raw) === "free");
     }
   });

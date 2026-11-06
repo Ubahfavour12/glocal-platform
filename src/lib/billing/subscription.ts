@@ -8,7 +8,17 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type TierId = "starter" | "growth" | "scale";
+/**
+ * The paid ladder, cheapest first.
+ *
+ * `starter` was retired 6 Nov 2026. It carried 2 renders/day while a video
+ * costs 4 (VIDEO_CREDIT_WEIGHT), so video was not rare on that tier, it was
+ * arithmetically impossible -- a paying tier that could never do the thing
+ * customers most want. `spark` replaces it at the bottom at a price the micro
+ * market can actually pay, and the entry *video* tier is now growth, which has
+ * the credits to honour the claim.
+ */
+export type TierId = "spark" | "growth" | "scale";
 
 export interface SubscriptionConfig {
   tier: TierId;
@@ -19,16 +29,27 @@ export interface SubscriptionConfig {
   spendMarkupBps: number;
 }
 
-// Initial caps — render/socials caps are tunable; markup + platforms are fixed
-// by the pricing model (Starter 15%/Meta, Growth 12%/+TikTok, Scale 10%/+Google).
+// Repriced 6 Nov 2026 for the market this actually sells into. The old ladder
+// ($39/$99/$249, 15/12/10%) was priced for a US SaaS buyer: Scale alone was
+// roughly N370,000/month against a market that is overwhelmingly micro.
+//
+// Markup now RISES as the price falls (Spark 18%, Growth 15%, Scale 12%). That
+// is not predatory, it is arithmetic: a low-volume account costs about the same
+// to serve as a large one, so the fixed cost is a bigger share of a smaller
+// number. The customer still pays less in absolute terms than anyone else could
+// serve them for.
+//
+// Render caps interact with VIDEO_CREDIT_WEIGHT (4) in creative/quota.ts: a
+// tier below 4 renders/day cannot produce video at all. Spark is deliberately
+// below it and never claims otherwise; growth is the entry video tier.
 const CONFIG: Record<TierId, SubscriptionConfig> = {
-  starter: { tier: "starter", rendersPerDay: 2, socialsLimit: 3, platforms: ["meta"], spendMarkupBps: 1500 },
-  growth: { tier: "growth", rendersPerDay: 6, socialsLimit: 6, platforms: ["meta", "tiktok"], spendMarkupBps: 1200 },
-  scale: { tier: "scale", rendersPerDay: 12, socialsLimit: 12, platforms: ["meta", "tiktok", "google"], spendMarkupBps: 1000 },
+  spark: { tier: "spark", rendersPerDay: 2, socialsLimit: 3, platforms: ["meta"], spendMarkupBps: 1800 },
+  growth: { tier: "growth", rendersPerDay: 6, socialsLimit: 6, platforms: ["meta", "tiktok"], spendMarkupBps: 1500 },
+  scale: { tier: "scale", rendersPerDay: 12, socialsLimit: 12, platforms: ["meta", "tiktok", "google"], spendMarkupBps: 1200 },
 };
 
 export function isTierId(v: string | null | undefined): v is TierId {
-  return v === "starter" || v === "growth" || v === "scale";
+  return v === "spark" || v === "growth" || v === "scale";
 }
 
 /** Pure: the quota row values for a tier. */

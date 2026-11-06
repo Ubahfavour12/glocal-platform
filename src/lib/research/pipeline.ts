@@ -43,7 +43,9 @@ export const PIPELINE_TARGET = 50;
  */
 const TARGET_BY_TIER: Record<RenderTier, number> = {
   free: 10,
-  starter: 25,
+  // Spark runs one ad at a time and never a duel, so it burns concepts slower
+  // than any paid tier. Fifteen stays comfortably ahead of what it can use.
+  spark: 15,
   growth: 40,
   scale: PIPELINE_TARGET,
 };

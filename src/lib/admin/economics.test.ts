@@ -4,7 +4,7 @@ import { economicsTotals, marginFor, rankByMargin, type CustomerCosts } from "./
 const base: CustomerCosts = {
   businessId: "b1",
   name: "Shop",
-  tier: "starter",
+  tier: "spark",
   renderCostUsdMinor: 100,
   renderCount: 20,
   markupRevenueUsdMinor: 0,
@@ -23,7 +23,7 @@ describe("marginFor", () => {
   });
 
   it("flags a customer who costs more to serve than they pay", () => {
-    const m = marginFor(row({ tier: "starter", renderCostUsdMinor: 1_000_000 }));
+    const m = marginFor(row({ tier: "spark", renderCostUsdMinor: 1_000_000 }));
     expect(m.underwater).toBe(true);
     expect(m.marginUsdMinor).toBeLessThan(0);
   });

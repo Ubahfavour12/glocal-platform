@@ -132,13 +132,13 @@ describe("buildPipelineBatch", () => {
 describe("pipelineTargetFor", () => {
   it("gives each tier a pool sized to what it can actually run", () => {
     expect(pipelineTargetFor("free")).toBe(10);
-    expect(pipelineTargetFor("starter")).toBe(25);
+    expect(pipelineTargetFor("spark")).toBe(15);
     expect(pipelineTargetFor("growth")).toBe(40);
     expect(pipelineTargetFor("scale")).toBe(PIPELINE_TARGET);
   });
 
   it("rises with the tier and never exceeds the Scale ceiling", () => {
-    const targets = (["free", "starter", "growth", "scale"] as const).map(pipelineTargetFor);
+    const targets = (["free", "spark", "growth", "scale"] as const).map(pipelineTargetFor);
     expect(targets).toEqual([...targets].sort((a, b) => a - b));
     expect(Math.max(...targets)).toBe(PIPELINE_TARGET);
   });
