@@ -9,6 +9,7 @@
  */
 
 import { createServiceClient } from "@/lib/supabase/server";
+import { asTier } from "@/lib/billing/plan";
 import { runNightly, type BusinessContext, type NightlyPlan } from "@/lib/orchestrator/nightly";
 import { buildLiveAdapters, type LiveDeps } from "@/lib/orchestrator/live-adapters";
 import { fetchAdInsights, type AdDayMetrics } from "@/lib/meta/insights";
@@ -32,6 +33,12 @@ export interface BizRow {
   persona: PersonaMode;
   full_auto: boolean;
   daily_budget_usd_minor: number;
+  /**
+   * The tier id, as `activateSubscription` writes it. Optional so existing
+   * callers keep compiling; absent resolves to the smallest concept pool,
+   * which is the cheap direction to be wrong in.
+   */
+  plan?: string | null;
 }
 
 export interface RunOptions {
@@ -95,7 +102,9 @@ export async function runForBusiness(
   // plan.
   if (!opts.skipSideEffects) {
     try {
-      await buildPipelineBatch(livePipelineDeps(supabase), biz.id);
+      // The tier sizes the concept pool: a micro account cannot consume a
+      // Scale-sized one, and generating it is the largest variable cost here.
+      await buildPipelineBatch(livePipelineDeps(supabase), biz.id, asTier(biz.plan));
     } catch {
       /* plan continues on the existing pool */
     }

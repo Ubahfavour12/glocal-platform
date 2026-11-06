@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { asTier } from "@/lib/billing/plan";
 import { buildPipelineBatch } from "@/lib/research/pipeline";
 import { livePipelineDeps } from "@/lib/research/pipeline-live";
 import { runForBusiness, type BizRow } from "@/lib/orchestrator/run-business";
@@ -36,7 +37,16 @@ export async function POST() {
   }
 
   const service = createServiceClient();
-  const result = await buildPipelineBatch(livePipelineDeps(service), business.id);
+  const { data: bizPlan } = await service
+    .from("businesses")
+    .select("plan")
+    .eq("id", business.id)
+    .maybeSingle();
+  const result = await buildPipelineBatch(
+    livePipelineDeps(service),
+    business.id,
+    asTier((bizPlan?.plan as string | null) ?? null),
+  );
   if (result.status === "error") {
     return NextResponse.json(result, { status: 500 });
   }

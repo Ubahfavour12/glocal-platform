@@ -22,7 +22,7 @@ import {
   viableChallengerCount,
   type PersonaMode,
 } from "@/lib/guardrails/budget";
-import { decideVerdict, type CandidateMetrics, type Verdict } from "@/lib/verdicts/verdict";
+import { type MetricUsed, decideVerdict, type CandidateMetrics, type Verdict } from "@/lib/verdicts/verdict";
 import { checkFatigue, type FatigueInput, type StyleDirective } from "@/lib/verdicts/fatigue";
 import { computeWalletHealth } from "@/lib/money/wallet-health";
 import { runGateway, type CreativeInput, type GatewayResult } from "@/lib/compliance/gateway";
@@ -33,7 +33,7 @@ export interface BusinessContext {
   businessId: string;
   name: string;
   category: string;
-  goal: "sales" | "leads" | "whatsapp" | "visits";
+  goal: "sales" | "leads" | "whatsapp" | "visits" | "awareness";
   persona: PersonaMode;
   fullAuto: boolean;
   dailyBudgetUsdMinor: number;
@@ -103,6 +103,29 @@ export interface OrchestratorAdapters {
 
 // ---------- the pipeline ----------
 
+/**
+ * What the winning metric actually means, in the owner's words.
+ *
+ * The old line printed the metric id in capitals, which is jargon everywhere
+ * and a lie for awareness: an attention verdict says people stopped and kept
+ * the ad, NOT that anyone bought. An owner who reads "winner" and assumes
+ * sales will raise budget on a campaign that was never going to produce them.
+ */
+export function verdictHeadline(metric: MetricUsed): string {
+  switch (metric) {
+    case "roas":
+      return "Yesterday's duel has a winner on revenue per naira spent.";
+    case "cost_per_won":
+      return "Yesterday's duel has a winner on what it costs to win a customer.";
+    case "cpci":
+      return "Yesterday's duel has a winner on what it costs to get an enquiry.";
+    case "attention":
+      return "Yesterday's duel has a winner on attention: more people saved, shared or watched it. That is reach and memory, not sales.";
+    case "engagement":
+      return "Yesterday's duel has a winner on click-through rate only, which is the weakest signal here.";
+  }
+}
+
 const CHALLENGERS_PER_DAY = 2;
 const MAX_GATEWAY_SUBSTITUTIONS = 2;
 
@@ -121,12 +144,13 @@ export async function runNightly(
     verdict = decideVerdict(candidates, {
       storeConnected: ctx.storeConnected,
       revenueTrusted: ctx.revenueTrusted,
+      awareness: ctx.goal === "awareness",
       now,
     });
     await adapters.audit(ctx.businessId, "verdict", verdict);
     commentary.push(
       verdict.status === "decided"
-        ? `Yesterday's duel has a winner (${verdict.metricUsed.toUpperCase()}). I'm making it the champion.`
+        ? `${verdictHeadline(verdict.metricUsed)} I'm making it the champion.`
         : `No verdict yet — ${verdict.reason}. The duel continues; I won't judge on thin data.`,
     );
   }

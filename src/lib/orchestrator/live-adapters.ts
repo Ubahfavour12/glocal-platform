@@ -77,9 +77,11 @@ export function overlayRevenue(
         clicks: 0,
         spendUsdMinor: 0,
         ctr: 0,
-        frequency: null,
+        reach: null,
+      frequency: null,
         intents: 0,
         revenueUsdMinor: rev.revenueUsdMinor,
+        attention: { saves: 0, shares: 0, comments: 0, reactions: 0, thruPlays: 0 },
       });
     }
   }

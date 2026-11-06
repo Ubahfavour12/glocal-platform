@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
         const { data: fresh } = await service
           .from("businesses")
           .select(
-            "id, name, category, goal, persona, full_auto, daily_budget_usd_minor, category_blocked",
+            "id, name, category, goal, persona, full_auto, daily_budget_usd_minor, category_blocked, plan",
           )
           .eq("id", business.id)
           .maybeSingle();

@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
 
   const { data: businesses, error } = await supabase
     .from("businesses")
-    .select("id, name, category, goal, persona, full_auto, daily_budget_usd_minor, category_blocked");
+    .select("id, name, category, goal, persona, full_auto, daily_budget_usd_minor, category_blocked, plan");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   for (const biz of businesses ?? []) {

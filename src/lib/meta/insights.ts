@@ -23,7 +23,10 @@ export interface RawInsightRow {
   clicks?: string;
   spend?: string; // major units, e.g. "1.53"
   ctr?: string; // percent, e.g. "1.24"
+  reach?: string; // unique people, NOT impressions
   frequency?: string; // avg impressions per person
+  /** ThruPlays are their own field, not an action type. */
+  video_thruplay_watched_actions?: { action_type: string; value: string }[];
   actions?: { action_type: string; value: string }[];
   action_values?: { action_type: string; value: string }[];
 }
@@ -35,10 +38,45 @@ export interface AdDayMetrics {
   clicks: number;
   spendUsdMinor: number;
   ctr: number; // fraction, 0..1
+  /** Unique people reached. Null when Meta did not report it. */
+  reach: number | null;
   frequency: number | null;
   intents: number; // conversion-intent actions (link clicks / messaging / leads)
   revenueUsdMinor: number; // purchase value when a store is connected
+  /** Attention events, for awareness goals. See ATTENTION_ACTIONS. */
+  attention: AttentionCounts;
 }
+
+/**
+ * What an awareness ad is actually trying to buy.
+ *
+ * Saves and shares sit apart from the rest: they are the only two that cost
+ * the viewer something (a decision to keep it, or to put their own name behind
+ * it), which is why the verdict weights them above a reaction. Reactions and
+ * comments are cheap and easily farmed by bait, so they count but count less.
+ */
+export interface AttentionCounts {
+  saves: number;
+  shares: number;
+  comments: number;
+  reactions: number;
+  thruPlays: number;
+}
+
+/**
+ * Meta action types that signal attention rather than purchase intent.
+ *
+ * Only action types confirmed in Meta's own insights output are listed. An
+ * invented action type does not error -- it silently sums to zero -- so a
+ * guess here would look like an ad nobody engaged with, which is worse than
+ * not measuring it at all.
+ */
+const ATTENTION_ACTIONS = {
+  saves: new Set(["onsite_conversion.post_save"]),
+  shares: new Set(["post"]),
+  comments: new Set(["comment"]),
+  reactions: new Set(["post_reaction"]),
+} as const;
 
 /** Action types that count as a conversion intent (CPCI numerator events). */
 const INTENT_ACTIONS = new Set([
@@ -64,6 +102,18 @@ export function parseInsightRow(raw: RawInsightRow): AdDayMetrics {
   const freq = raw.frequency !== undefined ? Number(raw.frequency) : null;
   const intents = sumActions(raw.actions, INTENT_ACTIONS);
   const revenueMajor = sumActions(raw.action_values, PURCHASE_ACTIONS);
+  const reachRaw = raw.reach !== undefined ? Number(raw.reach) : null;
+  const attention: AttentionCounts = {
+    saves: sumActions(raw.actions, ATTENTION_ACTIONS.saves),
+    shares: sumActions(raw.actions, ATTENTION_ACTIONS.shares),
+    comments: sumActions(raw.actions, ATTENTION_ACTIONS.comments),
+    reactions: sumActions(raw.actions, ATTENTION_ACTIONS.reactions),
+    // ThruPlay comes back as a one-entry list on its own field; summing it
+    // the same way means a shape change degrades to zero rather than throwing.
+    thruPlays: raw.video_thruplay_watched_actions
+      ? raw.video_thruplay_watched_actions.reduce((n, a) => n + Number(a.value || 0), 0)
+      : 0,
+  };
   return {
     adId: raw.ad_id,
     date: new Date(raw.date_start + "T00:00:00Z"),
@@ -71,8 +121,10 @@ export function parseInsightRow(raw: RawInsightRow): AdDayMetrics {
     clicks,
     spendUsdMinor: Math.round(Number(raw.spend ?? 0) * 100),
     ctr,
+    reach: Number.isFinite(reachRaw as number) ? reachRaw : null,
     frequency: Number.isFinite(freq as number) ? freq : null,
     intents,
+    attention,
     revenueUsdMinor: Math.round(revenueMajor * 100),
   };
 }
@@ -91,6 +143,8 @@ export function toCandidateMetrics(
       intents: r.intents,
       spendUsdMinor: r.spendUsdMinor,
       revenueUsdMinor: r.revenueUsdMinor,
+      reach: r.reach ?? undefined,
+      attention: r.attention,
     };
     const arr = byAd.get(r.adId) ?? [];
     arr.push(daily);
@@ -121,7 +175,10 @@ export async function fetchAdInsights(
   url.searchParams.set("time_increment", "1");
   url.searchParams.set(
     "fields",
-    "ad_id,impressions,clicks,spend,ctr,frequency,actions,action_values",
+    // reach is what an awareness ad buys and was never requested before, so
+    // the engine had nothing to judge one on but clicks.
+    "ad_id,impressions,reach,clicks,spend,ctr,frequency,actions,action_values," +
+      "video_thruplay_watched_actions",
   );
   url.searchParams.set("time_range", JSON.stringify({ since: sinceIso, until: untilIso }));
   url.searchParams.set("access_token", cfg.accessToken);

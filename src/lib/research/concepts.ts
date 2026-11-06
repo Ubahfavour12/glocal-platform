@@ -14,7 +14,7 @@ import type { ViralVideo } from "./youtube";
 export interface ProductBrief {
   businessName: string;
   category: string;
-  goal: "sales" | "leads" | "whatsapp" | "visits";
+  goal: "sales" | "leads" | "whatsapp" | "visits" | "awareness";
   /**
    * The language the ad copy is written in. Absent means English, which is
    * what every ad was before this field existed.
@@ -116,5 +116,9 @@ function goalText(goal: ProductBrief["goal"]): string {
       return "get WhatsApp messages";
     case "visits":
       return "drive store visits";
+    case "awareness":
+      // Named as what it is. An awareness brief that says "drive sales" gets
+      // sales copy, which is exactly the ad this goal exists to avoid.
+      return "be seen and remembered by the right people (no hard sell, no urgency, no discount)";
   }
 }

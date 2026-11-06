@@ -13,8 +13,51 @@
 
 import type { ViralVideo } from "./youtube";
 import type { AdConcept, ProductBrief } from "./concepts";
+import type { RenderTier } from "@/lib/billing/plan";
 
+/**
+ * The pool a Scale account carries. Kept as the name other modules import.
+ *
+ * Use `pipelineTargetFor(tier)` for anything that knows whose pipeline it is:
+ * this value is the ceiling, not the rule.
+ */
 export const PIPELINE_TARGET = 50;
+
+/**
+ * How many concepts to keep on hand, by tier.
+ *
+ * This used to be 50 for everyone, which was the single most expensive line in
+ * the product and bought nothing at the bottom. Concept generation is the
+ * largest variable cost per account, and a micro business runs ONE ad at a
+ * time: it cannot consume fifty concepts in any reasonable period, so roughly
+ * four fifths of that spend was inventory that would never be used. A free
+ * account, which gets exactly one render ever, was having fifty written for it.
+ *
+ * The numbers follow consumption, not generosity. A duel burns two challengers
+ * a day, so Scale's twelve renders a day genuinely churn a deep pool; Spark
+ * rotates one ad every few days and does not.
+ *
+ * Deliberately not proportional to price. The pool only has to stay ahead of
+ * what the tier can actually run, and past that point a bigger number is cost
+ * with no customer-visible effect.
+ */
+const TARGET_BY_TIER: Record<RenderTier, number> = {
+  free: 10,
+  starter: 25,
+  growth: 40,
+  scale: PIPELINE_TARGET,
+};
+
+/**
+ * Pure: the concept pool size for a tier.
+ *
+ * An unrecognised tier resolves to the smallest pool, the same direction
+ * `asTier` errs in: a tier someone adds to pricing before adding it here costs
+ * the least until it is mapped, rather than quietly buying the most.
+ */
+export function pipelineTargetFor(tier: RenderTier | null | undefined): number {
+  return tier && tier in TARGET_BY_TIER ? TARGET_BY_TIER[tier] : TARGET_BY_TIER.free;
+}
 export const BATCH_SIZE = 10;
 
 /** Keywords the scraper searches for this niche. Two keeps YouTube quota sane. */
@@ -77,9 +120,11 @@ export interface PipelineResult {
 export async function buildPipelineBatch(
   deps: PipelineDeps,
   businessId: string,
+  tier: RenderTier = "scale",
 ): Promise<PipelineResult> {
+  const target = pipelineTargetFor(tier);
   const existing = await deps.countConcepts(businessId);
-  if (existing >= PIPELINE_TARGET) {
+  if (existing >= target) {
     return { status: "full", added: 0, total: existing };
   }
 
@@ -99,7 +144,7 @@ export async function buildPipelineBatch(
   }
 
   const avoid = existing > 0 ? await deps.listExistingHooks(businessId) : [];
-  const want = Math.min(BATCH_SIZE, PIPELINE_TARGET - existing);
+  const want = Math.min(BATCH_SIZE, target - existing);
 
   try {
     const concepts = await deps.generate(brief, viral, want, avoid);
@@ -111,7 +156,7 @@ export async function buildPipelineBatch(
     await deps.audit(businessId, "pipeline_batch", {
       added: concepts.length,
       total,
-      target: PIPELINE_TARGET,
+      target,
       research: researchNote,
       viralPatterns: viral.length,
     });

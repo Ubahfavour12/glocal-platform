@@ -10,6 +10,8 @@ const insight = (adId: string, date: Date, over: Partial<AdDayMetrics> = {}): Ad
   adId,
   date: new Date(isoDay(date) + "T00:00:00Z"),
   impressions: 6_000,
+  reach: 2_000,
+  attention: { saves: 0, shares: 0, comments: 0, reactions: 0, thruPlays: 0 },
   clicks: 180,
   spendUsdMinor: 500,
   ctr: 0.03,

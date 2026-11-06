@@ -1,12 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  BATCH_SIZE,
-  buildNicheKeywords,
-  buildPipelineBatch,
-  conceptRowsFrom,
-  PIPELINE_TARGET,
-  type PipelineDeps,
-} from "./pipeline";
+import { BATCH_SIZE, buildNicheKeywords, buildPipelineBatch, conceptRowsFrom, PIPELINE_TARGET, type PipelineDeps, pipelineTargetFor } from "./pipeline";
 import type { AdConcept } from "./concepts";
 
 const concept = (i: number): AdConcept => ({
@@ -133,5 +126,33 @@ describe("buildPipelineBatch", () => {
     const { deps } = fakeDeps({ getBusiness: async () => null });
     const r = await buildPipelineBatch(deps, "biz");
     expect(r.status).toBe("error");
+  });
+});
+
+describe("pipelineTargetFor", () => {
+  it("gives each tier a pool sized to what it can actually run", () => {
+    expect(pipelineTargetFor("free")).toBe(10);
+    expect(pipelineTargetFor("starter")).toBe(25);
+    expect(pipelineTargetFor("growth")).toBe(40);
+    expect(pipelineTargetFor("scale")).toBe(PIPELINE_TARGET);
+  });
+
+  it("rises with the tier and never exceeds the Scale ceiling", () => {
+    const targets = (["free", "starter", "growth", "scale"] as const).map(pipelineTargetFor);
+    expect(targets).toEqual([...targets].sort((a, b) => a - b));
+    expect(Math.max(...targets)).toBe(PIPELINE_TARGET);
+  });
+
+  it("keeps the smallest tier far below Scale, which is the whole saving", () => {
+    // Concept generation is the largest variable cost per account, and a free
+    // account gets exactly one render ever. Fifty concepts for it was waste.
+    expect(pipelineTargetFor("free")).toBeLessThanOrEqual(PIPELINE_TARGET / 4);
+  });
+
+  it("resolves an unmapped tier to the cheapest pool, not the dearest", () => {
+    // Same direction asTier errs in: a tier added to pricing before it is
+    // mapped here costs the least until someone maps it.
+    expect(pipelineTargetFor(null)).toBe(pipelineTargetFor("free"));
+    expect(pipelineTargetFor(undefined)).toBe(pipelineTargetFor("free"));
   });
 });

@@ -11,6 +11,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeNetworks, type SocialNetwork } from "@/lib/metricool/client";
 import { publishToFacebook, publishToInstagram } from "@/lib/meta/publish";
+import { getSourceImageUrl } from "@/lib/media/storage";
 import {
   scheduleOrganic,
   type PostCandidate,
@@ -71,23 +72,43 @@ export async function scheduleOrganicForBusiness(
   const networks = normalizeNetworks(connections.map((c) => c.network));
   const postedToday = await countPostedToday(supabase, businessId);
 
+  // The customer's own product photo, as a stand-in when nothing was rendered.
+  //
+  // This is what makes organic posting work at zero ad spend. Organic accounts
+  // render nothing, so `mediaUrls` is empty -- and Instagram REQUIRES media, so
+  // every organic post was silently Facebook-only, dropping the channel that
+  // matters most to a Nigerian SMB. It would have shipped looking like a bug.
+  //
+  // The photo is already uploaded at onboarding and costs nothing to reuse, so
+  // organic becomes "their photo, our caption". Fetched once per run rather
+  // than per post, and a failure here must never stop the posting itself.
+  let fallbackImage: string | null = null;
+  try {
+    fallbackImage = await getSourceImageUrl(supabase, businessId);
+  } catch {
+    /* posting continues; Instagram is skipped as before */
+  }
+
   const deps: PostingDeps = {
     // Publish immediately to each connected network; return a combined id.
     schedule: async (post) => {
       const ids: string[] = [];
+      // A rendered creative when there is one, else the customer's own photo.
+      const image = post.mediaUrls[0] ?? fallbackImage ?? undefined;
       for (const conn of connections) {
         if (!networks.includes(conn.network)) continue;
         if (conn.network === "facebook") {
           const { postId } = await publishToFacebook(conn.accountId, conn.token, {
             message: post.text,
-            imageUrl: post.mediaUrls[0],
+            imageUrl: image,
           });
           ids.push(`fb:${postId}`);
-        } else if (conn.network === "instagram" && post.mediaUrls[0]) {
-          // Instagram needs an image; a text-only post skips it.
+        } else if (conn.network === "instagram" && image) {
+          // Instagram still requires media. With the fallback above, that now
+          // means "no photo on file", not "no ad spend".
           const { postId } = await publishToInstagram(conn.accountId, conn.token, {
             caption: post.text,
-            imageUrl: post.mediaUrls[0],
+            imageUrl: image,
           });
           ids.push(`ig:${postId}`);
         }

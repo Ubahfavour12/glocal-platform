@@ -6,6 +6,9 @@ import {
   type CandidateMetrics,
   type DailyMetrics,
   MIN_DECIDED_LEADS,
+  attentionScore,
+  frequencyOf,
+  saturatedAds,
 } from "./verdict";
 
 const now = new Date("2026-07-10T18:00:00Z");
@@ -273,5 +276,134 @@ describe("MIN_DECIDED_LEADS — refusing to decide on noise", () => {
       expect(v.metricUsed).toBe("cpci");
       expect(v.winnerAdId).toBe("a");
     }
+  });
+});
+
+describe("awareness verdicts", () => {
+  const day = (over: Partial<DailyMetrics> = {}): DailyMetrics => ({
+    date: new Date("2026-07-20T00:00:00Z"),
+    impressions: 6_000,
+    clicks: 100,
+    intents: 0,
+    spendUsdMinor: 1_000,
+    revenueUsdMinor: 0,
+    reach: 3_000,
+    attention: { saves: 0, shares: 0, comments: 0, reactions: 0, thruPlays: 0 },
+    ...over,
+  });
+  const when = new Date("2026-07-21T12:00:00Z");
+  const started = new Date("2026-07-19T00:00:00Z");
+  const ad = (adId: string, over: Partial<DailyMetrics>): CandidateMetrics => ({
+    adId,
+    startedAt: started,
+    daily: [day(over)],
+  });
+
+  it("picks the ad people actually kept, not the one they clicked", () => {
+    // THE BUG THIS FIXES. "bait" wins every click comparison; "real" is saved
+    // and shared. Before the attention branch the clickbait ad won the duel
+    // and took the budget.
+    const bait = ad("bait", {
+      clicks: 900,
+      attention: { saves: 0, shares: 0, comments: 1, reactions: 2, thruPlays: 0 },
+    });
+    const real = ad("real", {
+      clicks: 20,
+      attention: { saves: 40, shares: 25, comments: 10, reactions: 60, thruPlays: 200 },
+    });
+    const v = decideVerdict([bait, real], { storeConnected: false, awareness: true, now: when });
+    expect(v.status).toBe("decided");
+    if (v.status === "decided") {
+      expect(v.winnerAdId).toBe("real");
+      expect(v.metricUsed).toBe("attention");
+    }
+  });
+
+  it("refuses to judge on clicks when attention data is missing", () => {
+    // Falling through to CTR would reintroduce the exact bug above, so an
+    // awareness duel stops instead of answering the wrong question.
+    const a = ad("a", { clicks: 900 });
+    const b = ad("b", { clicks: 20 });
+    const v = decideVerdict([a, b], { storeConnected: false, awareness: true, now: when });
+    expect(v.status).toBe("pending");
+    if (v.status === "pending") expect(v.reason).toMatch(/clicks are not what this ad is buying/);
+  });
+
+  it("never reports engagement for an awareness goal", () => {
+    for (const attention of [
+      undefined,
+      { saves: 0, shares: 0, comments: 0, reactions: 0, thruPlays: 0 },
+    ]) {
+      const v = decideVerdict(
+        [ad("a", { clicks: 900, attention }), ad("b", { clicks: 10, attention })],
+        { storeConnected: false, awareness: true, now: when },
+      );
+      expect(v.status === "decided" && v.metricUsed === "engagement").toBe(false);
+    }
+  });
+
+  it("stays a cost metric, so cheap-and-ignored cannot win on volume", () => {
+    // Same attention score, one ad spent four times as much to get it.
+    const counts = { saves: 10, shares: 10, comments: 0, reactions: 0, thruPlays: 0 };
+    const cheap = ad("cheap", { spendUsdMinor: 1_000, attention: counts });
+    const dear = ad("dear", { spendUsdMinor: 4_000, attention: counts });
+    const v = decideVerdict([cheap, dear], { storeConnected: false, awareness: true, now: when });
+    expect(v.status === "decided" && v.winnerAdId).toBe("cheap");
+  });
+
+  it("leaves non-awareness duels exactly as they were", () => {
+    const a = ad("a", { clicks: 900, intents: 30 });
+    const b = ad("b", { clicks: 20, intents: 10 });
+    const v = decideVerdict([a, b], { storeConnected: false, now: when });
+    expect(v.status === "decided" && v.metricUsed).toBe("cpci");
+  });
+
+  it("still lets revenue outrank attention when a store is connected", () => {
+    const a = ad("a", { revenueUsdMinor: 10_000, attention: { saves: 99, shares: 99, comments: 0, reactions: 0, thruPlays: 0 } });
+    const b = ad("b", { revenueUsdMinor: 50_000, attention: { saves: 1, shares: 1, comments: 0, reactions: 0, thruPlays: 0 } });
+    const v = decideVerdict([a, b], { storeConnected: true, awareness: true, now: when });
+    expect(v.status === "decided" && v.metricUsed).toBe("roas");
+    expect(v.status === "decided" && v.winnerAdId).toBe("b");
+  });
+});
+
+describe("attentionScore", () => {
+  const z = { saves: 0, shares: 0, comments: 0, reactions: 0, thruPlays: 0 };
+
+  it("is zero for nothing and for absent data", () => {
+    expect(attentionScore(undefined)).toBe(0);
+    expect(attentionScore(z)).toBe(0);
+  });
+
+  it("ranks a share above a save above a reaction", () => {
+    // The ordering is the defensible part of the weights: a share puts the
+    // viewer's own name behind the ad, a reaction costs one tap.
+    expect(attentionScore({ ...z, shares: 1 })).toBeGreaterThan(attentionScore({ ...z, saves: 1 }));
+    expect(attentionScore({ ...z, saves: 1 })).toBeGreaterThan(
+      attentionScore({ ...z, reactions: 1 }),
+    );
+  });
+
+  it("cannot be out-farmed by cheap reactions alone", () => {
+    // Four reactions must not beat one share plus one save.
+    expect(attentionScore({ ...z, reactions: 4 })).toBeLessThan(
+      attentionScore({ ...z, shares: 1, saves: 1 }),
+    );
+  });
+});
+
+describe("frequency guard", () => {
+  it("computes impressions per person and flags saturation", () => {
+    expect(frequencyOf({ impressions: 9_000, reach: 3_000 })).toBe(3);
+    expect(frequencyOf({ impressions: 100, reach: 0 })).toBeNull();
+    const aggs = new Map([
+      ["fresh", { impressions: 3_000, reach: 3_000 } as never],
+      ["saturated", { impressions: 12_000, reach: 3_000 } as never],
+    ]);
+    expect(saturatedAds(aggs)).toEqual(["saturated"]);
+  });
+
+  it("says nothing when reach is unknown rather than guessing", () => {
+    expect(saturatedAds(new Map([["a", { impressions: 9_000, reach: 0 } as never]]))).toEqual([]);
   });
 });

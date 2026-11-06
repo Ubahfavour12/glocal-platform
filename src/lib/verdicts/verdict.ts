@@ -36,6 +36,71 @@ export interface DailyMetrics {
   intents: number;
   spendUsdMinor: number;
   revenueUsdMinor: number;
+  /**
+   * Unique people reached. Optional because it was never fetched before the
+   * awareness work, so historical rows and older fixtures do not carry it.
+   */
+  reach?: number;
+  /** Attention events, for awareness goals. Optional for the same reason. */
+  attention?: AttentionCounts;
+}
+
+/** Attention events, mirroring meta/insights.ts. */
+export interface AttentionCounts {
+  saves: number;
+  shares: number;
+  comments: number;
+  reactions: number;
+  thruPlays: number;
+}
+
+/**
+ * What each attention event is worth, relative to each other.
+ *
+ * A FOUNDER JUDGEMENT, NOT A MEASUREMENT, and labelled so deliberately -- the
+ * same way router.ts labels its routing assumption. Nobody has correlated
+ * these against brand outcomes because that needs survey data this product
+ * does not collect.
+ *
+ * The ordering is the defensible part. A save and a share cost the viewer
+ * something: a save is a decision to come back, a share puts their own name
+ * behind it in front of their own friends. A reaction costs a tap and is what
+ * bait farms, so it counts least. ThruPlay sits between: watching 15 seconds
+ * of an ad is real attention, but it is passive.
+ *
+ * If this is ever measured, the weights move and the metric name does not.
+ */
+export const ATTENTION_WEIGHTS: Record<keyof AttentionCounts, number> = {
+  shares: 5,
+  saves: 4,
+  comments: 2,
+  thruPlays: 2,
+  reactions: 1,
+};
+
+/**
+ * Above this, the budget is mostly re-showing the ad to people who have
+ * already seen it. Three is the number media buyers reach for; it is a rule of
+ * thumb rather than a finding, and the engine reports it rather than acting on
+ * it alone.
+ */
+export const FREQUENCY_CEILING = 3;
+
+/** Pure: the weighted attention score for one window. */
+export function attentionScore(a: AttentionCounts | undefined): number {
+  if (!a) return 0;
+  return (
+    a.shares * ATTENTION_WEIGHTS.shares +
+    a.saves * ATTENTION_WEIGHTS.saves +
+    a.comments * ATTENTION_WEIGHTS.comments +
+    a.thruPlays * ATTENTION_WEIGHTS.thruPlays +
+    a.reactions * ATTENTION_WEIGHTS.reactions
+  );
+}
+
+/** Pure: impressions per person reached. Null when reach is unknown or zero. */
+export function frequencyOf(agg: { impressions: number; reach: number }): number | null {
+  return agg.reach > 0 ? agg.impressions / agg.reach : null;
 }
 
 /**
@@ -67,9 +132,12 @@ export interface WindowAggregate {
   intents: number;
   spendUsdMinor: number;
   revenueUsdMinor: number;
+  /** Summed unique reach. An over-count across days; see aggregateWindow. */
+  reach: number;
+  attention: AttentionCounts;
 }
 
-export type MetricUsed = "roas" | "cost_per_won" | "cpci" | "engagement";
+export type MetricUsed = "roas" | "cost_per_won" | "cpci" | "attention" | "engagement";
 
 export type Verdict =
   | { status: "pending"; reason: string }
@@ -80,6 +148,25 @@ export type Verdict =
       scores: Record<string, number>;
     };
 
+/**
+ * Pure: which candidates are showing to the same people too often.
+ *
+ * Reported rather than acted on. A saturated ad is a reason to widen the
+ * audience, and the engine saying so is more useful than it silently
+ * discarding the only data it has.
+ */
+export function saturatedAds(
+  aggs: Map<string, WindowAggregate>,
+  ceiling = FREQUENCY_CEILING,
+): string[] {
+  const out: string[] = [];
+  for (const [adId, agg] of aggs) {
+    const f = frequencyOf(agg);
+    if (f !== null && f > ceiling) out.push(adId);
+  }
+  return out;
+}
+
 /** Sum the last WINDOW_DAYS of daily metrics relative to `now`. */
 export function aggregateWindow(daily: DailyMetrics[], now: Date): WindowAggregate {
   const cutoff = now.getTime() - WINDOW_DAYS * 24 * 60 * 60 * 1000;
@@ -89,6 +176,8 @@ export function aggregateWindow(daily: DailyMetrics[], now: Date): WindowAggrega
     intents: 0,
     spendUsdMinor: 0,
     revenueUsdMinor: 0,
+    reach: 0,
+    attention: { saves: 0, shares: 0, comments: 0, reactions: 0, thruPlays: 0 },
   };
   for (const d of daily) {
     if (d.date.getTime() >= cutoff && d.date.getTime() <= now.getTime()) {
@@ -97,6 +186,20 @@ export function aggregateWindow(daily: DailyMetrics[], now: Date): WindowAggrega
       agg.intents += d.intents;
       agg.spendUsdMinor += d.spendUsdMinor;
       agg.revenueUsdMinor += d.revenueUsdMinor;
+      // Summing daily reach over-counts anyone reached on more than one day.
+      // Meta only de-duplicates reach within a single query window, and asking
+      // per-window would double the API calls. Both candidates are inflated by
+      // the same mechanism, so a COMPARISON between them stays fair, which is
+      // all the duel needs -- but this number must never be shown to a
+      // customer as "people reached".
+      agg.reach += d.reach ?? 0;
+      if (d.attention) {
+        agg.attention.saves += d.attention.saves;
+        agg.attention.shares += d.attention.shares;
+        agg.attention.comments += d.attention.comments;
+        agg.attention.reactions += d.attention.reactions;
+        agg.attention.thruPlays += d.attention.thruPlays;
+      }
     }
   }
   return agg;
@@ -117,6 +220,11 @@ export function decideVerdict(
   candidates: CandidateMetrics[],
   opts: {
     storeConnected: boolean;
+    /**
+     * True when this business's goal is awareness. Awareness changes which
+     * metric is allowed to decide, not merely which is preferred.
+     */
+    awareness?: boolean;
     /**
      * Manually-reported/pixel revenue may judge (mark-as-sold passed the
      * consistency gate — see tracking/consistency.ts). Store revenue never
@@ -178,6 +286,38 @@ export function decideVerdict(
     }
     const winner = pickLowest(scores);
     if (winner) return { status: "decided", winnerAdId: winner, metricUsed: "cost_per_won", scores };
+  }
+
+  // ATTENTION — awareness only, and placed here deliberately.
+  //
+  // An awareness ad is not trying to be clicked. Before this branch existed,
+  // an awareness duel fell past ROAS, cost-per-won and CPCI (all of which need
+  // conversions an awareness campaign does not produce) and landed on the CTR
+  // tiebreaker -- so the agent would reliably crown whichever ad was best at
+  // baiting a click, and move real budget onto it, while reporting a clean
+  // verdict. That is worse than no verdict: it is a confident wrong answer.
+  //
+  // Cost per weighted attention event, LOWER is better. It stays a cost metric
+  // so the cheap-but-ignored ad cannot win on volume alone.
+  if (opts.awareness) {
+    const scored = candidates.map((c) => {
+      const agg = aggs.get(c.adId);
+      return { adId: c.adId, score: attentionScore(agg?.attention), spend: agg?.spendUsdMinor ?? 0 };
+    });
+    if (scored.every((s) => s.score > 0)) {
+      const scores: Record<string, number> = {};
+      for (const s of scored) scores[s.adId] = s.spend / s.score;
+      const winner = pickLowest(scores);
+      if (winner) return { status: "decided", winnerAdId: winner, metricUsed: "attention", scores };
+    }
+    // No attention data on every candidate. Falling through to CTR here would
+    // reintroduce exactly the bug this branch exists to fix, so an awareness
+    // duel stops rather than answering with the wrong question.
+    return {
+      status: "pending",
+      reason:
+        "awareness duel needs saves, shares, comments or video views on every ad before it can be judged; clicks are not what this ad is buying",
+    };
   }
 
   // CPCI: cost per conversion intent — LOWER is better. Requires intents.

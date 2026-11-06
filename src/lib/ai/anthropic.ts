@@ -9,7 +9,10 @@ import { fetchWithTimeout, LONG_TIMEOUT_MS } from "@/lib/net/fetch";
 const API = "https://api.anthropic.com/v1/messages";
 
 export const MODELS = {
-  cheap: "claude-haiku-4-5-20251001", // bulk/structured extraction
+  // Haiku 5.5: $0.10/$0.50 per MTok against Haiku 4.5's $1/$5 -- the same
+  // bulk structured extraction for a tenth of the price. Verified no call site
+  // passes budget_tokens, which this model rejects (adaptive thinking only).
+  cheap: "claude-haiku-5-5", // bulk/structured extraction
   smart: "claude-sonnet-5", // concept writing, compliance judgement
 } as const;
 
