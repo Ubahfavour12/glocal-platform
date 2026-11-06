@@ -7,6 +7,7 @@
  */
 
 import { callClaudeJson, MODELS } from "@/lib/ai/anthropic";
+import { asAdLanguage, languageDirective, type AdLanguage } from "@/lib/copy/language";
 import { tenureGuidance } from "@/lib/onboarding/tenure";
 import type { ViralVideo } from "./youtube";
 
@@ -14,6 +15,11 @@ export interface ProductBrief {
   businessName: string;
   category: string;
   goal: "sales" | "leads" | "whatsapp" | "visits";
+  /**
+   * The language the ad copy is written in. Absent means English, which is
+   * what every ad was before this field existed.
+   */
+  adLanguage?: AdLanguage;
   /** free-text the owner gave at onboarding */
   description?: string;
   /**
@@ -44,6 +50,7 @@ Rules:
 - Hooks must earn the first 3 seconds. CTAs must match the business goal.
 - Write like a real person. Never use em-dashes or en-dashes; use commas, periods, or separate sentences instead.
 - Never leave bracket placeholders like [category] or [business]. If you don't have a specific detail, use the actual product/category words from the brief or write around it naturally.
+- Write in the language the brief asks for. If it names no language, write in English.
 - Output STRICT JSON only, no prose.`;
 
 /**
@@ -68,7 +75,7 @@ Business: ${product.businessName}
 Category: ${product.category}
 Goal: ${goalText(product.goal)}
 Notes: ${product.description ?? "n/a"}
-${tenureGuidance(product.foundedYear)}
+${tenureGuidance(product.foundedYear)}${languageDirective(asAdLanguage(product.adLanguage))}
 
 TOP VIRAL ADS IN THIS SPACE (ranked by views/day):
 ${patterns.join("\n")}

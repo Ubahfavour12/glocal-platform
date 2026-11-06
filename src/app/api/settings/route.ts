@@ -3,11 +3,19 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { MIN_DAILY_BUDGET_USD_MINOR } from "@/lib/money/ledger";
 import { runForBusiness, type BizRow } from "@/lib/orchestrator/run-business";
 import { currentBusiness } from "@/lib/business/current";
+import { asAdLanguage } from "@/lib/copy/language";
 
 export const maxDuration = 300;
 
-/** Changing these invalidates a plan that is still waiting for approval. */
-const PLAN_AFFECTING = new Set(["daily_budget_usd_minor", "persona", "goal"]);
+/**
+ * Changing these invalidates a plan that is still waiting for approval.
+ *
+ * `ad_language` belongs here: the pending plan's copy is already written, in
+ * the old language. Leaving it out would save the setting and then show the
+ * customer tomorrow's ads still in English, which reads as the switch not
+ * working.
+ */
+const PLAN_AFFECTING = new Set(["daily_budget_usd_minor", "persona", "goal", "ad_language"]);
 
 /**
  * Update the signed-in customer's business settings (UF-7). RLS on
@@ -33,6 +41,7 @@ export async function POST(req: NextRequest) {
     full_auto?: boolean;
     launch_hour?: number;
     launch_timezone?: string;
+    ad_language?: string;
   } | null;
   if (!body) return NextResponse.json({ error: "bad request" }, { status: 400 });
 
@@ -63,6 +72,12 @@ export async function POST(req: NextRequest) {
   }
   if (typeof body.launch_timezone === "string" && body.launch_timezone.length <= 64) {
     update.launch_timezone = body.launch_timezone;
+  }
+  // Normalised through the same function the prompt uses, so the column and
+  // the generator can never disagree about what "yoruba " means. An
+  // unrecognised value resolves to English rather than being written through.
+  if (typeof body.ad_language === "string") {
+    update.ad_language = asAdLanguage(body.ad_language);
   }
 
   if (Object.keys(update).length === 0) {

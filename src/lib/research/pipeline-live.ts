@@ -10,13 +10,14 @@ import { generateConcepts, type ProductBrief } from "./concepts";
 import type { PipelineDeps } from "./pipeline";
 import { buildStrategyContext } from "@/lib/studio/profile";
 import type { StudioAnswers } from "@/lib/studio/questions";
+import { asAdLanguage } from "@/lib/copy/language";
 
 export function livePipelineDeps(supabase: SupabaseClient): PipelineDeps {
   return {
     async getBusiness(businessId) {
       const { data } = await supabase
         .from("businesses")
-        .select("name, category, goal, strategy_profile, founded_year")
+        .select("name, category, goal, strategy_profile, founded_year, ad_language")
         .eq("id", businessId)
         .maybeSingle();
       if (!data) return null;
@@ -29,6 +30,7 @@ export function livePipelineDeps(supabase: SupabaseClient): PipelineDeps {
         goal: data.goal,
         description: strategy || undefined,
         foundedYear: (data.founded_year as number | null) ?? null,
+        adLanguage: asAdLanguage(data.ad_language as string | null),
       } as ProductBrief;
     },
 
