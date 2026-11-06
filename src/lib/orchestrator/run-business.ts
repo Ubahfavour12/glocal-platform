@@ -11,7 +11,15 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { asTier } from "@/lib/billing/plan";
 import { runNightly, type BusinessContext, type NightlyPlan } from "@/lib/orchestrator/nightly";
-import { buildLiveAdapters, type LiveDeps } from "@/lib/orchestrator/live-adapters";
+import {
+  buildLiveAdapters,
+  sequentialSinceIso,
+  sequentialUntilIso,
+  sparkAdCount,
+  sparkBlocks,
+  sparkLiveSince,
+  type LiveDeps,
+} from "@/lib/orchestrator/live-adapters";
 import { fetchAdInsights, type AdDayMetrics } from "@/lib/meta/insights";
 import { metaConfigFromEnv } from "@/lib/meta/client";
 import { llmGatewayScan } from "@/lib/compliance/llm";
@@ -147,6 +155,12 @@ export async function runForBusiness(
   const live = buildLiveAdapters(deps, now);
   const gate = await live.revenueGate(biz.id);
 
+  // One tier value for the whole run: the concept pool, the engine routing and
+  // the sequential branch must not disagree about which tier this is.
+  const tier = asTier(biz.plan);
+  const liveSince = tier === "spark" ? await sparkLiveSince(supabase, biz.id) : null;
+  const adCount = tier === "spark" ? await sparkAdCount(supabase, biz.id) : 0;
+
   const ctx: BusinessContext = {
     businessId: biz.id,
     name: biz.name,
@@ -160,6 +174,13 @@ export async function runForBusiness(
     revenueTrusted: gate.allowed,
     walletBalanceUsdMinor: wallet?.balance_usd_minor ?? 0,
     countries: [],
+    // Spark tests one ad at a time across weeks rather than two side by side,
+    // so the orchestrator needs the tier and the rotation clock.
+    tier,
+    sparkLiveSince: liveSince,
+    // Ads minus the one currently live. Counted from the ads table rather than
+    // from insights, so the rotation clock does not depend on Meta answering.
+    sparkCompletedBlocks: Math.max(0, adCount - 1),
   };
 
   const plan = await runNightly(
@@ -167,6 +188,12 @@ export async function runForBusiness(
     {
       getOpenTestCandidates: live.getOpenTestCandidates,
       getChampionState: live.getChampionState,
+      getSequentialBlocks: async (businessId) =>
+        sparkBlocks(
+          supabase,
+          businessId,
+          await deps.fetchInsights(sequentialSinceIso(now), sequentialUntilIso(now)),
+        ),
       getNextConcepts: async (businessId, count) => {
         const { data } = await supabase
           .from("concepts")

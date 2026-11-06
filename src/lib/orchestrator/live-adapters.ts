@@ -11,7 +11,12 @@
 
 import type { AdDayMetrics } from "@/lib/meta/insights";
 import { toCandidateMetrics } from "@/lib/meta/insights";
-import type { CandidateMetrics } from "@/lib/verdicts/verdict";
+import type { CandidateMetrics, DailyMetrics } from "@/lib/verdicts/verdict";
+import type { SequentialBlock } from "@/lib/verdicts/sequential";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+/** Minimal Supabase surface these helpers need. */
+type Supa = SupabaseClient;
 import { WINDOW_DAYS } from "@/lib/verdicts/verdict";
 import type { FatigueInput } from "@/lib/verdicts/fatigue";
 import { updatePeakCtr } from "@/lib/verdicts/fatigue";
@@ -147,4 +152,96 @@ export function buildLiveAdapters(deps: LiveDeps, now: Date = new Date()) {
   }
 
   return { getOpenTestCandidates, getChampionState, revenueGate };
+}
+
+
+/**
+ * The last two runs of a sequential (Spark) account, oldest first.
+ *
+ * Blocks are DERIVED rather than stored: an ad's run starts at its
+ * `created_at` and ends when the next ad starts (or now). The `ads` table
+ * already carries that, and insights rows are already keyed by ad id and
+ * date, so storing a second copy of the same fact would only create something
+ * to keep in sync.
+ *
+ * Returns fewer than two when the account has not run two ads yet, which
+ * `decideSequential` handles by staying pending.
+ */
+export async function sparkBlocks(
+  supabase: Supa,
+  businessId: string,
+  rows: AdDayMetrics[],
+): Promise<SequentialBlock[]> {
+  const { data } = await supabase
+    .from("ads")
+    .select("platform_ad_id, created_at, campaigns!inner(business_id)")
+    .eq("campaigns.business_id", businessId)
+    .order("created_at", { ascending: false })
+    .limit(2);
+
+  const ads = (data ?? []) as { platform_ad_id: string | null; created_at: string }[];
+  const byAd = new Map<string, DailyMetrics[]>();
+  for (const r of rows) {
+    const arr = byAd.get(r.adId) ?? [];
+    arr.push({
+      date: r.date,
+      impressions: r.impressions,
+      clicks: r.clicks,
+      intents: r.intents,
+      spendUsdMinor: r.spendUsdMinor,
+      revenueUsdMinor: r.revenueUsdMinor,
+      reach: r.reach ?? undefined,
+      attention: r.attention,
+    });
+    byAd.set(r.adId, arr);
+  }
+
+  return ads
+    .filter((a): a is { platform_ad_id: string; created_at: string } => Boolean(a.platform_ad_id))
+    .map((a) => ({ adId: a.platform_ad_id, daily: byAd.get(a.platform_ad_id) ?? [] }))
+    .filter((b) => b.daily.length > 0)
+    .reverse(); // oldest first, so the newest run is the one being judged
+}
+
+/**
+ * How many ads this business has ever run.
+ *
+ * Counted from our own table rather than from insights, so the rotation clock
+ * keeps ticking even on a night Meta does not answer. A rotation that stalled
+ * because an upstream was down would quietly cost the customer a week.
+ */
+/**
+ * How far back to pull insights for a sequential comparison.
+ *
+ * Wider than the duel's 3-day window because a block is a whole week and two
+ * are compared: 30 days covers two 14-day blocks with slack, and over-fetching
+ * is free here since aggregateBlock sums only the days an ad was actually live.
+ */
+export function sequentialSinceIso(now: Date): string {
+  return new Date(now.getTime() - 30 * 86_400_000).toISOString().slice(0, 10);
+}
+
+export function sequentialUntilIso(now: Date): string {
+  return now.toISOString().slice(0, 10);
+}
+
+export async function sparkAdCount(supabase: Supa, businessId: string): Promise<number> {
+  const { count } = await supabase
+    .from("ads")
+    .select("id, campaigns!inner(business_id)", { count: "exact", head: true })
+    .eq("campaigns.business_id", businessId);
+  return count ?? 0;
+}
+
+/** When the newest ad went live, for the rotation clock. Null when none. */
+export async function sparkLiveSince(supabase: Supa, businessId: string): Promise<Date | null> {
+  const { data } = await supabase
+    .from("ads")
+    .select("created_at, campaigns!inner(business_id)")
+    .eq("campaigns.business_id", businessId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const at = (data as { created_at?: string } | null)?.created_at;
+  return at ? new Date(at) : null;
 }

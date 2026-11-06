@@ -77,6 +77,62 @@ export interface SequentialVerdict {
   caveats: string[];
 }
 
+/**
+ * What the scheduler should do with a Spark account tonight.
+ *
+ * `hold` leave the live ad alone, its week is not up
+ * `rotate` retire the live ad (if any) and start the next one
+ * `judge`  the live ad finished a week and there is a previous run to compare
+ */
+export type RotationAction = "hold" | "rotate" | "judge";
+
+export interface RotationInput {
+  /** When the live ad went live. Null when nothing is running. */
+  liveSince: Date | null;
+  /** Completed runs available to compare against. */
+  completedBlocks: number;
+  now: Date;
+}
+
+/**
+ * Pure: decide tonight's move for a sequential account.
+ *
+ * This is the only new judgement in the scheduler, and it is kept here, pure
+ * and total, so it can be tested without a database or a Meta account. The
+ * orchestrator does the doing; this decides.
+ *
+ * The week boundary is the whole point. Rotating early would hand
+ * decideSequential two part-weeks, which it refuses (and should), so the
+ * account would spend money and still never get an answer -- the exact failure
+ * this tier exists to escape.
+ */
+export function rotationDecision(input: RotationInput): {
+  action: RotationAction;
+  reason: string;
+} {
+  if (!input.liveSince) {
+    return { action: "rotate", reason: "nothing is running yet, so this starts the first ad" };
+  }
+  const days = Math.floor((input.now.getTime() - input.liveSince.getTime()) / 86_400_000);
+  if (days < MIN_BLOCK_DAYS) {
+    const left = MIN_BLOCK_DAYS - days;
+    return {
+      action: "hold",
+      reason: `this ad is ${days} day${days === 1 ? "" : "s"} into its week; ${left} more before it can be judged fairly`,
+    };
+  }
+  if (input.completedBlocks >= 1) {
+    return {
+      action: "judge",
+      reason: `this ad has run a full week and there is a previous week to compare it against`,
+    };
+  }
+  return {
+    action: "rotate",
+    reason: "first week is done; starting the second ad so there is something to compare against",
+  };
+}
+
 /** Distinct calendar days in a block. Duplicates collapse. */
 export function blockDays(b: SequentialBlock): number {
   return new Set(b.daily.map((d) => d.date.toISOString().slice(0, 10))).size;

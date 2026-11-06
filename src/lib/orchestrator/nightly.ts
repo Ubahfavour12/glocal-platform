@@ -20,10 +20,18 @@ import {
   clampBudgetIncrease,
   personaSplit,
   viableChallengerCount,
+  type ChallengerPlan,
   type PersonaMode,
 } from "@/lib/guardrails/budget";
 import { type MetricUsed, decideVerdict, type CandidateMetrics, type Verdict } from "@/lib/verdicts/verdict";
 import { checkFatigue, type FatigueInput, type StyleDirective } from "@/lib/verdicts/fatigue";
+import {
+  decideSequential,
+  rotationDecision,
+  type SequentialBlock,
+  type SequentialVerdict,
+} from "@/lib/verdicts/sequential";
+import type { RenderTier } from "@/lib/billing/plan";
 import { computeWalletHealth } from "@/lib/money/wallet-health";
 import { runGateway, type CreativeInput, type GatewayResult } from "@/lib/compliance/gateway";
 
@@ -44,6 +52,16 @@ export interface BusinessContext {
   revenueTrusted?: boolean;
   walletBalanceUsdMinor: number;
   countries: string[];
+  /**
+   * The subscription tier. Spark runs sequential testing instead of the duel,
+   * so the orchestrator has to know which it is. Absent behaves as a duel
+   * tier, which is what every account did before Spark existed.
+   */
+  tier?: RenderTier;
+  /** When the live ad went live, for the sequential rotation. */
+  sparkLiveSince?: Date | null;
+  /** Completed sequential runs available to compare. */
+  sparkCompletedBlocks?: number;
 }
 
 export interface Concept {
@@ -80,6 +98,13 @@ export interface NightlyPlan {
   /** Human-readable agent commentary for the approval card. */
   commentary: string[];
   status: "ready_for_approval" | "auto_approved" | "insufficient_funds";
+  /**
+   * The sequential verdict, on tiers that use it. Kept separate from
+   * `verdict` rather than widened into it: a sequential result carries
+   * caveats and a capped confidence that a duel verdict does not, and
+   * flattening the two would lose exactly the hedging that makes it honest.
+   */
+  sequential?: SequentialVerdict;
 }
 
 // ---------- adapters (injected) ----------
@@ -89,6 +114,11 @@ export interface OrchestratorAdapters {
   getOpenTestCandidates(businessId: string): Promise<CandidateMetrics[]>;
   /** Champion reign state for fatigue detection — null when no champion yet. */
   getChampionState?(businessId: string): Promise<FatigueInput | null>;
+  /**
+   * The last two completed/current runs, for sequential testing. Absent on
+   * duel tiers, where it is never called.
+   */
+  getSequentialBlocks?(businessId: string): Promise<SequentialBlock[]>;
   /** Next unrendered concepts, best rank first. */
   getNextConcepts(businessId: string, count: number): Promise<Concept[]>;
   /** Higgsfield render — absent until the key lands. */
@@ -194,11 +224,54 @@ export async function runNightly(
     return plan;
   }
 
-  // How many challengers today's budget can genuinely fund. Starving two
-  // challengers means neither reaches the verdict threshold, so we run fewer
-  // (or none) rather than testing ads that can never be judged.
-  const challengerPlan = viableChallengerCount(spendableToday, ctx.persona, CHALLENGERS_PER_DAY);
-  if (challengerPlan.note) commentary.push(challengerPlan.note);
+  // SEQUENTIAL vs DUEL. Spark has one budget, so it tests one ad at a time
+  // across weeks instead of two side by side.
+  //
+  // Without this branch a Spark account falls into the duel's degradation:
+  // viableChallengerCount returns 0 (correctly -- two funded ad sets are not
+  // affordable), the champion keeps the whole budget, and the SAME AD RUNS
+  // FOREVER while sequential.ts waits for a second block that never arrives.
+  // The account would spend real money and learn nothing, which is the exact
+  // failure this tier exists to escape.
+  const sequentialMode = ctx.tier === "spark";
+  let sequential: SequentialVerdict | undefined;
+
+  let challengerPlan: ChallengerPlan;
+  if (sequentialMode) {
+    const rotation = rotationDecision({
+      liveSince: ctx.sparkLiveSince ?? null,
+      completedBlocks: ctx.sparkCompletedBlocks ?? 0,
+      now,
+    });
+
+    if (rotation.action === "judge" && adapters.getSequentialBlocks) {
+      sequential = decideSequential(await adapters.getSequentialBlocks(ctx.businessId), {
+        storeConnected: ctx.storeConnected,
+        revenueTrusted: ctx.revenueTrusted,
+        awareness: ctx.goal === "awareness",
+      });
+      await adapters.audit(ctx.businessId, "sequential_verdict", sequential);
+      commentary.push(sequential.reason);
+      // The caveats go to the CUSTOMER, not just the journal. A sequential
+      // result is weaker evidence than a duel's and saying so is the point.
+      for (const c of sequential.caveats) commentary.push(c);
+    } else {
+      commentary.push(rotation.reason);
+    }
+
+    // One ad at a time, always. A rotate night starts the next one; a hold
+    // night leaves the live ad alone.
+    challengerPlan = { count: rotation.action === "hold" ? 0 : 1, note: null };
+  } else {
+    // How many challengers today's budget can genuinely fund. Starving two
+    // challengers means neither reaches the verdict threshold, so we run fewer
+    // (or none) rather than testing ads that can never be judged.
+    challengerPlan = viableChallengerCount(spendableToday, ctx.persona, CHALLENGERS_PER_DAY);
+    // Suppressed on Spark: that note tells the customer to raise their budget
+    // to about $10/day "for the full daily test", which is an upsell out of a
+    // test Spark is not running and never claimed to.
+    if (challengerPlan.note) commentary.push(challengerPlan.note);
+  }
 
   const split = personaSplit(spendableToday, ctx.persona, challengerPlan.count);
   const championBudget =
@@ -297,6 +370,7 @@ export async function runNightly(
     challengers,
     commentary,
     status: ctx.fullAuto ? "auto_approved" : "ready_for_approval",
+    sequential,
   };
   await adapters.savePlan(plan);
   await adapters.audit(ctx.businessId, "plan_created", {

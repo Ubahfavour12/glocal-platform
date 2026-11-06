@@ -221,3 +221,90 @@ describe("regenerate speed", () => {
     expect(peak).toBe(1);
   });
 });
+
+describe("Spark runs sequential testing, not the duel", () => {
+  // A micro budget: well under the $10/day the duel needs, which is the whole
+  // reason this tier exists.
+  const spark = (over: Partial<BusinessContext> = {}) =>
+    ctx({ tier: "spark", dailyBudgetUsdMinor: 150, walletBalanceUsdMinor: 5000, ...over });
+  const daysAgo = (n: number) => new Date(now.getTime() - n * 86_400_000);
+
+  it("starts one ad when nothing is running", async () => {
+    const { adapters, saved } = makeAdapters();
+    await runNightly(spark({ sparkLiveSince: null }), adapters, now);
+    expect(saved[0].challengers).toHaveLength(1);
+  });
+
+  it("starts no new ad mid-week, and says how long is left", async () => {
+    const { adapters, saved } = makeAdapters();
+    await runNightly(spark({ sparkLiveSince: daysAgo(3) }), adapters, now);
+    expect(saved[0].challengers).toHaveLength(0);
+    expect(saved[0].commentary.join(" ")).toMatch(/4 more/);
+  });
+
+  it("never funds two ads at once, whatever the day", async () => {
+    // The entire premise of sequential testing is one budget, one ad.
+    for (const d of [null, 0, 3, 7, 21]) {
+      const { adapters, saved } = makeAdapters();
+      await runNightly(
+        spark({ sparkLiveSince: d === null ? null : daysAgo(d), sparkCompletedBlocks: 1 }),
+        adapters,
+        now,
+      );
+      expect(saved[0].challengers.length).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("never shows the duel's raise-your-budget upsell", async () => {
+    // viableChallengerCount would tell a Spark account to raise to ~$10/day
+    // "for the full daily test" -- an upsell out of a test it is not running.
+    const { adapters, saved } = makeAdapters();
+    await runNightly(spark({ sparkLiveSince: daysAgo(2) }), adapters, now);
+    const text = saved[0].commentary.join(" ");
+    expect(text).not.toMatch(/full daily test/);
+    expect(text).not.toMatch(/\$10\/day/);
+  });
+
+  it("judges once a week is done and a previous run exists, and hedges", async () => {
+    const blocks = ["a", "b"].map((adId, i) => ({
+      adId,
+      daily: Array.from({ length: 7 }, (_, d) => ({
+        date: new Date(now.getTime() - (13 - i * 7 - d) * 86_400_000),
+        impressions: 1_000,
+        clicks: 50,
+        intents: i === 0 ? 20 : 5,
+        spendUsdMinor: 100,
+        revenueUsdMinor: 0,
+      })),
+    }));
+    const { adapters, saved, audits } = makeAdapters({
+      getSequentialBlocks: async () => blocks,
+    });
+    await runNightly(
+      spark({ sparkLiveSince: daysAgo(7), sparkCompletedBlocks: 1 }),
+      adapters,
+      now,
+    );
+    const plan = saved[0];
+    expect(plan.sequential?.status).toBe("decided");
+    expect(audits.some((a) => a.action === "sequential_verdict")).toBe(true);
+    // The caveat reaches the CUSTOMER, not just the journal.
+    expect(plan.commentary.join(" ")).toMatch(/different times/);
+    expect(plan.commentary.join(" ")).toMatch(/not a head-to-head/);
+  });
+
+  it("leaves the duel tiers completely alone", async () => {
+    // Same small budget, no tier: the old degradation, unchanged.
+    const { adapters, saved } = makeAdapters();
+    await runNightly(ctx({ dailyBudgetUsdMinor: 150, walletBalanceUsdMinor: 5000 }), adapters, now);
+    expect(saved[0].sequential).toBeUndefined();
+    expect(saved[0].commentary.join(" ")).toMatch(/too small|fewer|1 new ad/i);
+  });
+
+  it("still runs the duel for Growth at a healthy budget", async () => {
+    const { adapters, saved } = makeAdapters();
+    await runNightly(ctx({ tier: "growth", dailyBudgetUsdMinor: 2000 }), adapters, now);
+    expect(saved[0].challengers.length).toBe(2);
+    expect(saved[0].sequential).toBeUndefined();
+  });
+});

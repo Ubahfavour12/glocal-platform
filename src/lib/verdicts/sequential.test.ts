@@ -8,6 +8,7 @@ import {
   weekdayHistogram,
   weekdayImbalance,
   type SequentialBlock,
+  rotationDecision,
 } from "./sequential";
 import { MIN_IMPRESSIONS, type DailyMetrics } from "./verdict";
 
@@ -165,5 +166,63 @@ describe("when it does judge", () => {
     const v = decideSequential([bait, real], { storeConnected: false, awareness: true });
     expect(v.metricUsed).toBe("attention");
     expect(v.winnerAdId).toBe("real");
+  });
+});
+
+describe("rotationDecision", () => {
+  const now = new Date("2026-07-20T12:00:00Z");
+  const daysAgo = (n: number) => new Date(now.getTime() - n * 86_400_000);
+
+  it("starts the first ad when nothing is running", () => {
+    const r = rotationDecision({ liveSince: null, completedBlocks: 0, now });
+    expect(r.action).toBe("rotate");
+    expect(r.reason).toMatch(/first ad/);
+  });
+
+  it("holds until the week is up, and says how long is left", () => {
+    for (const d of [0, 1, 3, 6]) {
+      const r = rotationDecision({ liveSince: daysAgo(d), completedBlocks: 0, now });
+      expect(r.action).toBe("hold");
+      expect(r.reason).toMatch(new RegExp(`${MIN_BLOCK_DAYS - d} more`));
+    }
+  });
+
+  it("banks the first week and starts a second ad rather than judging", () => {
+    // With nothing to compare against, judging is impossible; rotating is the
+    // only move that makes a verdict possible next week.
+    const r = rotationDecision({ liveSince: daysAgo(7), completedBlocks: 0, now });
+    expect(r.action).toBe("rotate");
+  });
+
+  it("judges once a full week has run and a previous week exists", () => {
+    const r = rotationDecision({ liveSince: daysAgo(7), completedBlocks: 1, now });
+    expect(r.action).toBe("judge");
+  });
+
+  it("never rotates mid-week, which would make the comparison unjudgeable", () => {
+    // decideSequential refuses part-weeks, so an early rotation would spend
+    // money and still never produce an answer.
+    for (const blocks of [0, 1, 2]) {
+      for (const d of [1, 4, 6]) {
+        expect(rotationDecision({ liveSince: daysAgo(d), completedBlocks: blocks, now }).action).toBe(
+          "hold",
+        );
+      }
+    }
+  });
+
+  it("covers every combination without throwing", () => {
+    for (const liveSince of [null, daysAgo(3), daysAgo(7), daysAgo(21)]) {
+      for (const completedBlocks of [0, 1, 2]) {
+        const r = rotationDecision({ liveSince, completedBlocks, now });
+        expect(["hold", "rotate", "judge"]).toContain(r.action);
+        expect(r.reason.length).toBeGreaterThan(10);
+      }
+    }
+  });
+
+  it("keeps judging on a long overrun rather than silently holding", () => {
+    const r = rotationDecision({ liveSince: daysAgo(21), completedBlocks: 1, now });
+    expect(r.action).toBe("judge");
   });
 });
