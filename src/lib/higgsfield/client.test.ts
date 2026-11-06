@@ -167,10 +167,36 @@ describe("describeFailure", () => {
   });
 
   it("tells auth and credit failures apart from a wrong path", () => {
-    expect(describeFailure("submit", 401, "/p", "")).toContain("HIGGSFIELD_CREDENTIALS");
+    expect(describeFailure("submit", 401, "/p", "")).toContain("HIGGSFIELD_API_KEY");
     expect(describeFailure("submit", 402, "/p", "")).toContain("credits");
     expect(describeFailure("submit", 429, "/p", "")).toContain("rate limited");
     expect(describeFailure("submit", 500, "/p", "")).not.toContain("path is wrong");
+  });
+
+  it("calls a credits failure billing, not a bad key", () => {
+    // The real first render returned `403 not_enough_credits`. An earlier
+    // version answered that with "check your credentials", which sends the
+    // reader off to re-paste a key that was never the problem.
+    const msg = describeFailure("submit", 403, "/p", '{"detail":"not_enough_credits"}');
+    expect(msg).toContain("billing, not the key");
+    expect(msg).not.toMatch(/check HIGGSFIELD_API_KEY/);
+  });
+
+  it("still blames the key on a 401, where that is the actual cause", () => {
+    expect(describeFailure("submit", 401, "/p", '{"detail":"invalid key"}')).toContain(
+      "HIGGSFIELD_API_KEY",
+    );
+  });
+
+  it("reads credits from the wording even on an unexpected status", () => {
+    for (const body of ['{"detail":"insufficient balance"}', '{"detail":"quota exceeded"}']) {
+      expect(describeFailure("submit", 500, "/p", body)).toContain("billing");
+    }
+  });
+
+  it("explains a 403 with no useful body as refused rather than unauthenticated", () => {
+    const msg = describeFailure("submit", 403, "/p", "");
+    expect(msg).toMatch(/authenticated but refused/);
   });
 
   it("caps the body so an error page cannot flood the journal", () => {

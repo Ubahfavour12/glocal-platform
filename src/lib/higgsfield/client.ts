@@ -369,14 +369,26 @@ export function describeFailure(
   } catch {
     // Not JSON — an HTML error page or empty body. Keep the trimmed text.
   }
-  const hint =
-    status === 404
-      ? ` — 404 means this path is wrong, not that Higgsfield is down; override it with ${PATHS[what === "submit" ? "image" : "poll"].env} or HIGGSFIELD_BASE_URL`
-      : status === 401 || status === 403
-        ? " — check HIGGSFIELD_CREDENTIALS is KEY_ID:KEY_SECRET"
-        : status === 402 || status === 429
-          ? " — out of credits or rate limited"
-          : "";
+  // 403 is the ambiguous one and it matters: the first live render returned
+  // `403 not_enough_credits`, and an earlier version of this answered that
+  // with "check your credentials" -- sending the reader to re-paste a key that
+  // was never the problem. So the vendor's own words decide where they are
+  // decisive, and the status code only fills in the rest.
+  const says = (...needles: string[]) =>
+    needles.some((n) => detail.toLowerCase().includes(n));
+  const hint = says("credit", "quota", "balance", "insufficient")
+    ? " — this is billing, not the key: the API has its own credit pool, separate from the credits the Higgsfield app shows"
+    : status === 404
+      ? ` — 404 means this path is wrong, not that Higgsfield is down; override it with ${PATHS[what === "submit" ? "image" : "poll"].env} or HIGGSFIELD_BASE_URL. GET /models lists every valid slug`
+      : status === 401
+        ? " — the key was rejected; check HIGGSFIELD_API_KEY (a single key is fine)"
+        : status === 403
+          ? " — authenticated but refused: usually credits or a plan that does not include API access"
+          : status === 402
+            ? " — out of credits"
+            : status === 429
+              ? " — rate limited"
+              : "";
   return `Higgsfield ${what} failed: ${status} at ${path}${detail ? ` (${detail})` : ""}${hint}`;
 }
 
