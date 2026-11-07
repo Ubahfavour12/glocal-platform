@@ -6,6 +6,7 @@ import { IconRail } from "./IconRail";
 import { TabBar } from "./TabBar";
 import { NotificationBell } from "./NotificationBell";
 import { ThemeToggle } from "./ThemeToggle";
+import { SignOutButton } from "./SignOutButton";
 import { AskAgent } from "@/components/agent/AskAgent";
 import { createPersistedStore } from "@/lib/browser/persisted";
 import { BusinessSwitcher } from "@/components/business/BusinessSwitcher";
@@ -72,6 +73,7 @@ export function AppShell({
             <BusinessSwitcher businesses={businesses} currentId={currentBusinessId} />
             <ThemeToggle />
             <NotificationBell />
+            <SignOutButton />
           </div>
         </header>
         <main className="flex-1 overflow-y-auto px-4 pb-24 pt-6 sm:px-6 sm:pt-8 md:pb-8 lg:px-8 xl:px-12">

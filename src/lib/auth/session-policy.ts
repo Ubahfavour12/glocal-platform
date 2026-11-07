@@ -33,6 +33,22 @@ export const LAST_SEEN_COOKIE = "glocal-last-seen";
 /** Cookie holding when this session began, for the absolute ceiling below. */
 export const SESSION_START_COOKIE = "glocal-session-start";
 
+/**
+ * Every cookie that must be deleted when a session ends, by timeout or by the
+ * customer signing out.
+ *
+ * One list, because there are two places that end a session -- the timeout in
+ * proxy.ts and the sign-out route -- and a cookie remembered in one but not
+ * the other is how the next person on a shared phone inherits a half-expired
+ * session clock from someone who has already left. Supabase's own auth cookies
+ * are cleared by signOut(); these are ours and it does not know about them.
+ */
+export const SESSION_COOKIES = [
+  LAST_SEEN_COOKIE,
+  SESSION_START_COOKIE,
+  POLICY_COOKIE,
+] as const;
+
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 

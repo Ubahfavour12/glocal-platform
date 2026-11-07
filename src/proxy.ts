@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import {
   LAST_SEEN_COOKIE,
   POLICY_COOKIE,
+  SESSION_COOKIES,
   SESSION_START_COOKIE,
   evaluateSession,
   policyFrom,
@@ -65,9 +66,7 @@ export async function proxy(request: NextRequest) {
     // `response`, which we are now discarding, and without them the browser
     // keeps a session the server has already ended.
     response.cookies.getAll().forEach((c) => signedOut.cookies.set(c));
-    [LAST_SEEN_COOKIE, SESSION_START_COOKIE, POLICY_COOKIE].forEach((name) =>
-      signedOut.cookies.delete(name),
-    );
+    SESSION_COOKIES.forEach((name) => signedOut.cookies.delete(name));
     return signedOut;
   }
 

@@ -5,6 +5,10 @@ import {
   evaluateSession,
   isSessionPolicy,
   policyFrom,
+  SESSION_COOKIES,
+  LAST_SEEN_COOKIE,
+  SESSION_START_COOKIE,
+  POLICY_COOKIE,
 } from "./session-policy";
 
 const NOW = 1_800_000_000_000;
@@ -103,5 +107,27 @@ describe("cookies that cannot be trusted", () => {
 
   it("ignores an unparseable start time rather than expiring on it", () => {
     expect(ok({ startedAt: "never" }).action).toBe("continue");
+  });
+});
+
+describe("SESSION_COOKIES", () => {
+  it("lists every cookie a session owns", () => {
+    expect([...SESSION_COOKIES].sort()).toEqual(
+      [LAST_SEEN_COOKIE, SESSION_START_COOKIE, POLICY_COOKIE].sort(),
+    );
+  });
+
+  it("is the single list both session-enders use", () => {
+    // The timeout in proxy.ts and the sign-out route both end a session. A
+    // cookie remembered in one but not the other is how the next person on a
+    // shared phone inherits a half-expired clock from whoever left.
+    expect(SESSION_COOKIES).toHaveLength(3);
+    expect(new Set(SESSION_COOKIES).size).toBe(SESSION_COOKIES.length);
+  });
+
+  it("names only our own cookies, never Supabase's", () => {
+    // signOut() clears the auth cookies; these are the ones it does not know
+    // about. Listing a Supabase cookie here would be a second owner for it.
+    for (const c of SESSION_COOKIES) expect(c.startsWith("glocal-")).toBe(true);
   });
 });
