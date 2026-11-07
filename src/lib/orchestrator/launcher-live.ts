@@ -128,19 +128,28 @@ export function liveLaunchAdapters(
 /**
  * Pure: which of a business's ads should be stopped when `keep` goes live.
  *
- * Anything already paused is left alone so a retry does not churn, and the
- * incoming ads are never in the list — retiring the ad you just launched
- * would leave the account with nothing running at all.
+ * Retirement is tracked by `retiredAt`, NOT by `status`. The launcher writes
+ * 'launched' / 'awaiting_payment' / 'error' into status, which records how the
+ * launch went -- an outcome. An earlier version of this function wrote
+ * 'PAUSED' into that same column, which mixed an outcome vocabulary with a
+ * state one and threw away the fact that the ad had launched at all.
+ *
+ * Three filters, each load-bearing:
+ *  - no platformAdId: never reached the network (awaiting_payment, error), so
+ *    there is nothing to pause.
+ *  - in `keep`: retiring the ad you just launched would leave the account with
+ *    nothing running.
+ *  - already retired: a retry must not churn.
  */
 export function adsToRetire(
-  existing: { platformAdId: string | null; status: string | null }[],
+  existing: { platformAdId: string | null; retiredAt: string | null }[],
   keep: readonly string[],
 ): string[] {
   const keeping = new Set(keep);
   return existing
-    .filter((a): a is { platformAdId: string; status: string | null } => Boolean(a.platformAdId))
+    .filter((a): a is { platformAdId: string; retiredAt: string | null } => Boolean(a.platformAdId))
     .filter((a) => !keeping.has(a.platformAdId))
-    .filter((a) => (a.status ?? "").toUpperCase() !== "PAUSED")
+    .filter((a) => a.retiredAt === null)
     .map((a) => a.platformAdId);
 }
 
@@ -166,13 +175,14 @@ export async function retirePreviousAds(
 ): Promise<{ paused: string[]; failed: { adId: string; error: string }[] }> {
   const { data } = await supabase
     .from("ads")
-    .select("platform_ad_id, status, campaigns!inner(business_id)")
-    .eq("campaigns.business_id", businessId);
+    .select("platform_ad_id, retired_at, campaigns!inner(business_id)")
+    .eq("campaigns.business_id", businessId)
+    .is("retired_at", null);
 
   const targets = adsToRetire(
-    ((data ?? []) as { platform_ad_id: string | null; status: string | null }[]).map((a) => ({
+    ((data ?? []) as { platform_ad_id: string | null; retired_at: string | null }[]).map((a) => ({
       platformAdId: a.platform_ad_id,
-      status: a.status,
+      retiredAt: a.retired_at,
     })),
     keep,
   );
@@ -184,16 +194,19 @@ export async function retirePreviousAds(
       await pauseAd(cfg, adId);
       paused.push(adId);
     } catch (e) {
-      // Left ACTIVE in our row on purpose: it is still running, and recording
-      // otherwise would hide a live ad from every sweep that looks for one.
+      // retired_at stays null on purpose: the ad IS still running, and
+      // recording otherwise would hide a live, spending ad from every sweep
+      // that looks for one.
       failed.push({ adId, error: (e as Error).message });
     }
   }
 
   if (paused.length > 0) {
+    // status is left alone: it records that the launch succeeded, which stays
+    // true after the ad is stopped. retired_at is the state.
     await supabase
       .from("ads")
-      .update({ status: "PAUSED", is_champion: false })
+      .update({ retired_at: new Date().toISOString(), is_champion: false })
       .in("platform_ad_id", paused);
   }
 

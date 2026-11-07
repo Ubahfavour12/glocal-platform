@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { adsToRetire } from "./launcher-live";
 
-const ad = (platformAdId: string | null, status: string | null = "ACTIVE") => ({
+const ad = (platformAdId: string | null, retiredAt: string | null = null) => ({
   platformAdId,
-  status,
+  retiredAt,
 });
+const RETIRED = "2026-11-01T00:00:00Z";
 
 describe("adsToRetire", () => {
   it("retires the ad that was running before this one", () => {
@@ -19,16 +20,19 @@ describe("adsToRetire", () => {
     expect(adsToRetire([ad("a"), ad("b")], ["a", "b"])).toEqual([]);
   });
 
-  it("leaves already-paused ads alone, so a retry does not churn", () => {
-    expect(adsToRetire([ad("old", "PAUSED"), ad("older", "paused")], ["new"])).toEqual([]);
+  it("leaves already-retired ads alone, so a retry does not churn", () => {
+    expect(adsToRetire([ad("old", RETIRED), ad("older", RETIRED)], ["new"])).toEqual([]);
   });
 
-  it("is case-insensitive about the stored status", () => {
-    expect(adsToRetire([ad("x", "Paused")], ["new"])).toEqual([]);
-    expect(adsToRetire([ad("x", "active")], ["new"])).toEqual(["x"]);
+  it("tracks retirement separately from the launch outcome", () => {
+    // status records HOW THE LAUNCH WENT and stays true after the ad stops;
+    // retired_at is the state. Mixing them loses the fact that it launched.
+    expect(adsToRetire([ad("x", null)], ["new"])).toEqual(["x"]);
+    expect(adsToRetire([ad("x", RETIRED)], ["new"])).toEqual([]);
   });
 
-  it("skips rows with no platform id, which were never live", () => {
+  it("skips rows with no platform id, which never reached the network", () => {
+    // awaiting_payment and error rows have no platform ad id: nothing to pause.
     expect(adsToRetire([ad(null), ad("real")], ["new"])).toEqual(["real"]);
   });
 
@@ -42,10 +46,9 @@ describe("adsToRetire", () => {
     expect(adsToRetire([ad("a")], [])).toEqual(["a"]);
   });
 
-  it("treats an unknown status as still running", () => {
+  it("treats a null retired_at as still running", () => {
     // Erring toward "it might be live" is the safe direction: the worst case
     // is a redundant pause call, which Meta treats as a no-op.
-    expect(adsToRetire([ad("x", null)], ["new"])).toEqual(["x"]);
-    expect(adsToRetire([ad("y", "")], ["new"])).toEqual(["y"]);
+    expect(adsToRetire([ad("x", null), ad("y")], ["new"]).sort()).toEqual(["x", "y"]);
   });
 });
