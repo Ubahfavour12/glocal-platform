@@ -20,8 +20,17 @@ function fakeSupabase(rpcError: string | null = null) {
     async () => ({ data: null, error: rpcError ? { message: rpcError } : null }),
   );
   const insert = vi.fn(async () => ({ error: null }));
-  const client = { rpc, from: vi.fn(() => ({ insert })) };
-  return { client: client as unknown as SupabaseClient, rpc, insert };
+  // Which table each insert went to. The fee lands in `payment_fees` and must
+  // never land in `ledger_entries`, so the table name is the assertion.
+  const tables: string[] = [];
+  const client = {
+    rpc,
+    from: vi.fn((table: string) => {
+      tables.push(table);
+      return { insert };
+    }),
+  };
+  return { client: client as unknown as SupabaseClient, rpc, insert, tables };
 }
 
 const topup = (over: Partial<VerifiedTransaction> = {}): VerifiedTransaction => ({
@@ -124,9 +133,11 @@ describe("subscriptions", () => {
     });
   });
 
-  it("tolerates a small shortfall from FX rounding and PSP fees", async () => {
+  it("tolerates a small shortfall from FX rounding", async () => {
     const { client } = fakeSupabase();
-    // Comfortably over the repriced $39 Growth, so it settles.
+    // Comfortably over the repriced $39 Growth, so it settles. Once said "FX
+    // rounding and PSP fees"; the fee half is no longer tolerated silently,
+    // it is recorded -- see the tests below.
     const outcome = await settleVerifiedCharge(
       client,
       "paystack",
@@ -134,6 +145,68 @@ describe("subscriptions", () => {
       { sendReceipts: false },
     );
     expect(outcome.kind).toBe("subscribed");
+  });
+
+  it("records the processor's cut against the business, not the wallet", async () => {
+    // THE WHOLE POINT. The fee is OUR cost; the ledger is what the CUSTOMER
+    // may spend. Writing it as a wallet debit would quietly reduce balances
+    // and break the promise printed on the Add Funds screen.
+    const { client, insert, tables } = fakeSupabase();
+    await settleVerifiedCharge(
+      client,
+      "paystack",
+      topup({ feeLocalMinor: 160_000 }),
+      { sendReceipts: false },
+    );
+    expect(tables).toContain("payment_fees");
+    expect(tables).not.toContain("ledger_entries");
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        business_id: "b-1",
+        psp: "paystack",
+        fee_local_minor: 160_000,
+        // N160,000 at the quoted 1545 rate, ceiled.
+        fee_usd_minor: 104,
+      }),
+    );
+  });
+
+  it("records a fee on a subscription charge too", async () => {
+    const { client, tables } = fakeSupabase();
+    await settleVerifiedCharge(
+      client,
+      "paystack",
+      subscription({ feeLocalMinor: 90_000 }),
+      { sendReceipts: false },
+    );
+    expect(tables).toContain("payment_fees");
+  });
+
+  it("records nothing when the rail did not report a fee", async () => {
+    // Undefined is not zero. A rail that stays silent leaves a visible gap
+    // rather than a row claiming it was free.
+    const { client, tables } = fakeSupabase();
+    await settleVerifiedCharge(client, "paystack", topup(), { sendReceipts: false });
+    expect(tables).not.toContain("payment_fees");
+  });
+
+  it("still credits the wallet when the fee record fails", async () => {
+    // A charge that credited correctly must never be failed by a cost record:
+    // the PSP would retry and the customer would wait on our bookkeeping.
+    const { client, rpc } = fakeSupabase();
+    (client as unknown as { from: unknown }).from = vi.fn(() => ({
+      insert: vi.fn(async () => {
+        throw new Error("payment_fees unreachable");
+      }),
+    }));
+    const outcome = await settleVerifiedCharge(
+      client,
+      "paystack",
+      topup({ feeLocalMinor: 160_000 }),
+      { sendReceipts: false },
+    );
+    expect(outcome.kind).toBe("credited");
+    expect(rpc).toHaveBeenCalledWith("record_psp_topup", expect.anything());
   });
 
   it("refuses to unlock an expensive tier for a cheap charge, and records it", async () => {

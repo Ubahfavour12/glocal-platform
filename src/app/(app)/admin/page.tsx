@@ -1,8 +1,15 @@
 import { notFound } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { microsToUsdMinor } from "@/lib/ai/cost";
 import { configuredFounders, isFounder } from "@/lib/admin/access";
-import { economicsTotals, rankByMargin, type CustomerCosts } from "@/lib/admin/economics";
+import {
+  EXCLUDED_FROM_MARGIN,
+  economicsTotals,
+  infraShareUsdMinor,
+  rankByMargin,
+  type CustomerCosts,
+} from "@/lib/admin/economics";
 import {
   HEALTH_LABEL,
   health,
@@ -63,7 +70,19 @@ export default async function AdminPage() {
 
   const svc = createServiceClient();
 
-  const [bizRes, walletRes, adsRes, journalRes, wdRes, creativeRes, subRes, markupRes, walletIdRes] =
+  const [
+    bizRes,
+    walletRes,
+    adsRes,
+    journalRes,
+    wdRes,
+    creativeRes,
+    subRes,
+    markupRes,
+    walletIdRes,
+    llmRes,
+    feeRes,
+  ] =
     await Promise.all([
     svc
       .from("businesses")
@@ -91,6 +110,10 @@ export default async function AdminPage() {
     svc.from("subscriptions").select("business_id, tier, active"),
     svc.from("ledger_entries").select("wallet_id, kind, amount_usd_minor").eq("kind", "markup_fee"),
     svc.from("wallets").select("id, business_id"),
+    // The two costs that were measured nowhere until now. Without them this
+    // page computed margin as revenue minus RENDERS and called it the margin.
+    svc.from("llm_usage").select("business_id, cost_usd_micros"),
+    svc.from("payment_fees").select("business_id, fee_usd_minor"),
   ]);
 
   const businesses = bizRes.data ?? [];
@@ -171,6 +194,23 @@ export default async function AdminPage() {
     markup.set(biz, (markup.get(biz) ?? 0) + Math.abs(Number(e.amount_usd_minor ?? 0)));
   }
 
+  // LLM spend is stored in MICRO-dollars, because a single Haiku call rounds
+  // to zero cents and a month of zeros is how a team concludes the LLM is
+  // free. Summed in micros and converted once, here, where the number is
+  // finally large enough for a cent to mean something.
+  const llmMicros = new Map<string, number>();
+  for (const u of llmRes.data ?? []) {
+    const k = u.business_id as string;
+    llmMicros.set(k, (llmMicros.get(k) ?? 0) + Number(u.cost_usd_micros ?? 0));
+  }
+  const processingFee = new Map<string, number>();
+  for (const f of feeRes.data ?? []) {
+    const k = f.business_id as string;
+    processingFee.set(k, (processingFee.get(k) ?? 0) + Number(f.fee_usd_minor ?? 0));
+  }
+  // Everyone alive carries an equal slice of the fixed bill.
+  const infraEach = infraShareUsdMinor(rows.length);
+
   const costRows: CustomerCosts[] = rows.map((r) => ({
     businessId: r.businessId,
     name: r.name,
@@ -179,6 +219,9 @@ export default async function AdminPage() {
     renderCount: renderCost.get(r.businessId)?.count ?? 0,
     markupRevenueUsdMinor: markup.get(r.businessId) ?? 0,
     subscribed: subs.get(r.businessId)?.active ?? false,
+    llmCostUsdMinor: microsToUsdMinor(llmMicros.get(r.businessId) ?? 0),
+    processingFeeUsdMinor: processingFee.get(r.businessId) ?? 0,
+    infraShareUsdMinor: infraEach,
   }));
   const margins = rankByMargin(costRows).filter((m) => m.costUsdMinor > 0 || m.revenueUsdMinor > 0);
   const econ = economicsTotals(costRows);
@@ -253,14 +296,26 @@ export default async function AdminPage() {
       <div className="mt-6 rounded-card border border-line bg-surface-raised p-5">
         <div className="datalabel">what each customer costs to serve</div>
         <p className="mt-2 text-sm text-ink-muted">
-          Renders bill per generation and the subscription is fixed, so a heavy
-          renderer can cost more than they pay. Worst margin first.
+          Four cost lines, kept apart because each has a different lever: renders
+          move with the tier cap, LLM with the model, fees with the payment rail,
+          and infrastructure with nothing at all. Worst first.
         </p>
-        <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3">
           {[
             { k: "Revenue", v: usd(econ.revenueUsdMinor) },
-            { k: "Render cost", v: usd(econ.costUsdMinor) },
-            { k: "Margin", v: usd(econ.marginUsdMinor) },
+            { k: "Cost to serve", v: usd(econ.costUsdMinor) },
+            /*
+             * NOT "Margin". This figure is revenue minus the four costs below
+             * and nothing else -- it is a contribution line, not profit, and
+             * the label has to stop someone reading it as the latter. The
+             * previous version said "Margin" over a number that counted only
+             * renders.
+             */
+            { k: "Revenue − these costs", v: usd(econ.marginUsdMinor) },
+            { k: "Renders", v: usd(econ.renderCostUsdMinor) },
+            { k: "LLM", v: usd(econ.llmCostUsdMinor) },
+            { k: "Processing fees", v: usd(econ.processingFeeUsdMinor) },
+            { k: "Infrastructure", v: usd(econ.infraShareUsdMinor) },
             { k: "Underwater", v: String(econ.underwaterCount) },
           ].map((s2) => (
             <div key={s2.k}>
@@ -269,6 +324,12 @@ export default async function AdminPage() {
             </div>
           ))}
         </div>
+        <p className="mt-3 text-xs text-ink-faint">
+          Still excluded: {EXCLUDED_FROM_MARGIN.join(", ")}. Infrastructure is an
+          allocation of a fixed monthly bill, not a measurement of what any one
+          customer caused. Render and LLM rates are configured list prices, not
+          invoices.
+        </p>
         {margins.length === 0 ? (
           <p className="mt-4 text-sm text-ink-faint">
             Nothing rendered and nothing charged yet.
@@ -284,8 +345,14 @@ export default async function AdminPage() {
                 </span>
                 <span className="mx-2 text-ink-faint">·</span>
                 <span className="text-ink-faint">
-                  {m.renderCount} render{m.renderCount === 1 ? "" : "s"} ={" "}
-                  {usd(m.costUsdMinor)} · pays {usd(m.revenueUsdMinor)}
+                  {usd(m.costUsdMinor)} to serve · pays {usd(m.revenueUsdMinor)}
+                  {m.biggestCost ? ` · mostly ${m.biggestCost}` : ""}
+                </span>
+                <span className="mx-2 text-ink-faint">·</span>
+                <span className="text-ink-faint">
+                  {m.renderCount} render{m.renderCount === 1 ? "" : "s"} {usd(m.renderCostUsdMinor)}
+                  {m.llmCostUsdMinor > 0 ? ` · llm ${usd(m.llmCostUsdMinor)}` : ""}
+                  {m.processingFeeUsdMinor > 0 ? ` · fees ${usd(m.processingFeeUsdMinor)}` : ""}
                 </span>
               </li>
             ))}

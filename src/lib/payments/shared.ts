@@ -57,6 +57,15 @@ export interface VerifiedTransaction {
   amountLocalMinor: number;
   currency: string;
   meta: ChargeMeta | null;
+  /**
+   * What the processor kept, in the same minor units as amountLocalMinor.
+   *
+   * Optional because not every rail reports it on verify. Undefined means
+   * "this rail did not say", which is deliberately different from 0, meaning
+   * "it said the fee was nothing" -- recording an unknown fee as zero is how a
+   * cost disappears from the margin.
+   */
+  feeLocalMinor?: number;
 }
 
 /**
@@ -69,6 +78,26 @@ export function usdCreditForVerified(
 ): number {
   if (!(fxRate > 0)) throw new Error("fx rate must be positive");
   return Math.floor(amountLocalMinor / fxRate);
+}
+
+/**
+ * A processor fee in USD minor units.
+ *
+ * Rounded UP, the opposite of the credit above, and for the same reason: the
+ * credit floors so the ledger never over-credits a customer, and a cost
+ * ceilings so the margin is never flattered. Both round against us.
+ *
+ * Returns null when the rail did not report a fee, so the caller records
+ * nothing rather than recording a zero that would read as "free".
+ */
+export function feeUsdMinor(
+  feeLocalMinor: number | undefined,
+  fxRate: number,
+): number | null {
+  if (feeLocalMinor === undefined || !Number.isFinite(feeLocalMinor)) return null;
+  if (feeLocalMinor <= 0) return 0;
+  if (!(fxRate > 0)) return null;
+  return Math.ceil(feeLocalMinor / fxRate);
 }
 
 /**

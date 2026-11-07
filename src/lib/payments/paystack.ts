@@ -105,6 +105,8 @@ export async function verifyTransaction(reference: string): Promise<VerifiedTran
     amount: number;
     currency: string;
     metadata: unknown;
+    /** What Paystack kept, in the same minor units as `amount`. */
+    fees?: number | null;
   }>(`/transaction/verify/${encodeURIComponent(reference)}`);
   return {
     id: data.id,
@@ -115,6 +117,9 @@ export async function verifyTransaction(reference: string): Promise<VerifiedTran
     amountLocalMinor: data.amount,
     currency: data.currency,
     meta: parseMeta(data.metadata),
+    // Read rather than ignored, finally. Left undefined when Paystack omits
+    // it, which is not the same as a fee of zero.
+    feeLocalMinor: typeof data.fees === "number" ? data.fees : undefined,
   };
 }
 

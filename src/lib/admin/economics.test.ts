@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { economicsTotals, marginFor, rankByMargin, type CustomerCosts } from "./economics";
+import {
+  economicsTotals,
+  infraShareUsdMinor,
+  marginFor,
+  rankByMargin,
+  type CustomerCosts,
+} from "./economics";
 
 const base: CustomerCosts = {
   businessId: "b1",
@@ -86,6 +92,10 @@ describe("economicsTotals", () => {
     expect(t).toEqual({
       revenueUsdMinor: 1_000,
       costUsdMinor: 500,
+      renderCostUsdMinor: 500,
+      llmCostUsdMinor: 0,
+      processingFeeUsdMinor: 0,
+      infraShareUsdMinor: 0,
       marginUsdMinor: 500,
       underwaterCount: 1,
       renderCount: 12,
@@ -94,7 +104,15 @@ describe("economicsTotals", () => {
 
   it("is all zeroes for no customers rather than NaN", () => {
     expect(economicsTotals([])).toEqual({
-      revenueUsdMinor: 0, costUsdMinor: 0, marginUsdMinor: 0, underwaterCount: 0, renderCount: 0,
+      revenueUsdMinor: 0,
+      costUsdMinor: 0,
+      renderCostUsdMinor: 0,
+      llmCostUsdMinor: 0,
+      processingFeeUsdMinor: 0,
+      infraShareUsdMinor: 0,
+      marginUsdMinor: 0,
+      underwaterCount: 0,
+      renderCount: 0,
     });
   });
 });
@@ -106,5 +124,71 @@ describe("a tier value that is not a real tier", () => {
     const m = marginFor({ ...base, tier: "platinum", renderCostUsdMinor: 50 });
     expect(m.subscriptionUsdMinor).toBe(0);
     expect(m.underwater).toBe(true);
+  });
+});
+
+describe("the three costs that used to be invisible", () => {
+  it("sinks an account on LLM alone, which was impossible before", () => {
+    // THE CASE THIS REWRITE EXISTS FOR. No renders at all, heavy copy
+    // generation. The old file computed cost as renders and nothing else, so
+    // this customer read as pure profit and `underwater` could never fire.
+    const m = marginFor(
+      row({ subscribed: false, renderCostUsdMinor: 0, renderCount: 0, llmCostUsdMinor: 800 }),
+    );
+    expect(m.underwater).toBe(true);
+    expect(m.biggestCost).toBe("llm");
+  });
+
+  it("counts the processor's cut against the margin", () => {
+    const m = marginFor(
+      row({ subscribed: true, renderCostUsdMinor: 0, processingFeeUsdMinor: 120 }),
+    );
+    expect(m.processingFeeUsdMinor).toBe(120);
+    expect(m.costUsdMinor).toBe(120);
+  });
+
+  it("adds the four lines and keeps them separately readable", () => {
+    // Reported apart because each has a different lever: renders -> the tier
+    // cap, LLM -> the model, processing -> the rail, infra -> nothing.
+    const m = marginFor(
+      row({
+        renderCostUsdMinor: 100,
+        llmCostUsdMinor: 200,
+        processingFeeUsdMinor: 30,
+        infraShareUsdMinor: 1_250,
+      }),
+    );
+    expect(m.costUsdMinor).toBe(1_580);
+    expect(m.biggestCost).toBe("infra");
+  });
+
+  it("names no biggest cost when nothing was spent", () => {
+    const m = marginFor(row({ renderCostUsdMinor: 0, renderCount: 0 }));
+    expect(m.biggestCost).toBeNull();
+  });
+
+  it("treats a missing or nonsense cost as zero, not as NaN", () => {
+    // One bad row must not blank the whole dashboard.
+    const m = marginFor(row({ llmCostUsdMinor: Number.NaN, processingFeeUsdMinor: -5 }));
+    expect(Number.isFinite(m.costUsdMinor)).toBe(true);
+    expect(m.llmCostUsdMinor).toBe(0);
+    expect(m.processingFeeUsdMinor).toBe(0);
+  });
+});
+
+describe("infraShareUsdMinor", () => {
+  it("splits the fixed bill across active businesses", () => {
+    // $100/month over 8 accounts = $12.50 each.
+    expect(infraShareUsdMinor(8)).toBe(1_250);
+  });
+
+  it("rounds up, so the allocation is never cheaper than the bill", () => {
+    expect(infraShareUsdMinor(3)).toBe(3_334); // 10000/3 = 3333.33
+  });
+
+  it("is zero with nobody to allocate to, rather than Infinity", () => {
+    // Dividing by an empty customer list would put Infinity on a dashboard.
+    expect(infraShareUsdMinor(0)).toBe(0);
+    expect(infraShareUsdMinor(-1)).toBe(0);
   });
 });

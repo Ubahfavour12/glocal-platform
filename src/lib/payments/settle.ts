@@ -21,7 +21,7 @@ import {
   subscriptionPriceUsdMinor,
 } from "@/lib/billing/subscribe";
 import { sendReceiptForBusiness } from "@/lib/billing/receipt";
-import { usdCreditForVerified, type VerifiedTransaction } from "./shared";
+import { feeUsdMinor, usdCreditForVerified, type VerifiedTransaction } from "./shared";
 import { pspRef, type PspId } from "./provider";
 
 export type SettlementOutcome =
@@ -52,6 +52,39 @@ export async function settleVerifiedCharge(
 
   const paidUsdMinor = usdCreditForVerified(txn.amountLocalMinor, fxRate);
 
+  /**
+   * Record what the processor kept.
+   *
+   * NOT on the ledger. The ledger is what the CUSTOMER may spend, and this fee
+   * comes out of what reaches our account, not out of their balance -- writing
+   * it as a wallet debit would quietly contradict the promise on the Add Funds
+   * screen. It goes to `payment_fees`, beside `llm_usage`, as a cost to serve.
+   *
+   * Unique on psp_ref, because the redirect and the webhook both settle the
+   * same charge by design and only one fee was paid. Never throws: a charge
+   * that credited correctly must not be failed by a cost record, which would
+   * make the PSP retry and the customer wait.
+   */
+  const recordFee = async () => {
+    const usd = feeUsdMinor(txn.feeLocalMinor, fxRate);
+    if (usd === null) return; // this rail did not report a fee
+    try {
+      await supabase.from("payment_fees").insert({
+        business_id: businessId,
+        psp,
+        psp_ref: pspRef(psp, txn.id),
+        charge_local_minor: txn.amountLocalMinor,
+        fee_local_minor: txn.feeLocalMinor,
+        local_currency: txn.currency,
+        fx_rate: fxRate,
+        fee_usd_minor: usd,
+      });
+    } catch {
+      // Duplicate key on a second settle of the same charge, or anything
+      // else. Either way the money moved correctly and that is what matters.
+    }
+  };
+
   if (charge.kind === "subscription") {
     const expectedUsdMinor = subscriptionPriceUsdMinor(charge.tier);
 
@@ -70,6 +103,8 @@ export async function settleVerifiedCharge(
     }
 
     await activateSubscription(supabase, businessId, charge.tier);
+    // A subscription charge costs us a processor fee exactly as a top-up does.
+    await recordFee();
     if (opts.sendReceipts) {
       await sendReceiptForBusiness(supabase, businessId, {
         type: "subscription",
@@ -91,6 +126,8 @@ export async function settleVerifiedCharge(
     p_psp_ref: pspRef(psp, txn.id),
   });
   if (error) throw new Error(error.message);
+
+  await recordFee();
 
   if (opts.sendReceipts) {
     await sendReceiptForBusiness(supabase, businessId, {
