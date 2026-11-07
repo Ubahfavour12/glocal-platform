@@ -4,6 +4,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { SettingsForm } from "@/components/settings/SettingsForm";
 import { asAdLanguage } from "@/lib/copy/language";
+import { listBusinesses } from "@/lib/business/current";
 import { PixelCard } from "@/components/settings/PixelCard";
 import { SessionCard } from "@/components/settings/SessionCard";
 import { DeleteAccountCard } from "@/components/settings/DeleteAccountCard";
@@ -49,6 +50,10 @@ export default async function SettingsPage() {
     supabase.from("store_connections").select("id, provider, status").eq("business_id", bizId).eq("status", "active").maybeSingle(),
     supabase.from("media_assets").select("id", { count: "exact", head: true }).eq("business_id", bizId),
   ]);
+
+  // Every business on this account, so the card below can name them. Cheap,
+  // and almost always one row.
+  const businesses = await listBusinesses(supabase);
 
   const balanceUsdMinor = Number(walletRes.data?.balance_usd_minor ?? 0);
   const socials = (socialRes.data ?? []) as { network: string; display_name: string | null }[];
@@ -127,6 +132,51 @@ export default async function SettingsPage() {
 
         {/* Store connection */}
         <ConnectShopify connected={store ? store.provider : null} />
+
+        {/*
+          * Several businesses, on purpose.
+          *
+          * The product supported this in the database from the start and had
+          * no way to ask for it -- which is how five accounts ended up with
+          * duplicates they never wanted, and nobody with a second shop could
+          * get one they did. The header switcher only appears once there are
+          * two, so the first one has to be asked for somewhere a person goes
+          * deliberately. This is that place.
+          */}
+        <div className="rounded-card border border-line bg-surface-raised p-5">
+          <div className="datalabel">your businesses</div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {businesses.map((b) => (
+              <span
+                key={b.id}
+                className={`rounded-full px-3 py-1 text-xs ${
+                  b.id === bizId
+                    ? "bg-accent-soft text-accent-bright"
+                    : "bg-surface-overlay text-ink"
+                }`}
+              >
+                {b.name}
+                {b.id === bizId ? " · showing now" : ""}
+              </span>
+            ))}
+          </div>
+          <p className="mt-3 text-sm text-ink-muted">
+            Each business gets its own agent, wallet and ads — nothing is shared
+            between them. Run a second shop, or a second brand, without mixing
+            the two.
+          </p>
+          <Link
+            href="/onboarding?new=1"
+            className="mt-4 inline-block rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink transition-colors hover:border-accent"
+          >
+            Add another business
+          </Link>
+          {businesses.length > 1 && (
+            <p className="mt-2 text-xs text-ink-faint">
+              Switch between them from the menu at the top of any page.
+            </p>
+          )}
+        </div>
 
         <MediaUpload businessId={bizId} existingCount={mediaCount} />
         <PixelCard businessId={bizId} origin={origin} />

@@ -14,6 +14,7 @@ import {
 import { currencyForCountry, dialCodeForCountry, listCountries } from "@/lib/money/currency";
 import { checkWhatsApp, stripTrunkPrefix, waMeLink } from "@/lib/onboarding/phone";
 import { isValidFoundedYear } from "@/lib/onboarding/tenure";
+import { pickDraft } from "@/lib/onboarding/draft";
 import {
   defaultGoalFor,
   goalOptionsFor,
@@ -395,6 +396,8 @@ export default function OnboardingPage() {
    */
   const finishing = useRef(false);
 
+  /** True when /onboarding?new=1 -- adding another business on purpose. */
+  const [isNewBusiness, setIsNewBusiness] = useState(false);
   const [ownerId, setOwnerId] = useState<string | null>(null);
   // State, not a ref. This value is READ DURING RENDER to draw the resume
   // screen, and a ref read in render is invisible to React: nothing re-renders
@@ -423,34 +426,70 @@ export default function OnboardingPage() {
       if (cancelled) return;
       setOwnerId(uid);
 
+    // Adding a SECOND business on purpose, rather than resuming the first.
+    // Read from the URL rather than useSearchParams so the page can stay
+    // statically rendered and needs no Suspense boundary around itself.
+    const addingAnother = new URLSearchParams(window.location.search).has("new");
+    if (addingAnother) setIsNewBusiness(true);
+
     let restored = false;
     try {
-      const raw = localStorage.getItem(DRAFT_KEY);
-      if (raw) {
-        const d = JSON.parse(raw) as Draft;
-        // A draft stamped with a different account is somebody else's. Drop it
-        // rather than pre-filling this signup with their details.
-        if (d && d.ownerId && uid && d.ownerId !== uid) {
+      let localDraft: Draft | null = null;
+      try {
+        const raw = localStorage.getItem(DRAFT_KEY);
+        if (raw) localDraft = JSON.parse(raw) as Draft;
+      } catch {
+        // Corrupt or blocked storage: treat as no local draft.
+      }
+
+      // The account's copy, which is what survives changing device.
+      let remoteDraft: Draft | null = null;
+      if (uid && process.env.NEXT_PUBLIC_SUPABASE_URL) {
+        try {
+          const { data } = await createClient()
+            .from("onboarding_drafts")
+            .select("payload")
+            .eq("user_id", uid)
+            .maybeSingle();
+          const payload = data?.payload as Draft | undefined;
+          if (payload && typeof payload.phase === "string") remoteDraft = payload;
+        } catch {
+          // A draft that cannot be fetched is not worth blocking signup over.
+        }
+      }
+      if (cancelled) return;
+
+      const choice = pickDraft(localDraft, remoteDraft, uid);
+      if (choice.dropLocal) {
+        try {
           localStorage.removeItem(DRAFT_KEY);
-        } else if (d && typeof d.phase === "string" && FLOW.includes(d.phase)) {
-          setDraft(d);
-          setName(d.name ?? "");
-          setTrade(d.trade ?? "");
-          setFoundedYear(d.foundedYear ?? "");
-          setOtherTrade(d.otherTrade ?? "");
-          setCountry(d.country ?? "NG");
-          setOwnerRole(d.ownerRole ?? "owner");
-          setDoor(d.door ?? "whatsapp");
-          setDoorValue(d.doorValue ?? "");
-          setGoal(d.goal ?? null);
-          setDailyUsd(d.dailyUsd ?? 10);
-          setCountryTouched(true);
-          // Only worth interrupting for if they got past the first screen.
-          if (FLOW.indexOf(d.phase) > 0) {
-            setPhase(d.phase);
-            setResuming(true);
-            restored = true;
-          }
+        } catch {
+          /* nothing to clean up */
+        }
+      }
+
+      // Adding another business deliberately: the draft belongs to the first
+      // one, and pre-filling the second with it would be the opposite of what
+      // was asked for.
+      const d = addingAnother ? null : choice.draft;
+      if (d && typeof d.phase === "string" && FLOW.includes(d.phase)) {
+        setDraft(d);
+        setName(d.name ?? "");
+        setTrade(d.trade ?? "");
+        setFoundedYear(d.foundedYear ?? "");
+        setOtherTrade(d.otherTrade ?? "");
+        setCountry(d.country ?? "NG");
+        setOwnerRole(d.ownerRole ?? "owner");
+        setDoor(d.door ?? "whatsapp");
+        setDoorValue(d.doorValue ?? "");
+        setGoal(d.goal ?? null);
+        setDailyUsd(d.dailyUsd ?? 10);
+        setCountryTouched(true);
+        // Only worth interrupting for if they got past the first screen.
+        if (FLOW.indexOf(d.phase) > 0) {
+          setPhase(d.phase);
+          setResuming(true);
+          restored = true;
         }
       }
     } catch {
@@ -471,20 +510,38 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (!hydrated) return;
+    const draftNow: Draft = {
+      ownerId,
+      phase, name, trade, foundedYear, otherTrade, country, ownerRole,
+      door, doorValue, goal, dailyUsd,
+      savedAt: new Date().toISOString(),
+    };
     try {
-      localStorage.setItem(
-        DRAFT_KEY,
-        JSON.stringify({
-          ownerId,
-          phase, name, trade, foundedYear, otherTrade, country, ownerRole,
-          door, doorValue, goal, dailyUsd,
-          savedAt: new Date().toISOString(),
-        } satisfies Draft),
-      );
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draftNow));
     } catch {
       // Private-mode storage refusals must not break the flow.
     }
-  }, [hydrated, ownerId, phase, name, trade, foundedYear, otherTrade, country, ownerRole, door, doorValue, goal, dailyUsd]);
+
+    // And to the account, so the laptop at home can pick this up. Debounced:
+    // this effect runs on every keystroke of the business-name field, and a
+    // round trip per character would be both slow and pointless when only the
+    // last one survives. Adding a second business deliberately writes no
+    // draft -- the resume point belongs to the first signup.
+    if (!ownerId || isNewBusiness || !process.env.NEXT_PUBLIC_SUPABASE_URL) return;
+    const t = setTimeout(() => {
+      void createClient()
+        .from("onboarding_drafts")
+        .upsert(
+          { user_id: ownerId, payload: draftNow, updated_at: draftNow.savedAt },
+          { onConflict: "user_id" },
+        )
+        .then(
+          () => undefined,
+          () => undefined, // a lost draft save must never interrupt signup
+        );
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [hydrated, isNewBusiness, ownerId, phase, name, trade, foundedYear, otherTrade, country, ownerRole, door, doorValue, goal, dailyUsd]);
 
   /* -- derived ----------------------------------------------------------- */
 
@@ -702,6 +759,21 @@ export default function OnboardingPage() {
           // an error telling them their own business is in the way.
           let businessId = biz?.id as string | undefined;
           if (error && error.code === "23505") {
+            // The SAME code means two different things, and answering both the
+            // same way would be wrong in one of them.
+            //
+            // Finishing the first signup: an earlier tap of this very button
+            // already worked. Carry on with the row that exists -- telling
+            // someone their own business is in the way would be absurd.
+            //
+            // Adding another business on purpose: they have genuinely reused a
+            // name, and silently handing back the first business would look
+            // like the form did nothing. Say so, and let them rename it.
+            if (isNewBusiness) {
+              throw new Error(
+                `You already have a business called "${name.trim()}". Give this one a different name so you can tell them apart.`,
+              );
+            }
             const { data: existing } = await supabase
               .from("businesses")
               .select("id")
@@ -722,6 +794,30 @@ export default function OnboardingPage() {
               media.map((m) => uploadProductMedia(supabase, businessId, m.file)),
             );
           }
+
+          // A second business has to become the CURRENT one, or the next
+          // screen shows the first one's numbers under the new one's name.
+          // currentBusiness() falls back to the oldest, which is exactly wrong
+          // here, so the cookie has to be set before we navigate.
+          if (isNewBusiness && businessId) {
+            await fetch("/api/business/switch", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ businessId }),
+            }).catch(() => undefined);
+          }
+
+          // The resume point has been used up. Clearing it matters more than
+          // it looks: leaving it behind means the next visit to /onboarding
+          // offers to resume a signup that already finished.
+          await supabase
+            .from("onboarding_drafts")
+            .delete()
+            .eq("user_id", userData.user.id)
+            .then(
+              () => undefined,
+              () => undefined,
+            );
 
           // Wake the agent: the first concept batch builds in the background
           // (Phase 2.1); the nightly run tops the pipeline up to the target.

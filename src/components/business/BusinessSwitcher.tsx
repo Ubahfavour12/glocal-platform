@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import type { BusinessRef } from "@/lib/business/current";
 
 /**
@@ -8,7 +9,13 @@ import type { BusinessRef } from "@/lib/business/current";
  *
  * Renders NOTHING when there is only one, which is almost everybody. A
  * switcher with a single option is a control that cannot do anything, and it
- * would make a simple account look like an agency tool.
+ * would make a simple account look like an agency tool. The way to get a
+ * second one is in Settings, where somebody goes on purpose -- not a
+ * permanent "+" in the header that every single-business customer has to
+ * ignore forever.
+ *
+ * Once it IS showing, adding another belongs here too: this is the control
+ * that has already told them several businesses are a thing.
  *
  * A full page load rather than a router push: the selection lives in a cookie
  * the server reads, and every page on screen was rendered for the previous
@@ -23,11 +30,20 @@ export function BusinessSwitcher({
   businesses: BusinessRef[];
   currentId: string | null;
 }) {
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
 
   if (businesses.length < 2) return null;
 
+  const ADD = "__add__";
+
   async function switchTo(businessId: string) {
+    if (businessId === ADD) {
+      // A router push, unlike the full reload below: nothing about the current
+      // business is being replaced here, we are just going to another page.
+      router.push("/onboarding?new=1");
+      return;
+    }
     if (businessId === currentId || busy) return;
     setBusy(true);
     const res = await fetch("/api/business/switch", {
@@ -56,6 +72,7 @@ export function BusinessSwitcher({
             {b.name}
           </option>
         ))}
+        <option value={ADD}>+ Add a business</option>
       </select>
     </label>
   );
