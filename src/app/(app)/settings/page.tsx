@@ -138,6 +138,10 @@ export default async function SettingsPage() {
         Your data runs your ads and nothing else.{" "}
         <Link href="/privacy" className="underline hover:text-ink-muted">
           How we use it
+        </Link>{" "}
+        ·{" "}
+        <Link href="/terms" className="underline hover:text-ink-muted">
+          Terms of service
         </Link>
       </p>
     </div>

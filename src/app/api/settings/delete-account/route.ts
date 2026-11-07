@@ -5,7 +5,7 @@ import { MEDIA_BUCKET } from "@/lib/media/storage";
 import { currentBusiness } from "@/lib/business/current";
 
 /**
- * Erase the signed-in customer's account (GDPR Article 17).
+ * Erase the signed-in customer's account (the right to erasure, NDPA 2023).
  *
  * Until now there was no way to honour an erasure request at all — not a
  * missing button, a missing capability. The right does not require self-serve,
@@ -15,12 +15,20 @@ import { currentBusiness } from "@/lib/business/current";
  * customer had ever paid us.
  *
  * WHAT ERASURE MEANS HERE. Personal data is destroyed; the financial record is
- * kept and unlinked. Article 17(3) allows exactly this — erasure does not apply
- * where processing is necessary for a legal obligation or for defending legal
- * claims, and UK company and tax law requires keeping accounting records for
- * six years. So the ledger survives attached to an identifier that no longer
- * resolves to a person. `docs/` carries the full policy; `erase_business` in
- * migration 0032 is the authority on what goes and what stays.
+ * kept and unlinked. Both the NDPA and the GDPR this was first written against
+ * allow exactly that — erasure does not reach data a controller must keep to
+ * meet a legal obligation or to defend a legal claim, and CAMA 2020 requires a
+ * Nigerian company to keep its accounting records for six years. So the ledger
+ * survives, attached to an identifier that no longer resolves to a person.
+ *
+ * The law cited here was UK and EU until this was corrected: the operating
+ * company is Nigerian and so are its customers, so the NDPA 2023 and CAMA 2020
+ * are the regimes that actually bind it. The behaviour was already right; only
+ * the authority for it was wrong, and /privacy now states the same six years
+ * on the same basis.
+ *
+ * `docs/` carries the full policy; `erase_business` in migration 0032 is the
+ * authority on what goes and what stays.
  *
  * The SQL is service-role only and unreachable from a browser. This route is
  * the only way in, and it checks ownership first, so a stolen session token

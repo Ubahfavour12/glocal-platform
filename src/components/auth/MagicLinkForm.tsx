@@ -300,6 +300,27 @@ export function MagicLinkForm({ mode, linkError }: { mode: Mode; linkError?: Lin
                 </span>
               </span>
             </label>
+            {/*
+              Above the button, not below it: pressing the button is the act of
+              agreement, so the terms have to be in front of someone before
+              they press it rather than after. Signup only -- a returning
+              customer agreed when they joined, and re-presenting it on every
+              sign-in teaches people to ignore it.
+            */}
+            {mode === "signup" && (
+              <p className="text-xs leading-relaxed text-ink-faint">
+                By creating an account you agree to our{" "}
+                <Link href="/terms" className="text-ink-muted underline hover:text-ink">
+                  Terms of Service
+                </Link>{" "}
+                and{" "}
+                <Link href="/privacy" className="text-ink-muted underline hover:text-ink">
+                  Privacy Policy
+                </Link>
+                , including that the agent spends your wallet balance on
+                advertising without asking each time.
+              </p>
+            )}
             <button
               type="submit"
               disabled={state === "sending"}

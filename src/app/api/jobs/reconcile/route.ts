@@ -51,9 +51,30 @@ export async function GET(req: NextRequest) {
     issues.push(`entry ${e.id}: positive amount with kind ${e.kind}`);
   }
 
+  // Data minimisation, and the one promise on /privacy that nothing kept.
+  // `prune_click_events` has existed since migration 0032 and no caller ever
+  // existed, so the ninety-day limit on ad viewers' click data was a function
+  // sitting in the database while the table grew without bound. These are
+  // people who never had any relationship with us and cannot ask us for
+  // anything, which is exactly why the limit has to be automatic.
+  //
+  // Its failure must not fail reconciliation: a housekeeping sweep that can
+  // mask a negative wallet balance is worse than one that skips a night.
+  let clickEventsPruned: number | string;
+  const { data: pruned, error: pruneError } = await supabase.rpc("prune_click_events", {
+    p_days: 90,
+  });
+  if (pruneError) {
+    clickEventsPruned = `failed: ${pruneError.message}`;
+    issues.push(`click-event prune failed: ${pruneError.message}`);
+  } else {
+    clickEventsPruned = Number(pruned ?? 0);
+  }
+
   const report = {
     ran_at: new Date().toISOString(),
     wallets_checked: balances?.length ?? 0,
+    click_events_pruned: clickEventsPruned,
     issues,
     psp_comparison: "pending, Stripe/Flutterwave not connected",
     ad_network_comparison: "pending, ads not live",
