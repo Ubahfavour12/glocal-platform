@@ -25,6 +25,7 @@ import { metaConfigFromEnv } from "@/lib/meta/client";
 import { llmGatewayScan } from "@/lib/compliance/llm";
 import { buildPipelineBatch } from "@/lib/research/pipeline";
 import { livePipelineDeps } from "@/lib/research/pipeline-live";
+import { usageMeter } from "@/lib/ai/usage";
 import { renderCreativeLive } from "@/lib/creative/render-live";
 import { higgsfieldConfigProblem, resolveCredentials } from "@/lib/higgsfield/client";
 import { scheduleOrganicForBusiness } from "@/lib/organic/posting-live";
@@ -105,6 +106,11 @@ export async function runForBusiness(
   now: Date,
   opts: RunOptions = {},
 ): Promise<NightlyPlan> {
+  // One meter for this business's compliance judgements, flushed before we
+  // return. The concept pipeline meters itself inside livePipelineDeps,
+  // because it is built per generate call.
+  const complianceMeter = usageMeter(supabase, biz.id, "compliance");
+
   // Keep the concept pipeline topped up toward the target. Short-circuits when
   // full; research failures degrade inside the builder and must never break the
   // plan.
@@ -227,7 +233,9 @@ export async function runForBusiness(
         const rest = rows.filter((r) => !preferred.includes(r.id));
         return [...front, ...rest].slice(0, count);
       },
-      llmGatewayScan: process.env.ANTHROPIC_API_KEY ? llmGatewayScan : undefined,
+      llmGatewayScan: process.env.ANTHROPIC_API_KEY
+        ? (input) => llmGatewayScan(input, complianceMeter.sink)
+        : undefined,
       renderCreative:
         !opts.skipRender && renderConfigured() ? renderCreativeLive(supabase) : undefined,
       savePlan: async (p) => {
@@ -286,6 +294,11 @@ export async function runForBusiness(
       /* organic is best-effort */
     }
   }
+
+  // Last, and unconditionally: the tokens were spent whatever else happened
+  // tonight, and this is a serverless handler -- a write still in flight when
+  // it returns is a write the runtime may never finish.
+  await complianceMeter.flush();
 
   return plan;
 }

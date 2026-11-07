@@ -11,6 +11,7 @@ import type { PipelineDeps } from "./pipeline";
 import { buildStrategyContext } from "@/lib/studio/profile";
 import type { StudioAnswers } from "@/lib/studio/questions";
 import { asAdLanguage } from "@/lib/copy/language";
+import { usageMeter } from "@/lib/ai/usage";
 
 export function livePipelineDeps(supabase: SupabaseClient): PipelineDeps {
   return {
@@ -58,8 +59,18 @@ export function livePipelineDeps(supabase: SupabaseClient): PipelineDeps {
       return scrapeNiche(apiKey, { keywords, competitorHandles: [] });
     },
 
-    async generate(brief, viral, count, avoidHooks) {
-      return generateConcepts(brief, viral, count, "", avoidHooks);
+    async generate(businessId, brief, viral, count, avoidHooks) {
+      // One meter per call, built here rather than held on the deps object:
+      // the deps are constructed once and could serve several businesses, and
+      // a meter that outlived its business would charge the wrong account.
+      const meter = usageMeter(supabase, businessId, "concepts");
+      try {
+        return await generateConcepts(brief, viral, count, "", avoidHooks, meter.sink);
+      } finally {
+        // In the `finally` so a failed generation still records the tokens it
+        // burned. A call that returned unparseable JSON was billed in full.
+        await meter.flush();
+      }
     },
 
     async insertConcepts(rows) {

@@ -14,7 +14,12 @@ const concept = (i: number): AdConcept => ({
 function fakeDeps(over: Partial<PipelineDeps> = {}) {
   const inserted: unknown[][] = [];
   const audits: { action: string; detail: unknown }[] = [];
-  const generateCalls: { count: number; avoid: string[]; viralLen: number }[] = [];
+  const generateCalls: {
+    businessId: string;
+    count: number;
+    avoid: string[];
+    viralLen: number;
+  }[] = [];
   const deps: PipelineDeps = {
     getBusiness: async () => ({
       businessName: "Ada's Fashion",
@@ -24,8 +29,8 @@ function fakeDeps(over: Partial<PipelineDeps> = {}) {
     countConcepts: async () => 0,
     listExistingHooks: async () => [],
     scrape: async () => [],
-    generate: async (_b, viral, count, avoid) => {
-      generateCalls.push({ count, avoid, viralLen: viral.length });
+    generate: async (businessId, _brief, viral, count, avoid) => {
+      generateCalls.push({ businessId, count, avoid, viralLen: viral.length });
       return Array.from({ length: count }, (_, i) => concept(i + 1));
     },
     insertConcepts: async (rows) => {
@@ -63,6 +68,10 @@ describe("buildPipelineBatch", () => {
     const r = await buildPipelineBatch(deps, "biz");
     expect(r).toMatchObject({ status: "built", added: BATCH_SIZE, total: BATCH_SIZE });
     expect(generateCalls[0].count).toBe(BATCH_SIZE);
+    // The generator is the only step here that spends real money, and the live
+    // implementation bills the LLM tokens to this id. If it stopped arriving,
+    // the cost would still be incurred and would land on nobody.
+    expect(generateCalls[0].businessId).toBe("biz");
     expect((inserted[0] as { rank: number }[])[0].rank).toBe(1);
     expect(audits.some((a) => a.action === "pipeline_batch")).toBe(true);
   });

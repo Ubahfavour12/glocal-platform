@@ -7,7 +7,7 @@
  * Plugs into runGateway as the optional llmScan argument.
  */
 
-import { callClaudeJson, MODELS } from "@/lib/ai/anthropic";
+import { callClaudeJson, MODELS, type ClaudeUsageSink } from "@/lib/ai/anthropic";
 import type { CreativeInput, GatewayResult } from "./gateway";
 
 const SYSTEM = `You are an ad-policy compliance reviewer for Meta, TikTok and Google Ads. You judge whether an ad creative is likely to be REJECTED by these networks' automated and human review.
@@ -22,7 +22,11 @@ interface LlmVerdict {
   issues: { code: string; detail: string }[];
 }
 
-export async function llmGatewayScan(input: CreativeInput): Promise<GatewayResult> {
+export async function llmGatewayScan(
+  input: CreativeInput,
+  /** Where to report what this call cost. Optional; absent in tests. */
+  onUsage?: ClaudeUsageSink,
+): Promise<GatewayResult> {
   const user = `AD CREATIVE
 Category: ${input.category}
 Copy: ${input.copy}
@@ -38,6 +42,7 @@ Block only when a network would very likely reject it.`;
     system: SYSTEM,
     user,
     maxTokens: 1024,
+    onUsage,
   });
 
   return {

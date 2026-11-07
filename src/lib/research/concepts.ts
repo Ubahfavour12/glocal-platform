@@ -6,7 +6,7 @@
  * the two entering each day's test.
  */
 
-import { callClaudeJson, MODELS } from "@/lib/ai/anthropic";
+import { callClaudeJson, MODELS, type ClaudeUsageSink } from "@/lib/ai/anthropic";
 import { asAdLanguage, languageDirective, type AdLanguage } from "@/lib/copy/language";
 import { tenureGuidance } from "@/lib/onboarding/tenure";
 import type { ViralVideo } from "./youtube";
@@ -65,6 +65,14 @@ export async function generateConcepts(
   traitGuidance = "",
   /** Hooks already in this business's pipeline — batches must not repeat them. */
   avoidHooks: string[] = [],
+  /**
+   * Where to report what this call cost. Optional, and absent in tests.
+   *
+   * This is the most expensive LLM call in the product — a 4,096-token reply
+   * from a Sonnet-class model, once or twice a night per business — so it is
+   * the one that most needed measuring and the one that was invisible.
+   */
+  onUsage?: ClaudeUsageSink,
 ): Promise<AdConcept[]> {
   const patterns = viral.slice(0, 15).map((v, i) =>
     `${i + 1}. "${v.title}" (${v.channelTitle}, ${Math.round(v.viralityScore).toLocaleString()} views/day)`,
@@ -98,6 +106,7 @@ Return STRICT JSON array; each item:
     system: SYSTEM,
     user,
     maxTokens: 4096,
+    onUsage,
   });
 
   // normalise ranks 1..N in case the model drifts

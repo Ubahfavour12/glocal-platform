@@ -102,7 +102,14 @@ export interface PipelineDeps {
   countConcepts(businessId: string): Promise<number>;
   listExistingHooks(businessId: string): Promise<string[]>;
   scrape(keywords: string[]): Promise<ViralVideo[]>;
+  /**
+   * `businessId` is here only so the live implementation can bill the LLM
+   * tokens to the right account. The generator itself does not need it, and a
+   * fake in a test can ignore it -- but without it the only step in this
+   * pipeline that spends real money could not say whose money it was.
+   */
   generate(
+    businessId: string,
     brief: ProductBrief,
     viral: ViralVideo[],
     count: number,
@@ -149,7 +156,7 @@ export async function buildPipelineBatch(
   const want = Math.min(BATCH_SIZE, target - existing);
 
   try {
-    const concepts = await deps.generate(brief, viral, want, avoid);
+    const concepts = await deps.generate(businessId, brief, viral, want, avoid);
     if (concepts.length === 0) {
       return { status: "error", added: 0, total: existing, detail: "no concepts generated" };
     }

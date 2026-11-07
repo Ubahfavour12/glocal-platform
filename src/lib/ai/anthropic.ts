@@ -6,6 +6,7 @@
  */
 
 import { fetchWithTimeout, LONG_TIMEOUT_MS } from "@/lib/net/fetch";
+import { EMPTY_USAGE, type ClaudeUsage } from "./cost";
 const API = "https://api.anthropic.com/v1/messages";
 
 export const MODELS = {
@@ -24,21 +25,72 @@ function apiKey(): string {
   return k;
 }
 
+/**
+ * Told what a call cost, after it succeeded.
+ *
+ * A sink rather than a return value because almost every caller wants the
+ * text and nothing else, and changing `callClaude`'s return type would have
+ * touched every call site to serve the one concern none of them have. The
+ * client stays ignorant of what the sink does with the numbers — it reports,
+ * `ai/usage.ts` records.
+ *
+ * It must not throw and must not be awaited: cost accounting does not get to
+ * fail ad creation. `reportUsage` enforces both.
+ */
+export type ClaudeUsageSink = (model: string, usage: ClaudeUsage) => void;
+
 export interface ClaudeCall {
   model?: ClaudeModel;
   system?: string;
   user: string;
   maxTokens?: number;
   temperature?: number;
+  /** Optional: where to report what this call cost. See ClaudeUsageSink. */
+  onUsage?: ClaudeUsageSink;
 }
 
 interface MessagesResponse {
   content?: { type: string; text?: string }[];
   error?: { message: string };
+  /**
+   * The block this wrapper used to discard. Four fields, all optional on the
+   * wire: a model without prompt caching returns only the first two.
+   */
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
+}
+
+/** Normalise the wire shape, treating every missing field as zero. */
+function usageFrom(res: MessagesResponse): ClaudeUsage {
+  const u = res.usage;
+  if (!u) return EMPTY_USAGE;
+  return {
+    inputTokens: u.input_tokens ?? 0,
+    outputTokens: u.output_tokens ?? 0,
+    cacheCreationInputTokens: u.cache_creation_input_tokens ?? 0,
+    cacheReadInputTokens: u.cache_read_input_tokens ?? 0,
+  };
+}
+
+/** Report usage without letting the sink break the call that produced it. */
+function reportUsage(call: ClaudeCall, model: string, usage: ClaudeUsage): void {
+  if (!call.onUsage) return;
+  try {
+    call.onUsage(model, usage);
+  } catch {
+    // Swallowed on purpose. A broken cost recorder must never turn a
+    // successful generation into a failed one; the worst case is one
+    // unrecorded call, which the next one does not inherit.
+  }
 }
 
 /** Single-turn call returning the assistant's text. */
 export async function callClaude(call: ClaudeCall): Promise<string> {
+  const model = call.model ?? MODELS.smart;
   const res = await fetchWithTimeout(API, {
     timeoutMs: LONG_TIMEOUT_MS,
     method: "POST",
@@ -48,7 +100,7 @@ export async function callClaude(call: ClaudeCall): Promise<string> {
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: call.model ?? MODELS.smart,
+      model,
       max_tokens: call.maxTokens ?? 1024,
       // temperature is only sent when explicitly requested; newer models
       // reject it, and the default sampling is what we want anyway.
@@ -59,6 +111,10 @@ export async function callClaude(call: ClaudeCall): Promise<string> {
   });
   const data = (await res.json()) as MessagesResponse;
   if (data.error) throw new Error(`Claude API: ${data.error.message}`);
+  // Reported before the empty-text check: an answer we could not parse still
+  // consumed tokens, and a cost we refuse to record because the reply
+  // disappointed us is a cost that shows up only on the invoice.
+  reportUsage(call, model, usageFrom(data));
   const text = data.content?.find((b) => b.type === "text")?.text;
   if (!text) throw new Error("Claude API: empty response");
   return text;

@@ -5,7 +5,7 @@
  * mutation into genuine evolution (one cheap Claude call per verdict).
  */
 
-import { callClaudeJson, MODELS } from "@/lib/ai/anthropic";
+import { callClaudeJson, MODELS, type ClaudeUsageSink } from "@/lib/ai/anthropic";
 
 export interface CreativeSummary {
   hook: string;
@@ -28,6 +28,8 @@ const SYSTEM = `You analyse ad A/B test results. Given the winning creative and 
 export async function extractWinnerTraits(
   winner: CreativeSummary,
   losers: CreativeSummary[],
+  /** Where to report what this call cost. Optional; absent in tests. */
+  onUsage?: ClaudeUsageSink,
 ): Promise<WinnerTraits> {
   const fmt = (c: CreativeSummary, label: string) =>
     `${label}: hook="${c.hook}" copy="${c.copy}" cta="${c.cta}" ctr=${(c.ctr * 100).toFixed(2)}%${
@@ -45,6 +47,7 @@ Return STRICT JSON:
     system: SYSTEM,
     user,
     maxTokens: 600,
+    onUsage,
   });
 }
 
