@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { SettingsForm } from "@/components/settings/SettingsForm";
+import { asAdLanguage } from "@/lib/copy/language";
 import { PixelCard } from "@/components/settings/PixelCard";
 import { SessionCard } from "@/components/settings/SessionCard";
 import { DeleteAccountCard } from "@/components/settings/DeleteAccountCard";
@@ -24,7 +25,7 @@ export default async function SettingsPage() {
   const supabase = await createClient();
   const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
     supabase,
-    "id, daily_budget_usd_minor, goal, persona, full_auto, plan, free_render_used, launch_hour",
+    "id, daily_budget_usd_minor, goal, persona, full_auto, plan, free_render_used, launch_hour, ad_language",
   );
 
   if (!business) {
@@ -81,6 +82,7 @@ export default async function SettingsPage() {
             persona: (business.persona as Persona) ?? "smart",
             fullAuto: Boolean(business.full_auto),
             launchHour: Number(business.launch_hour ?? 7),
+            adLanguage: asAdLanguage(business.ad_language as string | null),
           }}
           balanceUsdMinor={balanceUsdMinor}
         />

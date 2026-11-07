@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { computeWalletHealth } from "@/lib/money/wallet-health";
+import type { AdLanguage } from "@/lib/copy/language";
 
-type Goal = "sales" | "leads" | "whatsapp" | "visits";
+type Goal = "sales" | "leads" | "whatsapp" | "visits" | "awareness";
 type Persona = "conservative" | "smart" | "aggressive";
 
 const GOALS: { id: Goal; label: string }[] = [
@@ -12,6 +13,22 @@ const GOALS: { id: Goal; label: string }[] = [
   { id: "leads", label: "Leads" },
   { id: "whatsapp", label: "WhatsApp messages" },
   { id: "visits", label: "Store visits" },
+  { id: "awareness", label: "Be known locally" },
+];
+
+/**
+ * The language the agent writes ADS in. Not the dashboard language.
+ *
+ * The API has accepted `ad_language` since the language work shipped and the
+ * generator honours it, but there was no control, so every account stayed on
+ * English by default -- a feature that existed and could not be reached.
+ */
+const AD_LANGUAGES: { id: AdLanguage; label: string }[] = [
+  { id: "english", label: "English" },
+  { id: "pidgin", label: "Pidgin" },
+  { id: "hausa", label: "Hausa" },
+  { id: "yoruba", label: "Yoruba" },
+  { id: "igbo", label: "Igbo" },
 ];
 
 const PERSONAS: { id: Persona; label: string; blurb: string }[] = [
@@ -30,6 +47,7 @@ export function SettingsForm({
     persona: Persona;
     fullAuto: boolean;
     launchHour: number;
+    adLanguage: AdLanguage;
   };
   balanceUsdMinor: number;
 }) {
@@ -39,6 +57,7 @@ export function SettingsForm({
   const [persona, setPersona] = useState<Persona>(initial.persona);
   const [fullAuto, setFullAuto] = useState(initial.fullAuto);
   const [launchHour, setLaunchHour] = useState(initial.launchHour);
+  const [adLanguage, setAdLanguage] = useState<AdLanguage>(initial.adLanguage);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
@@ -57,6 +76,7 @@ export function SettingsForm({
         daily_budget_usd_minor: budgetMinor,
         goal,
         persona,
+        ad_language: adLanguage,
         full_auto: fullAuto,
         launch_hour: launchHour,
         // The shop's own clock, so 7am means 7am where the shop is rather than
@@ -121,6 +141,29 @@ export function SettingsForm({
               }`}
             >
               {g.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ad language */}
+      <div className="mt-6">
+        <span className="datalabel">ad language</span>
+        <p className="mt-1 text-sm text-ink-muted">
+          The language your ads are written in. Your dashboard stays in English.
+        </p>
+        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {AD_LANGUAGES.map((l) => (
+            <button
+              key={l.id}
+              onClick={() => setAdLanguage(l.id)}
+              className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                adLanguage === l.id
+                  ? "border-accent bg-accent-soft text-ink"
+                  : "border-line bg-surface text-ink-muted hover:border-ink-faint"
+              }`}
+            >
+              {l.label}
             </button>
           ))}
         </div>

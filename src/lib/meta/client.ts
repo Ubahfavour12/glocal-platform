@@ -105,7 +105,8 @@ export type CampaignObjective =
   | "OUTCOME_TRAFFIC"
   | "OUTCOME_SALES"
   | "OUTCOME_LEADS"
-  | "OUTCOME_ENGAGEMENT";
+  | "OUTCOME_ENGAGEMENT"
+  | "OUTCOME_AWARENESS";
 
 /**
  * Step 3: create a campaign — ALWAYS paused at creation. Going live is a
@@ -276,8 +277,28 @@ export async function listCampaigns(
   return data.data;
 }
 
+/**
+ * Stop an ad that is already running.
+ *
+ * Everything else in this file CREATES objects, always paused, and nothing
+ * could ever turn one off again. That was survivable while the only tiers
+ * were duel tiers, where the champion and its challengers are all meant to
+ * run together. It is not survivable for sequential testing: without this,
+ * a rotation starts the next ad while the previous one keeps spending, so
+ * one budget funds two ads and the two "blocks" overlap in time -- which
+ * makes the comparison not sequential at all.
+ *
+ * Idempotent at the network: pausing an already-paused ad is a no-op on
+ * Meta's side, so a retry after a partial failure is safe.
+ */
+export async function pauseAd(cfg: MetaConfig, platformAdId: string): Promise<void> {
+  await graph(platformAdId, { method: "POST", params: { status: "PAUSED" } }, cfg.accessToken);
+}
+
 /** Map a business goal (onboarding) to the Meta campaign objective. */
-export function objectiveForGoal(goal: "sales" | "leads" | "whatsapp" | "visits"): CampaignObjective {
+export function objectiveForGoal(
+  goal: "sales" | "leads" | "whatsapp" | "visits" | "awareness",
+): CampaignObjective {
   switch (goal) {
     case "sales":
       return "OUTCOME_SALES";
@@ -287,5 +308,10 @@ export function objectiveForGoal(goal: "sales" | "leads" | "whatsapp" | "visits"
       return "OUTCOME_ENGAGEMENT";
     case "visits":
       return "OUTCOME_TRAFFIC";
+    case "awareness":
+      // The objective that actually optimises for reach and recall. Sending an
+      // awareness campaign to TRAFFIC would buy clicks, which is the opposite
+      // of what the goal asks for and what the attention verdict measures.
+      return "OUTCOME_AWARENESS";
   }
 }

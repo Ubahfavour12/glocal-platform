@@ -13,6 +13,7 @@ import {
   createPausedAd,
   createPausedAdSet,
   metaConfigFromEnv,
+  pauseAd,
   type MetaConfig,
 } from "@/lib/meta/client";
 import { destinationUrl, type ConnectionMode } from "@/lib/tracking/modes";
@@ -122,4 +123,88 @@ export function liveLaunchAdapters(
       });
     },
   };
+}
+
+/**
+ * Pure: which of a business's ads should be stopped when `keep` goes live.
+ *
+ * Anything already paused is left alone so a retry does not churn, and the
+ * incoming ads are never in the list — retiring the ad you just launched
+ * would leave the account with nothing running at all.
+ */
+export function adsToRetire(
+  existing: { platformAdId: string | null; status: string | null }[],
+  keep: readonly string[],
+): string[] {
+  const keeping = new Set(keep);
+  return existing
+    .filter((a): a is { platformAdId: string; status: string | null } => Boolean(a.platformAdId))
+    .filter((a) => !keeping.has(a.platformAdId))
+    .filter((a) => (a.status ?? "").toUpperCase() !== "PAUSED")
+    .map((a) => a.platformAdId);
+}
+
+/**
+ * Stop everything except the ads just launched. Sequential tiers only.
+ *
+ * WHY ONLY SEQUENTIAL TIERS. A duel is supposed to run its champion and
+ * challengers at the same time, so retiring the others there would break the
+ * product. Spark is the opposite: one budget, one ad, and the whole comparison
+ * depends on the runs NOT overlapping.
+ *
+ * THE ORDER MATTERS AND IS THE POINT. Meta is paused first, and our row is
+ * only updated for ads Meta confirmed. Writing our row first, or writing it
+ * regardless, would leave the database saying "paused" while the ad kept
+ * spending the customer's money -- a lie in the direction that costs them.
+ * Each ad is attempted independently so one failure cannot strand the rest.
+ */
+export async function retirePreviousAds(
+  supabase: SupabaseClient,
+  cfg: MetaConfig,
+  businessId: string,
+  keep: readonly string[],
+): Promise<{ paused: string[]; failed: { adId: string; error: string }[] }> {
+  const { data } = await supabase
+    .from("ads")
+    .select("platform_ad_id, status, campaigns!inner(business_id)")
+    .eq("campaigns.business_id", businessId);
+
+  const targets = adsToRetire(
+    ((data ?? []) as { platform_ad_id: string | null; status: string | null }[]).map((a) => ({
+      platformAdId: a.platform_ad_id,
+      status: a.status,
+    })),
+    keep,
+  );
+
+  const paused: string[] = [];
+  const failed: { adId: string; error: string }[] = [];
+  for (const adId of targets) {
+    try {
+      await pauseAd(cfg, adId);
+      paused.push(adId);
+    } catch (e) {
+      // Left ACTIVE in our row on purpose: it is still running, and recording
+      // otherwise would hide a live ad from every sweep that looks for one.
+      failed.push({ adId, error: (e as Error).message });
+    }
+  }
+
+  if (paused.length > 0) {
+    await supabase
+      .from("ads")
+      .update({ status: "PAUSED", is_champion: false })
+      .in("platform_ad_id", paused);
+  }
+
+  await supabase.from("journal_entries").insert({
+    business_id: businessId,
+    entry_type: "note",
+    content: {
+      action: "ads_retired",
+      detail: { kept: keep, paused, failed },
+    },
+  });
+
+  return { paused, failed };
 }

@@ -60,7 +60,10 @@ export async function POST(req: NextRequest) {
       Math.round(body.daily_budget_usd_minor),
     );
   }
-  if (body.goal && ["sales", "leads", "whatsapp", "visits"].includes(body.goal)) {
+  // "awareness" included: without it the new goal was accepted by the UI and
+  // silently dropped here, which is the same shape of bug as a feature that
+  // ships unreachable.
+  if (body.goal && ["sales", "leads", "whatsapp", "visits", "awareness"].includes(body.goal)) {
     update.goal = body.goal;
   }
   if (body.persona && ["conservative", "smart", "aggressive"].includes(body.persona)) {

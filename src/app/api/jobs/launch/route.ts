@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { launchPlan, type LaunchContext, type PlanAd } from "@/lib/orchestrator/launcher";
 import { DEFAULT_LAUNCH_HOUR, launchDueNow } from "@/lib/orchestrator/launch-timing";
-import { liveLaunchAdapters } from "@/lib/orchestrator/launcher-live";
+import { liveLaunchAdapters, retirePreviousAds } from "@/lib/orchestrator/launcher-live";
 import { metaConfigFromEnv, objectiveForGoal, ctaForGoal } from "@/lib/meta/client";
 import type { ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
 import type { ConnectionMode } from "@/lib/tracking/modes";
-import { asPlan, planAllowsLaunch } from "@/lib/billing/plan";
+import { asPlan, asTier, planAllowsLaunch } from "@/lib/billing/plan";
 import { resolveTargetCountries } from "@/lib/tracking/geo";
 import { audienceConstraintsFor } from "@/lib/compliance/targeting";
 import { markupBpsOrDefault } from "@/lib/billing/spend";
@@ -225,6 +225,40 @@ async function launchForPlan(
 
   const summary = await launchPlan(ctx, ads, adapters);
   await supabase.from("approvals").update({ launched_at: new Date().toISOString() }).eq("id", plan.id);
+
+  /**
+   * Sequential tiers run ONE ad at a time, so the ads this plan just launched
+   * replace whatever was running rather than joining it.
+   *
+   * Without this, a Spark rotation starts the next ad while the previous one
+   * keeps spending: one budget funds two ads, and the two runs overlap in
+   * time, which makes the "sequential" comparison not sequential at all.
+   * decideSequential would be handed two concurrent runs and judge them as
+   * consecutive.
+   *
+   * Deliberately NOT done for duel tiers, where champion and challengers are
+   * meant to run together -- retiring there would break the product.
+   *
+   * After the launch, never before: retiring first would leave the account
+   * with nothing running if the launch then failed. And a failure here must
+   * not undo a successful launch, so it is caught and recorded.
+   */
+  if (asTier(biz.plan as string | null) === "spark") {
+    const launched = summary.results
+      .filter((r) => r.status === "launched" && r.platformAdId)
+      .map((r) => r.platformAdId as string);
+    if (launched.length > 0) {
+      try {
+        await retirePreviousAds(supabase, cfg, businessId, launched);
+      } catch (e) {
+        await supabase.from("journal_entries").insert({
+          business_id: businessId,
+          entry_type: "note",
+          content: { action: "ads_retire_failed", detail: { error: (e as Error).message } },
+        });
+      }
+    }
+  }
 
   /**
    * The day's budget leaves the spendable balance now, not when the network
