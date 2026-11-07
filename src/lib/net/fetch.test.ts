@@ -90,3 +90,78 @@ describe("fetchWithTimeout", () => {
     expect(DEFAULT_TIMEOUT_MS).toBeLessThanOrEqual(30_000);
   });
 });
+
+describe("retries", () => {
+  const original = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = original;
+  });
+
+  function responding(...statuses: (number | "throw")[]) {
+    let i = 0;
+    const calls = { n: 0 };
+    globalThis.fetch = (async () => {
+      calls.n += 1;
+      const s = statuses[Math.min(i++, statuses.length - 1)];
+      if (s === "throw") throw new Error("socket hang up");
+      return new Response("{}", { status: s });
+    }) as typeof fetch;
+    return calls;
+  }
+
+  it("does not retry by default", async () => {
+    // Opt-in, because a repeat of a write can create the thing twice.
+    const calls = responding(503);
+    const res = await fetchWithTimeout("https://x.test");
+    expect(res.status).toBe(503);
+    expect(calls.n).toBe(1);
+  });
+
+  it("retries a transient status and returns the eventual success", async () => {
+    const calls = responding(503, 200);
+    const res = await fetchWithTimeout("https://x.test", { retries: 2 });
+    expect(res.status).toBe(200);
+    expect(calls.n).toBe(2);
+  });
+
+  it("retries a dropped connection", async () => {
+    const calls = responding("throw", 200);
+    const res = await fetchWithTimeout("https://x.test", { retries: 2 });
+    expect(res.status).toBe(200);
+    expect(calls.n).toBe(2);
+  });
+
+  it("does NOT retry a status that would answer the same way again", async () => {
+    // A 400 or a 403 is not "not now", it is "not ever". Retrying one only
+    // spends the deadline that a genuinely transient failure needed.
+    const calls = responding(403);
+    const res = await fetchWithTimeout("https://x.test", { retries: 3 });
+    expect(res.status).toBe(403);
+    expect(calls.n).toBe(1);
+  });
+
+  it("gives up after the allowance and returns the last response", async () => {
+    const calls = responding(503);
+    const res = await fetchWithTimeout("https://x.test", { retries: 2 });
+    expect(res.status).toBe(503);
+    expect(calls.n).toBe(3); // the first attempt plus two retries
+  });
+
+  it("surfaces the error when every attempt throws", async () => {
+    const calls = responding("throw");
+    await expect(fetchWithTimeout("https://x.test", { retries: 1 })).rejects.toThrow(
+      /socket hang up/,
+    );
+    expect(calls.n).toBe(2);
+  });
+
+  it("stops retrying when the caller cancels", async () => {
+    // An abort is a decision, not a failure, and must not be retried past.
+    const calls = responding("throw");
+    const ac = new AbortController();
+    const p = fetchWithTimeout("https://x.test", { retries: 5, signal: ac.signal });
+    ac.abort();
+    await expect(p).rejects.toThrow();
+    expect(calls.n).toBeLessThanOrEqual(2);
+  });
+});

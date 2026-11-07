@@ -32,6 +32,23 @@ export const DEFAULT_TIMEOUT_MS = 15_000;
  */
 export const LONG_TIMEOUT_MS = 120_000;
 
+/**
+ * Status codes worth trying again.
+ *
+ * All of them mean "not now", none mean "not ever": 408 and 425 are the
+ * request arriving at a bad moment, 429 is a rate limit, 500/502/503/504 are
+ * the far side having a bad second, and 529 is Anthropic's overloaded. A 400
+ * or a 403 would return exactly the same answer on the second attempt and
+ * retrying one only wastes the deadline.
+ */
+const RETRYABLE_STATUS = new Set([408, 425, 429, 500, 502, 503, 504, 529]);
+
+/** Exponential, from 400ms, with jitter so retries do not synchronise. */
+function backoffMs(attempt: number): number {
+  const base = 400 * 2 ** (attempt - 1);
+  return Math.round(base + Math.random() * 200);
+}
+
 export class TimeoutError extends Error {
   constructor(url: string | URL, ms: number) {
     // Names the host, never the full URL: query strings carry tokens, and this
@@ -58,7 +75,55 @@ export async function fetchWithTimeout(
   // `string | URL` because callers legitimately build URLs with searchParams,
   // and making each one call .toString() is friction that invites a bare fetch.
   url: string | URL,
-  init: RequestInit & { timeoutMs?: number } = {},
+  init: RequestInit & { timeoutMs?: number; retries?: number } = {},
+): Promise<Response> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, retries = 0, signal, ...rest } = init;
+
+  /*
+   * RETRIES ARE OPT-IN, AND THAT IS NOT TIMIDITY.
+   *
+   * A retry is only safe when a second attempt cannot do the thing twice. A
+   * dropped response from Meta's ad-creation endpoint does not mean the ad was
+   * not created, and retrying it buys the customer two ads on one budget. The
+   * same is true of a payment capture. Those call sites pass nothing and keep
+   * failing loudly.
+   *
+   * Where a repeat creates nothing -- reads, and generation calls that cost
+   * tokens but cannot double-charge anyone -- a transient 503 should not cost
+   * a customer their night, and those sites opt in.
+   */
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    if (attempt > 0) {
+      await new Promise((r) => setTimeout(r, backoffMs(attempt)));
+      // The caller gave up while we were waiting out the backoff.
+      if (signal?.aborted) break;
+    }
+    try {
+      const res = await attemptOnce(url, { ...rest, timeoutMs, signal });
+      if (attempt < retries && RETRYABLE_STATUS.has(res.status)) {
+        // Drain the body before discarding the response, or the connection is
+        // held open until it is garbage collected.
+        void res.arrayBuffer().catch(() => undefined);
+        lastError = new Error(`upstream returned ${res.status}`);
+        continue;
+      }
+      return res;
+    } catch (e) {
+      // A timeout or a dropped connection. Worth another go, unless the
+      // caller cancelled -- that is a decision, not a failure.
+      if (signal?.aborted) throw e;
+      lastError = e;
+      if (attempt === retries) throw e;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("request failed");
+}
+
+/** One attempt, with the deadline. The retry loop above drives it. */
+async function attemptOnce(
+  url: string | URL,
+  init: RequestInit & { timeoutMs?: number },
 ): Promise<Response> {
   const { timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...rest } = init;
 

@@ -45,7 +45,9 @@ export async function fetchUsdRate(
   if (cached && now.getTime() - cached.fetchedAt.getTime() < CACHE_TTL_MS) {
     return cached;
   }
-  const res = await fetchWithTimeout(SOURCE, { next: { revalidate: 3600 } });
+  // A read, so safe to repeat -- and worth repeating: without a rate, nobody
+  // can top up a wallet and onboarding cannot show a local price.
+  const res = await fetchWithTimeout(SOURCE, { next: { revalidate: 3600 }, retries: 2 });
   if (!res.ok) throw new Error(`FX provider unreachable (${res.status})`);
   const snapshot = parseRateResponse((await res.json()) as ErApiResponse, key, now);
   cache.set(key, snapshot);

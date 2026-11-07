@@ -36,8 +36,15 @@ async function graph<T>(
   const body = new URLSearchParams({ ...init.params, access_token: accessToken });
   const res =
     init.method === "POST"
-      ? await fetchWithTimeout(url, { method: "POST", body })
-      : await fetchWithTimeout(`${url}?${body}`, { method: "GET" });
+      ? // NO RETRIES ON A POST, deliberately. Meta's writes create campaigns,
+        // ad sets and ads; a dropped response does not mean the ad was not
+        // created, and a second attempt would buy the customer two ads on one
+        // budget. A write that fails here fails loudly and is dealt with by
+        // the caller, which is the only safe behaviour.
+        await fetchWithTimeout(url, { method: "POST", body })
+      : // Reads -- insights, account state -- create nothing, so a transient
+        // 503 should not cost a business its nightly verdict.
+        await fetchWithTimeout(`${url}?${body}`, { method: "GET", retries: 2 });
   const data = (await res.json()) as T & { error?: { message: string; error_user_msg?: string } };
   if (data.error) {
     throw new Error(

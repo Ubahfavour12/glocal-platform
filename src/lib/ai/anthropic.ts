@@ -93,6 +93,11 @@ export async function callClaude(call: ClaudeCall): Promise<string> {
   const model = call.model ?? MODELS.smart;
   const res = await fetchWithTimeout(API, {
     timeoutMs: LONG_TIMEOUT_MS,
+    // Safe to repeat: a second attempt spends tokens but creates nothing. A
+    // 529 "overloaded" is the common failure here and retrying is the
+    // documented answer to it -- without this, one busy minute at Anthropic
+    // costs a customer their whole night's concepts.
+    retries: 2,
     method: "POST",
     headers: {
       "x-api-key": apiKey(),

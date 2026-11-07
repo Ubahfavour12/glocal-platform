@@ -2,8 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { runForBusiness, type BizRow } from "@/lib/orchestrator/run-business";
 import { isDormant } from "@/lib/orchestrator/dormant";
+import { hasRoomForAnother, observedPerBusinessMs } from "@/lib/orchestrator/budget";
 
 export const maxDuration = 300;
+
+/**
+ * How recently a business must have run to be skipped by a later pass.
+ *
+ * The cron fires twice now, because one attempt a night means a run that dies
+ * -- a bad deploy, an upstream outage, a list that outgrew the ceiling -- costs
+ * every customer a day, with nothing to pick it up until tomorrow. The second
+ * pass exists for whoever the first one deferred or never reached.
+ *
+ * It must not re-run the ones that already succeeded, or the second pass would
+ * reinstate exactly the waste the dormancy gate removed. Twelve hours is
+ * comfortably longer than the gap between the two passes and comfortably
+ * shorter than a day, so the first pass of the NEXT night is never blocked.
+ */
+const RERUN_GUARD_HOURS = 12;
 
 /**
  * The nightly run, Vercel cron (see vercel.json), CRON_SECRET auth like
@@ -24,11 +40,22 @@ export async function GET(req: NextRequest) {
 
   const supabase = createServiceClient();
   const now = new Date();
+  const startedAtMs = Date.now();
   const results: { businessId: string; status: string }[] = [];
 
+  // LEAST RECENTLY RUN FIRST, and this ordering is the fix for a real bug.
+  // There was no ORDER BY, so the order was arbitrary but STABLE -- when a run
+  // outgrew its 300-second ceiling it was killed partway through the same list
+  // every night, and the businesses after the cut-off were the same ones every
+  // time. They would have seen an agent that had quietly stopped while every
+  // screen still said it ran nightly.
+  //
+  // Nulls first: a business that has never run is the most urgent, not the
+  // least.
   const { data: businesses, error } = await supabase
     .from("businesses")
-    .select("id, name, category, goal, persona, full_auto, daily_budget_usd_minor, category_blocked, plan");
+    .select("id, name, category, goal, persona, full_auto, daily_budget_usd_minor, category_blocked, plan, last_run_at")
+    .order("last_run_at", { ascending: true, nullsFirst: true });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Dormancy signals, read once for everyone rather than three queries per
@@ -51,6 +78,10 @@ export async function GET(req: NextRequest) {
     ]),
   );
 
+  // Starts pessimistic and learns from the night it is actually having.
+  let perBusiness: number | undefined;
+  let attempted = 0;
+
   for (const biz of businesses ?? []) {
     if (biz.category_blocked) {
       results.push({ businessId: biz.id, status: "skipped_blocked_category" });
@@ -70,12 +101,56 @@ export async function GET(req: NextRequest) {
       results.push({ businessId: biz.id, status: "skipped_dormant" });
       continue;
     }
+    // Already served tonight. This is what makes a second cron pass cheap:
+    // it only does the work the first pass could not get to.
+    const lastRun = biz.last_run_at ? Date.parse(String(biz.last_run_at)) : NaN;
+    if (Number.isFinite(lastRun) && startedAtMs - lastRun < RERUN_GUARD_HOURS * 3_600_000) {
+      results.push({ businessId: biz.id, status: "skipped_ran_recently" });
+      continue;
+    }
+
+    // Stop VOLUNTARILY while there is still time to say what happened.
+    // Being killed at the ceiling loses the response, the audit row and any
+    // record of how far the run got; deferring loses nothing, because these
+    // businesses now sort to the front of the next run.
+    if (!hasRoomForAnother({ startedAtMs, nowMs: Date.now(), perBusinessMs: perBusiness })) {
+      results.push({ businessId: biz.id, status: "deferred_out_of_time" });
+      continue;
+    }
+
     try {
       const plan = await runForBusiness(supabase, biz as BizRow, now);
       results.push({ businessId: biz.id, status: plan.status });
     } catch (e) {
       results.push({ businessId: biz.id, status: `error: ${(e as Error).message}` });
     }
+
+    // Stamped whether the run succeeded or threw. A business that fails every
+    // night must not monopolise the front of the queue and starve everybody
+    // else -- it had its turn, and the error is in the results either way.
+    attempted += 1;
+    perBusiness = observedPerBusinessMs(attempted, Date.now() - startedAtMs);
+    await supabase
+      .from("businesses")
+      .update({ last_run_at: new Date().toISOString() })
+      .eq("id", biz.id);
   }
-  return NextResponse.json({ ran: results.length, results });
+
+  const deferred = results.filter((r) => r.status === "deferred_out_of_time").length;
+  if (deferred > 0) {
+    // Worth a record: a run that keeps deferring is the signal that the
+    // customer list has outgrown one pass, and nothing else would show it.
+    await supabase.from("audit_log").insert({
+      actor: "job:nightly",
+      action: "nightly_deferred",
+      detail: { deferred, ran: results.length - deferred, elapsedMs: Date.now() - startedAtMs },
+    });
+  }
+
+  return NextResponse.json({
+    ran: results.length,
+    deferred,
+    elapsedMs: Date.now() - startedAtMs,
+    results,
+  });
 }
