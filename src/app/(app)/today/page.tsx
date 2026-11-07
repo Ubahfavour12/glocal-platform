@@ -72,7 +72,11 @@ export default async function TodayPage() {
     // Which networks are connected. Onboarding never asks, on purpose: it is
     // seven screens already and an OAuth redirect mid-signup loses people. So
     // the ask belongs here, once they have somewhere to come back to.
-    supabase.from("platform_accounts").select("platform").eq("business_id", bizId),
+    supabase
+      .from("social_connections")
+      .select("network, provider")
+      .eq("business_id", bizId)
+      .eq("status", "active"),
     // Approved but not yet fired. On full auto nobody ever sees an approval
     // screen, so without this there is no moment at which the owner can learn
     // that ads are about to go live, let alone change them first.
@@ -87,7 +91,22 @@ export default async function TodayPage() {
   const clicksToday = clicksRes.count ?? 0;
   const awaiting = approvalRes.data;
   const queued = queuedRes.data as { plan_date: string; scheduled_for: string | null } | null;
-  const connected = new Set((socialsRes.data ?? []).map((r) => String(r.platform)));
+  // THIS BANNER COULD NEVER GO AWAY. It read `platform_accounts`, a table that
+  // does not exist -- the real ones are `ad_accounts` and `social_connections`.
+  // Supabase returns an error rather than throwing, `.data` was null, the set
+  // was empty, and so every account on earth was told it had "one thing left"
+  // and must connect Facebook, including accounts that already had.
+  //
+  // The three ids below are offers, not storage keys, so each is derived from
+  // what the OAuth callbacks actually write: the Meta flow inserts rows with
+  // provider "meta" and network "facebook" (plus "instagram" when the page has
+  // one); the standalone Instagram flow inserts provider and network
+  // "instagram".
+  const socialRows = (socialsRes.data ?? []) as { network: string; provider: string }[];
+  const connected = new Set<string>();
+  if (socialRows.some((r) => r.provider === "meta")) connected.add("meta");
+  if (socialRows.some((r) => r.network === "instagram")) connected.add("instagram");
+  if (socialRows.some((r) => r.network === "tiktok")) connected.add("tiktok");
   // Meta is the one that actually blocks ads. The rest widen reach.
   const NETWORKS = [
     { id: "meta", label: "Facebook & Instagram", why: "Required before any ad can run.", href: "/api/oauth/meta/start", required: true },

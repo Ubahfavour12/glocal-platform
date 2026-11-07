@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { runForBusiness, type BizRow } from "@/lib/orchestrator/run-business";
+import { isDormant } from "@/lib/orchestrator/dormant";
 
 export const maxDuration = 300;
 
@@ -30,9 +31,43 @@ export async function GET(req: NextRequest) {
     .select("id, name, category, goal, persona, full_auto, daily_budget_usd_minor, category_blocked, plan");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  // Dormancy signals, read once for everyone rather than three queries per
+  // business. At this scale either would do; as a per-row lookup it would be
+  // the thing that makes the nightly run slow later, and it is three lines
+  // either way.
+  const [adAccountsRes, socialsRes, balancesRes] = await Promise.all([
+    supabase.from("ad_accounts").select("business_id"),
+    supabase.from("social_connections").select("business_id").eq("status", "active"),
+    supabase.from("wallet_balances").select("business_id, balance_usd_minor"),
+  ]);
+  const withAdAccount = new Set(
+    (adAccountsRes.data ?? []).map((r) => String(r.business_id)),
+  );
+  const withSocial = new Set((socialsRes.data ?? []).map((r) => String(r.business_id)));
+  const balances = new Map(
+    (balancesRes.data ?? []).map((r) => [
+      String(r.business_id),
+      Number(r.balance_usd_minor ?? 0),
+    ]),
+  );
+
   for (const biz of businesses ?? []) {
     if (biz.category_blocked) {
       results.push({ businessId: biz.id, status: "skipped_blocked_category" });
+      continue;
+    }
+    // Nowhere to advertise, nowhere to post, nothing to spend. Everything this
+    // loop would produce for them is work nobody can act on, and it is billed
+    // to us either way. Opens again by itself the night after they connect or
+    // top up -- nothing marks the account and nothing has to un-mark it.
+    if (
+      isDormant({
+        hasAdAccount: withAdAccount.has(biz.id),
+        hasSocial: withSocial.has(biz.id),
+        balanceUsdMinor: balances.get(biz.id) ?? 0,
+      })
+    ) {
+      results.push({ businessId: biz.id, status: "skipped_dormant" });
       continue;
     }
     try {

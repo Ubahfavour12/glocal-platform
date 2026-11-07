@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { GlocalMark } from "@/components/brand/Logo";
 import { buildServiceGeo } from "@/lib/tracking/geo";
@@ -382,6 +382,20 @@ export default function OnboardingPage() {
   const [media, setMedia] = useState<{ file: File; url: string; isVideo: boolean }[]>([]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  /**
+   * A ref, not the `saving` state, and the difference is not stylistic.
+   *
+   * `saving` disables the button, which is the right thing for the frame after
+   * React commits -- and useless for the two clicks the browser dispatches
+   * before it. Both handlers read `saving: false` and both insert. Production
+   * shows exactly that: five of ten accounts own duplicate businesses created
+   * 0.4 to 2.3 seconds apart, each duplicate carrying a full 50-concept pool
+   * the nightly pipeline paid a Sonnet-class model to write for a business
+   * nobody will ever open.
+   *
+   * A ref is set synchronously, so the second handler sees it.
+   */
+  const finishing = useRef(false);
 
   const [ownerId, setOwnerId] = useState<string | null>(null);
   // State, not a ref. This value is READ DURING RENDER to draw the resume
@@ -585,6 +599,10 @@ export default function OnboardingPage() {
   /* -- finish ------------------------------------------------------------ */
 
   async function finish() {
+    // Checked and set in the same synchronous step, before any await, so a
+    // second click dispatched in the same task turns around here.
+    if (finishing.current) return;
+    finishing.current = true;
     setSaving(true);
     setSaveError(null);
 
@@ -631,13 +649,33 @@ export default function OnboardingPage() {
             })
             .select("id")
             .single();
-          if (error) throw new Error(error.message);
+
+          // 23505 is the unique index on (owner_id, lower(name)): this owner
+          // already has a business by this name, which at this point in the
+          // flow means an earlier attempt of THIS setup succeeded. Treat it as
+          // success and carry on with the row that exists -- a customer whose
+          // double-tap worked the first time must land in the product, not on
+          // an error telling them their own business is in the way.
+          let businessId = biz?.id as string | undefined;
+          if (error && error.code === "23505") {
+            const { data: existing } = await supabase
+              .from("businesses")
+              .select("id")
+              .eq("owner_id", userData.user.id)
+              .ilike("name", name.trim())
+              .order("created_at", { ascending: true })
+              .limit(1)
+              .maybeSingle();
+            businessId = existing?.id as string | undefined;
+          } else if (error) {
+            throw new Error(error.message);
+          }
 
           // The photo step promised these become the ads, so actually send
           // them. A failed upload must not strand a created business.
-          if (biz?.id) {
+          if (businessId) {
             await Promise.allSettled(
-              media.map((m) => uploadProductMedia(supabase, biz.id as string, m.file)),
+              media.map((m) => uploadProductMedia(supabase, businessId, m.file)),
             );
           }
 
@@ -646,6 +684,9 @@ export default function OnboardingPage() {
           fetch("/api/pipeline/build", { method: "POST", keepalive: true }).catch(() => {});
         }
       } catch (e) {
+        // Released only here. On the success path it stays set: the screen
+        // moves on, and a late click must not start a second setup.
+        finishing.current = false;
         setSaving(false);
         setSaveError(
           e instanceof Error ? e.message : "Something went wrong saving your answers.",
