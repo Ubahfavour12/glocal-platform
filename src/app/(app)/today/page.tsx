@@ -151,8 +151,22 @@ export default async function TodayPage() {
   const runwayHoldUsd = ((business.daily_budget_usd_minor as number) / 100) * 7;
 
   return (
-    <div className="mx-auto max-w-5xl 2xl:max-w-6xl">
-      <header className="mb-6 flex flex-wrap items-end justify-between gap-3 sm:mb-8 sm:gap-4">
+    /*
+     * ONE RHYTHM, ON THE CONTAINER.
+     *
+     * Every section used to carry its own margin, and they disagreed: the
+     * banners used `mb-6`, everything below used `mt-6`, and the metric row had
+     * neither -- so the chips and the orange "one thing left" banner sat flush
+     * against each other with no gap at all, while other pairs got 24px and a
+     * few got 48. That is what read as cramped, and it was structural rather
+     * than a number being too small.
+     *
+     * `space-y` puts the spacing between siblings instead of on them, so a
+     * conditional section that does not render leaves no margin behind and
+     * every gap is the same by construction.
+     */
+    <div className="mx-auto max-w-5xl space-y-8 sm:space-y-10 2xl:max-w-6xl">
+      <header className="flex flex-wrap items-end justify-between gap-3 sm:gap-4">
         <div>
           <div className="datalabel">today · {business.name}</div>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight">
@@ -162,7 +176,7 @@ export default async function TodayPage() {
         <div className="datalabel shrink-0">{today}</div>
       </header>
 
-      <section className="grid grid-cols-2 gap-3 sm:gap-4 sm:grid-cols-3 xl:grid-cols-5">
+      <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 sm:gap-5 xl:grid-cols-5">
         <MetricChip icon={<BoltIcon />} label="spend today" value={fmtDual(spendTodayUsdMinor, local)} hint={duelRunning ? "live" : "no live campaigns yet"} />
         <MetricChip icon={<CursorIcon />} label="link clicks" value={clicksToday > 0 ? clicksToday.toLocaleString() : "—"} hint="taps through your ads" />
         <MetricChip icon={<BagIcon />} label="verified sales" value={salesTodayUsdMinor > 0 ? fmtDual(salesTodayUsdMinor, local) : "—"} hint="today" />
@@ -176,9 +190,9 @@ export default async function TodayPage() {
       </section>
 
       {missing.length > 0 && (
-        <section className="mb-6">
+        <section>
           <div
-            className={`rounded-card border p-5 ${
+            className={`rounded-card border p-6 ${
               missing.some((n) => n.required)
                 ? "border-accent/40 bg-accent-soft"
                 : "border-line bg-surface-raised"
@@ -213,7 +227,7 @@ export default async function TodayPage() {
       )}
 
       {queued && (
-        <section className="mb-6">
+        <section>
           <div className="rounded-card border border-accent/40 bg-accent-soft p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
@@ -238,7 +252,7 @@ export default async function TodayPage() {
       )}
 
       {efficiency.verdict !== "too_early" && (
-        <section className="mt-6">
+        <section>
           <div
             className={`rounded-card border p-4 ${
               efficiency.verdict === "losing"
@@ -258,7 +272,7 @@ export default async function TodayPage() {
         </section>
       )}
 
-      <section className="mt-6">
+      <section>
         {awaiting ? (
           <AgentNote>
             {agentLine}{" "}
@@ -271,8 +285,8 @@ export default async function TodayPage() {
         )}
       </section>
 
-      <section className="mt-6 grid gap-4 md:grid-cols-2">
-        <Link href="/duel" className="group flex flex-col rounded-card border border-line bg-surface-raised p-5 transition-colors hover:border-ink-faint">
+      <section className="grid gap-5 md:grid-cols-2">
+        <Link href="/duel" className="group flex flex-col rounded-card border border-line bg-surface-raised p-6 transition-colors hover:border-ink-faint">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-ink-muted">
               <TrophyIcon className="h-4 w-4 text-accent-bright" />
@@ -296,7 +310,7 @@ export default async function TodayPage() {
           </span>
         </Link>
 
-        <div className="flex flex-col rounded-card border border-line bg-surface-raised p-5">
+        <div className="flex flex-col rounded-card border border-line bg-surface-raised p-6">
           <div className="flex items-center gap-2 text-ink-muted">
             <WalletIcon className="h-4 w-4" />
             <span className="datalabel">wallet</span>
@@ -330,7 +344,7 @@ export default async function TodayPage() {
         </div>
       </section>
 
-      <Link href="/pipeline" className="group mt-6 block rounded-card border border-line bg-surface-raised p-5 transition-colors hover:border-ink-faint">
+      <Link href="/pipeline" className="group block rounded-card border border-line bg-surface-raised p-6 transition-colors hover:border-ink-faint">
         <div className="flex items-center justify-between">
           <div className="datalabel">concept pipeline</div>
           <span className="font-mono text-xs text-ink-muted">{pipelineCount} / {PIPELINE_TARGET}</span>

@@ -51,8 +51,6 @@ const COUNTED = 6;
 
 const DRAFT_KEY = "glocal.onboarding.draft";
 
-// Display-only example rate until the FX provider is wired (Task #3).
-const DEMO_NGN_PER_USD_BUFFERED = 1545;
 
 const DOORS: { id: Door; label: string; hint: string; placeholder: string }[] = [
   {
@@ -492,16 +490,62 @@ export default function OnboardingPage() {
 
   const local = currencyForCountry(country);
   const dial = dialCodeForCountry(country);
+
+  /**
+   * The live rate for THIS customer's currency.
+   *
+   * There was a constant here -- 1545 naira to the dollar -- multiplied by the
+   * budget and then printed with the customer's OWN symbol. So a Kenyan
+   * choosing $25/day read "KSh 38,625" when the true figure is nearer 3,200:
+   * wrong by a factor of twelve, at the exact moment someone decides what they
+   * can afford. It was stale for Nigeria too (1,545 against a live 1,389).
+   *
+   * Null until it arrives, and null forever if the lookup fails. Every line
+   * below is hidden while it is null, because showing nothing is honest and
+   * showing a wrong number is not -- which is the whole lesson of the constant
+   * this replaces.
+   */
+  const [fx, setFx] = useState<{ currency: string; rate: number } | null>(null);
+  useEffect(() => {
+    if (local.currency === "USD") return;
+    let live = true;
+    fetch(`/api/fx?currency=${encodeURIComponent(local.currency)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { effective_rate?: number } | null) => {
+        // `live` drops a reply that arrived after the country changed again.
+        if (!live) return;
+        const rate = d?.effective_rate;
+        if (typeof rate === "number" && rate > 0) setFx({ currency: local.currency, rate });
+      })
+      .catch(() => {
+        // Silent: no estimate is the correct outcome, and it is already null.
+      });
+    return () => {
+      live = false;
+    };
+  }, [local.currency]);
+
+  /**
+   * The rate is TAGGED with the currency it was fetched for, and read back
+   * only when the tag still matches. Clearing it on every country change would
+   * mean a synchronous setState inside the effect -- a cascading render the
+   * compiler rejects, and the same mistake AppShell's persisted store exists
+   * to avoid. Deriving instead means a stale rate can never be shown and
+   * nothing has to be reset.
+   */
+  const fxRate = fx && fx.currency === local.currency ? fx.rate : null;
+
+  /** A USD amount in minor units, written in the customer's own money. */
+  const inLocal = (usdMinor: number): string | null =>
+    fxRate === null ? null : `${local.symbol}${Math.ceil((usdMinor * fxRate) / 100).toLocaleString()}`;
   const category = trade === OTHER_TRADE ? otherTrade.trim() : trade;
   const screen = useMemo(() => screenCategory(category), [category]);
 
   const dailyMinor = Math.max(Math.round(dailyUsd * 100), MIN_DAILY_BUDGET_USD_MINOR);
   const holdMinor = minFirstDepositUsdMinor(dailyMinor);
   const holdUsd = (holdMinor / 100).toFixed(2);
-  const holdLocal =
-    local.currency === "USD"
-      ? null
-      : `≈ ${local.symbol}${Math.ceil((holdMinor * DEMO_NGN_PER_USD_BUFFERED) / 100).toLocaleString()}`;
+  const holdInLocal = inLocal(holdMinor);
+  const holdLocal = holdInLocal === null ? null : `≈ ${holdInLocal}`;
 
   const goalOptions = useMemo(() => goalOptionsFor(door), [door]);
 
@@ -1230,10 +1274,9 @@ export default function OnboardingPage() {
                 </span>
                 <span className="datalabel">per day</span>
               </div>
-              {local.currency !== "USD" && (
+              {inLocal(dailyMinor) !== null && (
                 <div className="mt-1.5 font-mono text-[13px] text-ink-faint">
-                  ≈ {local.symbol}
-                  {Math.ceil((dailyMinor * DEMO_NGN_PER_USD_BUFFERED) / 100).toLocaleString()}
+                  ≈ {inLocal(dailyMinor)}
                 </div>
               )}
               <input

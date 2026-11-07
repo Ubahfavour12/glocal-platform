@@ -5,17 +5,45 @@ import { useState } from "react";
 /**
  * Wallet funding, UF-2. Two paths:
  *  - "Pay with card": a real hosted checkout on whichever rail is active
- *    (test-mode until the merchant account goes live). The final ₦ price is
+ *    (test-mode until the merchant account goes live). The final local price is
  *    quoted before redirect.
  *
  * The rail is not hardcoded here. The checkout response names it, and the
  * footnote reports that name, so the screen cannot end up claiming a customer
  * paid through a PSP they did not.
+ *
+ * NEITHER IS THE CURRENCY, NOW. The label said "Pay with card (₦)" to
+ * everybody. Two different things could make that a lie: a customer outside
+ * Nigeria, and a customer inside it whose charge falls back to dollars because
+ * the merchant account is not approved for their currency. `pspChargeCurrency`
+ * already works out what will actually be charged -- the button just has to
+ * say it.
  */
-export function AddFundsButton({ businessId }: { businessId: string }) {
+const SYMBOLS: Record<string, string> = {
+  USD: "$",
+  NGN: "₦",
+  GHS: "₵",
+  KES: "KSh",
+  ZAR: "R",
+};
+
+export function AddFundsButton({
+  businessId,
+  chargeCurrency,
+  localSymbol,
+}: {
+  businessId: string;
+  /** What the processor will actually charge in, from pspChargeCurrency. */
+  chargeCurrency: string;
+  /** This country's symbol, used when the charge is in their own currency. */
+  localSymbol: string;
+}) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [usd, setUsd] = useState(70);
+  // The local symbol only applies when the charge is in the local currency.
+  // A Ghanaian billed in dollars should read "$", not a cedi sign on a dollar.
+  const chargeSymbol = SYMBOLS[chargeCurrency.toUpperCase()] ?? localSymbol;
 
   async function cardCheckout() {
     setBusy("card");
@@ -55,7 +83,7 @@ export function AddFundsButton({ businessId }: { businessId: string }) {
           onClick={cardCheckout}
           className="rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-bright disabled:opacity-50"
         >
-          {busy === "card" ? "Preparing checkout…" : "Pay with card (₦)"}
+          {busy === "card" ? "Preparing checkout…" : `Pay with card (${chargeSymbol})`}
         </button>
       </div>
 

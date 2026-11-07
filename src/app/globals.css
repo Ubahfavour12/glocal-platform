@@ -20,6 +20,7 @@
   --surface: #0c0c0d;
   --surface-raised: #141416;
   --surface-overlay: #1c1c1f;
+  --skeleton: #26262b;
   --card: #faf8f5;
   --card-muted: #f5f3ef;
 
@@ -45,6 +46,7 @@
     --surface: #faf9f7;
     --surface-raised: #ffffff;
     --surface-overlay: #f1efea;
+  --skeleton: #e4dfd6;
     --card: #ffffff;
     --card-muted: #f7f5f2;
 
@@ -72,6 +74,7 @@
   --surface: #faf9f7;
   --surface-raised: #ffffff;
   --surface-overlay: #f1efea;
+  --skeleton: #e4dfd6;
   --card: #ffffff;
   --card-muted: #f7f5f2;
 
@@ -95,6 +98,7 @@
   --surface: #0c0c0d;
   --surface-raised: #141416;
   --surface-overlay: #1c1c1f;
+  --skeleton: #26262b;
   --card: #faf8f5;
   --card-muted: #f5f3ef;
 
@@ -118,6 +122,7 @@
   --color-surface: var(--surface);
   --color-surface-raised: var(--surface-raised);
   --color-surface-overlay: var(--surface-overlay);
+  --color-skeleton: var(--skeleton);
   --color-card: var(--card);
   --color-card-muted: var(--card-muted);
 
@@ -204,6 +209,55 @@ main > * {
 a.rounded-card:hover,
 button.rounded-card:hover {
   transform: translateY(-1px);
+}
+
+/* ---------- loading ----------
+ * A skeleton has two jobs and the old one did neither.
+ *
+ * IT HAS TO BE SEEN. It drew itself in --surface-overlay on --surface-raised:
+ * #1c1c1f on #141416, eight values apart out of 255. On a dark screen that is
+ * not a loading state, it is a dead page. Hence --skeleton.
+ *
+ * IT HAS TO BE LATE. Appearing instantly turns a 150ms navigation into a
+ * flash of grey boxes -- the thing that reads as unprofessional, because the
+ * eye registers the flicker and not the content. Holding it invisible for
+ * 180ms means a fast page shows nothing at all and only a genuinely slow one
+ * shows a skeleton. The pulse is deferred by the same delay so the two start
+ * together rather than the box fading in mid-pulse.
+ */
+@keyframes skeletonIn {
+  to {
+    opacity: 1;
+  }
+}
+
+.skeleton {
+  opacity: 0;
+  background-color: var(--skeleton);
+  animation:
+    skeletonIn 120ms ease-out 180ms forwards,
+    pulse 1.8s ease-in-out 180ms infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    background-color: var(--skeleton);
+  }
+  50% {
+    background-color: var(--surface-overlay);
+  }
+}
+
+/* Someone who has asked for less motion gets the shape, held still. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    opacity: 1;
+    animation: none;
+  }
+  main > * {
+    animation: none;
+  }
 }
 
 /* The theme swap eases instead of flashing. */

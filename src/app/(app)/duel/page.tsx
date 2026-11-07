@@ -59,7 +59,7 @@ export default async function DuelPage() {
           </p>
         </div>
       ) : (
-        <section className="mt-6 rounded-card border border-line bg-surface-raised p-5">
+        <section className="mt-8 rounded-card border border-line bg-surface-raised p-6">
           <div className="flex items-center justify-between">
             <span className="datalabel">today&apos;s duel · {test.test_date}</span>
             <span
@@ -120,7 +120,7 @@ export default async function DuelPage() {
         </section>
       )}
 
-      <section className="mt-6">
+      <section className="mt-8">
         <div className="datalabel">verdict history</div>
         {verdicts.length === 0 ? (
           <p className="mt-3 text-sm text-ink-faint">No verdicts yet. They appear here as duels resolve.</p>

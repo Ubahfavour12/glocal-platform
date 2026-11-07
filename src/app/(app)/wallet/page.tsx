@@ -14,6 +14,7 @@ import {
 import { effectiveRate } from "@/lib/money/fx";
 import { fetchUsdRate } from "@/lib/money/rates";
 import { createClient } from "@/lib/supabase/server";
+import { currencyForCountry, pspChargeCurrency } from "@/lib/money/currency";
 import { currentBusiness } from "@/lib/business/current";
 
 export const dynamic = "force-dynamic"; // balance must always be current
@@ -25,12 +26,29 @@ interface LedgerRow {
   created_at: string;
 }
 
-async function liveRate() {
+/**
+ * The rate this customer actually converts at.
+ *
+ * It used to ask for NGN and print a naira sign, whoever was looking. A shop
+ * in Nairobi reading "N1,389/$" is being shown a number that has nothing to do
+ * with the money leaving their account -- and the page did not even select the
+ * business's country, so it had no way to do better.
+ *
+ * A USD business gets no card at all: "$1.00/$" is not a fact anyone needs.
+ */
+async function liveRate(country: string | null, currency: string | null) {
+  const code = (currency ?? "USD").toUpperCase();
+  if (code === "USD") return { value: "", ok: true, show: false };
+  const { symbol } = currencyForCountry(country);
   try {
-    const snapshot = await fetchUsdRate("NGN");
-    return { value: `₦${Math.round(effectiveRate(snapshot)).toLocaleString()}/$`, ok: true };
+    const snapshot = await fetchUsdRate(code);
+    return {
+      value: `${symbol}${Math.round(effectiveRate(snapshot)).toLocaleString()}/$`,
+      ok: true,
+      show: true,
+    };
   } catch {
-    return { value: "—", ok: false };
+    return { value: "—", ok: false, show: true };
   }
 }
 
@@ -43,7 +61,9 @@ async function walletData() {
     id: string;
     name: string;
     daily_budget_usd_minor: number;
-  }>(supabase, "id, name, daily_budget_usd_minor");
+    country: string | null;
+    currency: string | null;
+  }>(supabase, "id, name, daily_budget_usd_minor, country, currency");
   if (!business) return null;
 
   const { data: balanceRow } = await supabase
@@ -126,7 +146,14 @@ function kindIcon(kind: string): ReactNode {
 }
 
 export default async function WalletPage() {
-  const [fx, wallet] = await Promise.all([liveRate(), walletData()]);
+  // Serial, not parallel: the rate depends on which currency this customer is
+  // in, and that is on the business row. One extra round trip on a page that
+  // already makes several, in exchange for a number that is about them.
+  const wallet = await walletData();
+  const fx = await liveRate(
+    wallet?.business.country ?? null,
+    wallet?.business.currency ?? null,
+  );
 
   const balanceMinor = wallet?.balanceMinor ?? 0;
   const dailyMinor = wallet?.business.daily_budget_usd_minor ?? 1000;
@@ -150,7 +177,7 @@ export default async function WalletPage() {
       />
 
       {health === "empty" && (
-        <section className="mt-8 rounded-card border border-negative/50 bg-negative/10 p-5">
+        <section className="mt-8 rounded-card border border-negative/50 bg-negative/10 p-6">
           <div className="datalabel text-negative">spending has stopped</div>
           <p className="mt-2 text-sm text-ink">
             Your balance is empty, so your ads are paused. Nothing is being spent, and nothing is
@@ -164,7 +191,7 @@ export default async function WalletPage() {
       )}
 
       {health === "critical" && (
-        <section className="mt-8 rounded-card border border-accent/50 bg-accent-soft p-5">
+        <section className="mt-8 rounded-card border border-accent/50 bg-accent-soft p-6">
           <div className="datalabel text-accent-bright">running low</div>
           <p className="mt-2 text-sm text-ink">
             About {runway} {runway === 1 ? "day" : "days"} left at your current budget. When it hits
@@ -174,7 +201,7 @@ export default async function WalletPage() {
       )}
 
       {/* Balance + runway hero */}
-      <section className="mt-8 grid gap-4 md:grid-cols-[1.4fr_1fr]">
+      <section className="mt-8 grid gap-5 md:grid-cols-[1.4fr_1fr]">
         <div className="rounded-card border border-line bg-surface-raised p-6">
           <div className="flex items-center gap-2 text-ink-muted">
             <WalletIcon className="h-4 w-4" />
@@ -213,25 +240,31 @@ export default async function WalletPage() {
           </div>
         </div>
 
-        <div className="flex flex-col justify-between rounded-card border border-line bg-surface-raised p-6">
-          <div>
-            <div className="flex items-center gap-2 text-ink-muted">
-              <RefreshIcon className="h-4 w-4" />
-              <span className="datalabel">live fx rate</span>
+        {fx.show && (
+          <div className="flex flex-col justify-between rounded-card border border-line bg-surface-raised p-6">
+            <div>
+              <div className="flex items-center gap-2 text-ink-muted">
+                <RefreshIcon className="h-4 w-4" />
+                <span className="datalabel">live fx rate</span>
+              </div>
+              <div className="mt-3 font-mono text-2xl font-semibold text-ink">{fx.value}</div>
+              <p className="mt-1 text-xs text-ink-faint">
+                {fx.ok ? "Refreshed hourly. This is the final price you pay." : "Rate temporarily unavailable."}
+              </p>
             </div>
-            <div className="mt-3 font-mono text-2xl font-semibold text-ink">{fx.value}</div>
-            <p className="mt-1 text-xs text-ink-faint">
-              {fx.ok ? "Refreshed hourly. This is the final price you pay." : "Rate temporarily unavailable."}
-            </p>
           </div>
-        </div>
+        )}
       </section>
 
       {wallet ? (
-        <section className="mt-4 rounded-card border border-line bg-surface-raised p-5">
+        <section className="mt-8 rounded-card border border-line bg-surface-raised p-6">
           <div className="datalabel">add funds</div>
           <div className="mt-3">
-            <AddFundsButton businessId={wallet.business.id} />
+            <AddFundsButton
+              businessId={wallet.business.id}
+              chargeCurrency={pspChargeCurrency(wallet.business.currency)}
+              localSymbol={currencyForCountry(wallet.business.country).symbol}
+            />
           </div>
           <div className="mt-5 border-t border-line pt-5">
             <WithdrawButton
@@ -242,7 +275,7 @@ export default async function WalletPage() {
           </div>
         </section>
       ) : (
-        <section className="mt-4 rounded-card border border-line bg-surface-raised p-5">
+        <section className="mt-8 rounded-card border border-line bg-surface-raised p-6">
           <div className="datalabel">preview mode</div>
           <p className="mt-2 text-sm text-ink-muted">
             Sign in and finish onboarding to activate your wallet.
@@ -250,7 +283,7 @@ export default async function WalletPage() {
         </section>
       )}
 
-      <section className="mt-4 rounded-card border border-line bg-surface-raised p-5">
+      <section className="mt-8 rounded-card border border-line bg-surface-raised p-6">
         <div className="flex items-center justify-between">
           <div className="datalabel">ledger · last 10</div>
           <a href="/statement" className="text-xs text-accent hover:text-accent-bright">
