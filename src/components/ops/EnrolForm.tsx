@@ -6,24 +6,18 @@ import { useState } from "react";
 /**
  * Confirm the authenticator actually has the key, then save.
  *
- * The secret rides along in the form rather than being held in a server
- * session, and that is deliberate: it was generated for this page view and
- * means nothing until the matching code comes back. The server verifies the
- * code AGAINST THE SUBMITTED SECRET before storing either, so the only way
- * to enrol a secret is to prove you already hold it.
+ * SIX DIGITS AND NOTHING ELSE. The secret used to ride along in this form,
+ * which was defensible on its own terms and had one fatal consequence: the
+ * page it came from regenerated the key on every render, so a form submitted
+ * after the page had re-rendered carried a DIFFERENT secret from the one in
+ * the phone — and the server, verifying the code against what it was handed,
+ * refused a perfectly typed code as wrong. Forever, with no way to tell.
  *
- * The consequence that matters: a key that never reached the phone can never
- * become the one that locks everybody out.
+ * The candidate now lives server-side and the server reads it itself. There
+ * is exactly one key these digits can be checked against, and nothing the
+ * browser does can change which one.
  */
-export function EnrolForm({
-  totpSecret,
-  sessionSecret,
-  uri,
-}: {
-  totpSecret: string;
-  sessionSecret: string;
-  uri: string;
-}) {
+export function EnrolForm({ uri }: { uri: string }) {
   const router = useRouter();
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -39,7 +33,7 @@ export function EnrolForm({
       const res = await fetch("/api/ops/enrol", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, totpSecret, sessionSecret }),
+        body: JSON.stringify({ code }),
       });
       if (!res.ok) {
         const data = (await res.json().catch(() => null)) as { error?: string } | null;
@@ -79,7 +73,11 @@ export function EnrolForm({
         >
           {busy ? "Checking…" : "Confirm and save"}
         </button>
-        {error && <p className="text-sm text-negative">{error}</p>}
+        {error && (
+          <p className="text-sm leading-relaxed text-negative" role="alert">
+            {error}
+          </p>
+        )}
       </form>
 
       <button

@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { STEP_SECONDS, base32Decode, totp, totpConfigured, verifyTotp } from "./totp";
+import {
+  DIAGNOSTIC_STEPS,
+  SKEW_STEPS,
+  STEP_SECONDS,
+  base32Decode,
+  describeClockSkew,
+  diagnoseTotp,
+  totp,
+  totpConfigured,
+  verifyTotp,
+} from "./totp";
 
 // RFC 6238 publishes test vectors for the ASCII secret "12345678901234567890".
 // Base32 of those twenty bytes:
@@ -106,5 +116,84 @@ describe("totpConfigured", () => {
   it("is true for a proper secret", () => {
     process.env.ADMIN_TOTP_SECRET = RFC_SECRET;
     expect(totpConfigured()).toBe(true);
+  });
+});
+
+describe("diagnoseTotp", () => {
+  // 1 Jan 2027, a fixed point so a drifting wall clock cannot flake these.
+  const now = Date.UTC(2027, 0, 1, 12, 0, 0);
+  const step = STEP_SECONDS * 1000;
+
+  it("accepts a code from the current step", () => {
+    expect(diagnoseTotp(RFC_SECRET, totp(RFC_SECRET, now), now)).toEqual({
+      match: "in_window",
+    });
+  });
+
+  it("accepts the edge of the tolerated window rather than diagnosing it", () => {
+    const code = totp(RFC_SECRET, now + SKEW_STEPS * step);
+    expect(diagnoseTotp(RFC_SECRET, code, now)).toEqual({ match: "in_window" });
+  });
+
+  it("reports a clock running fast as a POSITIVE offset", () => {
+    // The phone is two steps ahead, so it shows the code for a later step.
+    // Getting this sign backwards would send someone to fix the wrong thing.
+    const code = totp(RFC_SECRET, now + 2 * step);
+    expect(diagnoseTotp(RFC_SECRET, code, now)).toEqual({
+      match: "out_of_window",
+      offsetSeconds: 60,
+    });
+  });
+
+  it("reports a clock running slow as a negative offset", () => {
+    const code = totp(RFC_SECRET, now - 4 * step);
+    expect(diagnoseTotp(RFC_SECRET, code, now)).toEqual({
+      match: "out_of_window",
+      offsetSeconds: -120,
+    });
+  });
+
+  it("reports the NEAREST explanation, not any collision further out", () => {
+    const code = totp(RFC_SECRET, now + 3 * step);
+    const verdict = diagnoseTotp(RFC_SECRET, code, now);
+    expect(verdict).toEqual({ match: "out_of_window", offsetSeconds: 90 });
+  });
+
+  it("gives up outside the searched window rather than guessing", () => {
+    const code = totp(RFC_SECRET, now + (DIAGNOSTIC_STEPS + 5) * step);
+    expect(diagnoseTotp(RFC_SECRET, code, now)).toEqual({ match: "none" });
+  });
+
+  it("is 'none' for junk, a wrong code, and a malformed secret", () => {
+    expect(diagnoseTotp(RFC_SECRET, "abc", now)).toEqual({ match: "none" });
+    expect(diagnoseTotp(RFC_SECRET, "12345", now)).toEqual({ match: "none" });
+    expect(diagnoseTotp("not-base32!", "000000", now)).toEqual({ match: "none" });
+  });
+
+  it("never contradicts verifyTotp about what is accepted", () => {
+    // The two must agree exactly: a code verifyTotp accepts must never be
+    // reported as a clock problem, or the console would refuse a good code
+    // while explaining why it was fine.
+    for (let i = -DIAGNOSTIC_STEPS; i <= DIAGNOSTIC_STEPS; i += 1) {
+      const code = totp(RFC_SECRET, now + i * step);
+      const accepted = verifyTotp(RFC_SECRET, code, now);
+      expect(diagnoseTotp(RFC_SECRET, code, now).match === "in_window").toBe(accepted);
+    }
+  });
+});
+
+describe("describeClockSkew", () => {
+  it("says ahead for fast and behind for slow", () => {
+    expect(describeClockSkew(60)).toContain("ahead of");
+    expect(describeClockSkew(-60)).toContain("behind");
+  });
+
+  it("switches to minutes once seconds stop being readable", () => {
+    expect(describeClockSkew(90)).toContain("90 seconds");
+    expect(describeClockSkew(180)).toContain("3 minutes");
+  });
+
+  it("tells the reader what to actually do", () => {
+    expect(describeClockSkew(120)).toMatch(/automatic date|Time correction/i);
   });
 });

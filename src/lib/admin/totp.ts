@@ -116,6 +116,86 @@ export function verifyTotp(
   return false;
 }
 
+/**
+ * How far out a clock is searched once a code has already been refused.
+ *
+ * Twenty steps is ten minutes either way, which covers the usual cause -- a
+ * phone with automatic time off, or a laptop that has drifted -- without
+ * pretending to explain a code that is simply wrong.
+ */
+export const DIAGNOSTIC_STEPS = 20;
+
+export type TotpDiagnosis =
+  /** Accepted. */
+  | { match: "in_window" }
+  /** The right key, the wrong time. Positive means the clock runs fast. */
+  | { match: "out_of_window"; offsetSeconds: number }
+  /** Not a code from this key at any time nearby, or not a code at all. */
+  | { match: "none" };
+
+/**
+ * Why was that code refused?
+ *
+ * "That code did not match" is true and useless. It is the same sentence for
+ * a mistyped key, a stale key, and a phone whose clock is two minutes out --
+ * three problems with three different fixes, and no way to tell them apart.
+ * Searching a wider window turns the third into a sentence a person can act
+ * on: your clock is about this far off.
+ *
+ * NOT AN ORACLE, and worth saying why. This is only reached behind a
+ * signed-in, allowlisted founder session. Anyone who can get this far can
+ * already ask for a code in the accepted window; learning that their guess
+ * would have been right four minutes ago tells them nothing they could use.
+ * The width is bounded so it cannot be walked outward indefinitely.
+ */
+export function diagnoseTotp(
+  secretBase32: string,
+  submitted: string,
+  atMs: number = Date.now(),
+): TotpDiagnosis {
+  const code = submitted.replace(/\s/g, "");
+  if (!/^\d{6}$/.test(code)) return { match: "none" };
+  let key: Buffer;
+  try {
+    key = base32Decode(secretBase32);
+  } catch {
+    return { match: "none" };
+  }
+  if (verifyTotp(secretBase32, code, atMs)) return { match: "in_window" };
+
+  const now = Math.floor(atMs / 1000 / STEP_SECONDS);
+  // Nearest explanation first, so a code that happens to collide far away
+  // does not outrank the drift that actually caused this.
+  for (let distance = SKEW_STEPS + 1; distance <= DIAGNOSTIC_STEPS; distance += 1) {
+    for (const i of [distance, -distance]) {
+      if (codeForCounter(key, now + i) === code) {
+        // A phone whose clock runs fast computes the code for a LATER step,
+        // so a match at +2 means roughly a minute ahead, not behind.
+        return { match: "out_of_window", offsetSeconds: i * STEP_SECONDS };
+      }
+    }
+  }
+  return { match: "none" };
+}
+
+/**
+ * Say what a drifting clock means, in words someone can act on.
+ *
+ * Shared by enrolment and unlock so the two never drift apart in their
+ * wording, which matters more than it sounds: this is the one sentence that
+ * turns "it just doesn't work" into a thing to go and fix.
+ */
+export function describeClockSkew(offsetSeconds: number): string {
+  const abs = Math.abs(offsetSeconds);
+  const amount = abs >= 120 ? `${Math.round(abs / 60)} minutes` : `${abs} seconds`;
+  const direction = offsetSeconds > 0 ? "ahead of" : "behind";
+  return (
+    `that key is right but your device clock is about ${amount} ${direction} ours — ` +
+    `turn on automatic date & time (or, in Google Authenticator, Settings → ` +
+    `Time correction for codes → Sync now) and try the next code`
+  );
+}
+
 /** Is a second factor configured at all? */
 export function totpConfigured(): boolean {
   const s = process.env.ADMIN_TOTP_SECRET?.trim();
