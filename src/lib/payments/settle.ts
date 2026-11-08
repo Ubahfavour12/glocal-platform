@@ -144,7 +144,10 @@ export async function settleVerifiedCharge(
     await issueInvoiceFor(
       "subscription",
       expectedUsdMinor,
-      `Glocal ${charge.tier} plan — one month`,
+      // Capitalised: the tier is a proper noun on the customer's invoice, and
+      // the raw column value is lowercase. Caught by looking at a rendered
+      // invoice rather than at the string.
+      `Glocal ${charge.tier.charAt(0).toUpperCase()}${charge.tier.slice(1)} plan — one month`,
     );
     if (opts.sendReceipts) {
       const sent = await sendReceiptForBusiness(supabase, businessId, {

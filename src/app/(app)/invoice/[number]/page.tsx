@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { currentBusiness } from "@/lib/business/current";
-import { OPERATOR, OPERATOR_RC, contactSentence } from "@/lib/legal/entity";
+import { CONTACT_EMAIL, OPERATOR, OPERATOR_RC } from "@/lib/legal/entity";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Invoice" };
@@ -125,10 +125,17 @@ export default async function InvoicePage({
           </tfoot>
         </table>
 
+        {/*
+          * NOT contactSentence(). That helper is written for the legal pages
+          * and, with no contact address configured, it explains how to DELETE
+          * your account -- which is a strange thing to read at the bottom of a
+          * bill. Spotted by rendering an invoice rather than by reading the
+          * code. A billing contact appears only once there is one to give.
+          */}
         <p className="mt-8 text-xs leading-relaxed text-ink-faint">
           Paid in full; this invoice is also the receipt. Amounts are in US
-          dollars, the currency this account is denominated in.{" "}
-          {contactSentence()}
+          dollars, the currency this account is denominated in.
+          {CONTACT_EMAIL ? ` Questions about this invoice: ${CONTACT_EMAIL}.` : ""}
         </p>
       </div>
 
