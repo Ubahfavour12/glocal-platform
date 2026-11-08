@@ -27,7 +27,7 @@ export default async function UnlockPage() {
   return (
     <div className="mx-auto max-w-sm pt-16">
       <div className="datalabel">ops</div>
-      <h1 className="mt-1 text-2xl font-semibold tracking-tight">Second factor</h1>
+      <h1 className="gl-title mt-1.5 text-[28px] font-semibold leading-tight tracking-[-0.035em]">Second factor</h1>
       <p className="mt-3 text-sm leading-relaxed text-ink-muted">
         This console reads across every customer, so a signed-in session is not
         enough on its own. Enter the current code from your authenticator app.

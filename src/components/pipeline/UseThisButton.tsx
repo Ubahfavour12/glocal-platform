@@ -60,7 +60,7 @@ export function UseThisButton({
               blocked
                 ? "cursor-not-allowed border-line-soft text-ink-faint opacity-60"
                 : kind === k
-                  ? "border-accent bg-accent-soft text-ink"
+                  ? "border-accent bg-accent-soft text-ink shadow-[0_0_24px_-10px_rgba(245,133,16,0.7)]"
                   : "border-line text-ink-muted hover:border-ink-faint"
             }`}
           >

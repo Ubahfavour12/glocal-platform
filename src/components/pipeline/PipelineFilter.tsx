@@ -78,7 +78,7 @@ export function PipelineFilter({
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search hooks, angles, shots…"
           aria-label="Search concepts"
-          className="w-full rounded-lg border border-line bg-surface-raised px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none sm:max-w-xs"
+          className="w-full rounded-lg border border-line bg-surface-raised px-3 py-2 text-sm text-ink placeholder:text-ink-faint gl-field sm:max-w-xs"
         />
         <div className="flex flex-wrap gap-2">
           {tab("all", "All")}
@@ -96,7 +96,7 @@ export function PipelineFilter({
         (walletEmpty ? (
           // Loud, and with the way out attached. This is the state four of five
           // accounts were sitting in while the screen said nothing at all.
-          <p className="mt-3 rounded-card border border-accent/40 bg-accent-soft px-3 py-2 text-xs leading-relaxed text-ink">
+          <p className="mt-3 gl-lit rounded-card px-3 py-2 text-xs leading-relaxed text-ink">
             {slotSummary(plannedConceptIds, challengerSlots, true)}{" "}
             <Link href="/wallet" className="font-medium text-accent-bright underline">
               Add funds

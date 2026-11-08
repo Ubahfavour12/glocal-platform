@@ -92,7 +92,7 @@ export function WithdrawButton({
     );
   }
 
-  const field = "rounded-lg border border-line bg-surface-raised px-3 py-2.5 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none";
+  const field = "rounded-lg border border-line bg-surface-raised px-3 py-2.5 text-sm text-ink placeholder:text-ink-faint gl-field";
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-3">
