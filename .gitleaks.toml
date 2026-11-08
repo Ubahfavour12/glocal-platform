@@ -82,4 +82,10 @@ regexes = [
   # not a scanner, and this repository's worst-case leak -- the Supabase
   # service_role key -- is itself a JWT.
   '''dBjftJeZ4CVPmB92K27uhb''',
+  # The RFC 6238 test vector: base32 of the ASCII string "12345678901234567890",
+  # published in the standard and used in totp.test.ts to prove the
+  # implementation matches it. High entropy next to the word SECRET is exactly
+  # what the scanner should flag, so it is allowlisted as this one exact
+  # published constant rather than by relaxing the rule.
+  '''GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ''',
 ]

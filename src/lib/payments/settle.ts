@@ -65,6 +65,42 @@ export async function settleVerifiedCharge(
    * that credited correctly must not be failed by a cost record, which would
    * make the PSP retry and the customer wait.
    */
+  /**
+   * Issue the customer's invoice.
+   *
+   * A numbered document per payment, which the ledger and the receipt email
+   * between them did not provide: the ledger is a running balance and the
+   * email is not something you can file or hand to an accountant.
+   *
+   * Idempotent on the PSP reference inside the database function, because the
+   * redirect and the webhook both settle the same charge on purpose and a
+   * customer must never receive two invoices for one payment.
+   *
+   * Never throws. The money has moved correctly; a missing document is worth
+   * recording, not worth making the PSP retry a settled charge.
+   */
+  const issueInvoiceFor = async (
+    kind: "topup" | "subscription",
+    usdMinor: number,
+    description: string,
+  ) => {
+    try {
+      await supabase.rpc("issue_invoice", {
+        p_business_id: businessId,
+        p_kind: kind,
+        p_amount_usd_minor: usdMinor,
+        p_amount_local_minor: txn.amountLocalMinor,
+        p_local_currency: txn.currency,
+        p_fx_rate: fxRate,
+        p_description: description,
+        p_psp: psp,
+        p_psp_ref: pspRef(psp, txn.id),
+      });
+    } catch {
+      /* see above */
+    }
+  };
+
   const recordFee = async () => {
     const usd = feeUsdMinor(txn.feeLocalMinor, fxRate);
     if (usd === null) return; // this rail did not report a fee
@@ -105,6 +141,11 @@ export async function settleVerifiedCharge(
     await activateSubscription(supabase, businessId, charge.tier);
     // A subscription charge costs us a processor fee exactly as a top-up does.
     await recordFee();
+    await issueInvoiceFor(
+      "subscription",
+      expectedUsdMinor,
+      `Glocal ${charge.tier} plan — one month`,
+    );
     if (opts.sendReceipts) {
       const sent = await sendReceiptForBusiness(supabase, businessId, {
         type: "subscription",
@@ -129,6 +170,7 @@ export async function settleVerifiedCharge(
   if (error) throw new Error(error.message);
 
   await recordFee();
+  await issueInvoiceFor("topup", paidUsdMinor, "Wallet top-up");
 
   if (opts.sendReceipts) {
     const sent = await sendReceiptForBusiness(supabase, businessId, {

@@ -112,7 +112,11 @@ describe("receipts are sent once, by the webhook only", () => {
   it("stays silent on the redirect path, so one payment is not emailed twice", async () => {
     const { client, rpc } = fakeSupabase();
     await settleVerifiedCharge(client, "paystack", topup(), { sendReceipts: false });
-    expect(rpc).toHaveBeenCalledTimes(1); // still credited
+    // Asserts the CREDIT happened, not how many RPCs were made. The count
+    // version broke the moment invoicing added a second call, which told us
+    // nothing about whether the money landed -- the only thing this test
+    // cares about.
+    expect(rpc).toHaveBeenCalledWith("record_psp_topup", expect.anything());
     expect(sendReceiptForBusiness).not.toHaveBeenCalled();
   });
 });

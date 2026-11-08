@@ -58,10 +58,26 @@ async function statementData() {
   });
   rows.reverse(); // newest first for display
 
+  // Numbered documents, which the running balance above is not. A customer
+  // asking "can I have an invoice for that payment" was previously being
+  // pointed at a web page showing a balance.
+  const { data: invoiceRows } = await supabase
+    .from("invoices")
+    .select("number, description, amount_usd_minor, issued_at")
+    .eq("business_id", business.id)
+    .order("issued_at", { ascending: false })
+    .limit(24);
+
   return {
     business,
     balanceMinor: Number(balanceRow?.balance_usd_minor ?? 0),
     rows,
+    invoices: (invoiceRows ?? []) as {
+      number: string;
+      description: string;
+      amount_usd_minor: number;
+      issued_at: string;
+    }[],
   };
 }
 
@@ -77,6 +93,37 @@ export default async function StatementPage() {
         subtitle="Every top-up, ad spend, service fee, subscription, and refund — append-only and reconciled daily to the cent."
         stat={{ value: usd(balanceMinor), caption: "current balance" }}
       />
+
+      {data && data.invoices.length > 0 && (
+        <section className="mt-6 rounded-card border border-line bg-surface-raised p-5">
+          <div className="datalabel">invoices</div>
+          <p className="mt-2 text-sm text-ink-muted">
+            One numbered invoice for every payment you have made. Open any of
+            them to print or save as a PDF.
+          </p>
+          <ul className="mt-4 flex flex-col gap-2">
+            {data.invoices.map((inv) => (
+              <li key={inv.number} className="flex flex-wrap items-baseline gap-x-3 text-sm">
+                <Link
+                  href={`/invoice/${inv.number}`}
+                  className="font-mono text-accent hover:text-accent-bright"
+                >
+                  {inv.number}
+                </Link>
+                <span className="text-ink">{inv.description}</span>
+                <span className="font-mono text-ink-muted">{usd(inv.amount_usd_minor)}</span>
+                <span className="text-xs text-ink-faint">
+                  {new Date(inv.issued_at).toLocaleDateString("en-GB", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="mt-6 flex items-center justify-between">
         <div className="datalabel">full history</div>
