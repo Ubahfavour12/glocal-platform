@@ -17,27 +17,39 @@
 
 /* ---------- dark (the default, and the brand's home) ---------- */
 :root {
-  --surface: #0c0c0d;
-  --surface-raised: #141416;
-  --surface-overlay: #1c1c1f;
-  --skeleton: #26262b;
+  --surface: #07070a;
+  --surface-raised: #0f0f13;
+  --surface-overlay: #17171c;
+  --skeleton: #24242b;
   --card: #faf8f5;
   --card-muted: #f5f3ef;
 
-  --ink: #ededee;
-  --ink-muted: #9b9ba1;
-  --ink-faint: #5c5c63;
+  --ink: #f5f5f7;
+  --ink-muted: #a1a1aa;
+  /* Was #5c5c63 (about 3:1 on the surface). Faint text still has to be read. */
+  --ink-faint: #80808a;
   --ink-on-card: #17171a;
   --ink-on-card-muted: #6b6b70;
 
-  --accent: #b45309;
-  --accent-bright: #d97706;
-  --accent-soft: rgba(180, 83, 9, 0.13);
+  /* The brand orange itself, from the logo. Primary buttons carry dark ink on
+   * it (8:1) rather than white (2.6:1) — see .bg-accent.text-white below. */
+  --accent: #f58510;
+  --accent-bright: #ff9d3c;
+  --accent-soft: rgba(245, 133, 16, 0.13);
 
-  --positive: #4ade80;
-  --negative: #f87171;
-  --line: #26262a;
-  --line-soft: #1a1a1d;
+  --positive: #34d399;
+  --negative: #fb7185;
+  /* Hairlines are translucent white so they read the same on every surface. */
+  --line: rgba(255, 255, 255, 0.09);
+  --line-soft: rgba(255, 255, 255, 0.06);
+
+  --on-accent: #1a0b00;
+  --cta: linear-gradient(180deg, #ffa54d 0%, #f58510 55%, #e5730a 100%);
+  --cta-glow: 0 0 0 1px rgba(255, 190, 120, 0.35) inset, 0 10px 28px -8px rgba(245, 133, 16, 0.6);
+  --card-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0.012) 100%);
+  --card-edge: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --ambient: radial-gradient(45% 35% at 90% 0%, rgba(245, 133, 16, 0.1) 0%, transparent 70%),
+    radial-gradient(40% 30% at 20% 0%, rgba(99, 102, 241, 0.06) 0%, transparent 70%);
 }
 
 /* ---------- light (only when the system asks and nothing overrides) ---------- */
@@ -52,7 +64,7 @@
 
     --ink: #1b1714;
     --ink-muted: #63594f;
-    --ink-faint: #9a9086;
+    --ink-faint: #776c62;
     --ink-on-card: #1b1714;
     --ink-on-card-muted: #63594f;
 
@@ -66,6 +78,13 @@
     --negative: #b91c1c;
     --line: #e6e1da;
     --line-soft: #f0ece6;
+
+    --on-accent: #1a0b00;
+    --cta: linear-gradient(180deg, #ffa54d 0%, #f58510 55%, #e5730a 100%);
+    --cta-glow: 0 0 0 1px rgba(255, 190, 120, 0.45) inset, 0 8px 20px -10px rgba(194, 86, 8, 0.55);
+    --card-sheen: none;
+    --card-edge: 0 1px 2px rgba(27, 23, 20, 0.05), 0 10px 28px -18px rgba(27, 23, 20, 0.18);
+    --ambient: radial-gradient(45% 35% at 90% 0%, rgba(245, 133, 16, 0.08) 0%, transparent 70%);
   }
 }
 
@@ -80,7 +99,7 @@
 
   --ink: #1b1714;
   --ink-muted: #63594f;
-  --ink-faint: #9a9086;
+  --ink-faint: #776c62;
   --ink-on-card: #1b1714;
   --ink-on-card-muted: #63594f;
 
@@ -92,30 +111,49 @@
   --negative: #b91c1c;
   --line: #e6e1da;
   --line-soft: #f0ece6;
+
+  --on-accent: #1a0b00;
+  --cta: linear-gradient(180deg, #ffa54d 0%, #f58510 55%, #e5730a 100%);
+  --cta-glow: 0 0 0 1px rgba(255, 190, 120, 0.45) inset, 0 8px 20px -10px rgba(194, 86, 8, 0.55);
+  --card-sheen: none;
+  --card-edge: 0 1px 2px rgba(27, 23, 20, 0.05), 0 10px 28px -18px rgba(27, 23, 20, 0.18);
+  --ambient: radial-gradient(45% 35% at 90% 0%, rgba(245, 133, 16, 0.08) 0%, transparent 70%);
 }
 
 :root[data-theme="dark"] {
-  --surface: #0c0c0d;
-  --surface-raised: #141416;
-  --surface-overlay: #1c1c1f;
-  --skeleton: #26262b;
+  --surface: #07070a;
+  --surface-raised: #0f0f13;
+  --surface-overlay: #17171c;
+  --skeleton: #24242b;
   --card: #faf8f5;
   --card-muted: #f5f3ef;
 
-  --ink: #ededee;
-  --ink-muted: #9b9ba1;
-  --ink-faint: #5c5c63;
+  --ink: #f5f5f7;
+  --ink-muted: #a1a1aa;
+  /* Was #5c5c63 (about 3:1 on the surface). Faint text still has to be read. */
+  --ink-faint: #80808a;
   --ink-on-card: #17171a;
   --ink-on-card-muted: #6b6b70;
 
-  --accent: #b45309;
-  --accent-bright: #d97706;
-  --accent-soft: rgba(180, 83, 9, 0.13);
+  /* The brand orange itself, from the logo. Primary buttons carry dark ink on
+   * it (8:1) rather than white (2.6:1) — see .bg-accent.text-white below. */
+  --accent: #f58510;
+  --accent-bright: #ff9d3c;
+  --accent-soft: rgba(245, 133, 16, 0.13);
 
-  --positive: #4ade80;
-  --negative: #f87171;
-  --line: #26262a;
-  --line-soft: #1a1a1d;
+  --positive: #34d399;
+  --negative: #fb7185;
+  /* Hairlines are translucent white so they read the same on every surface. */
+  --line: rgba(255, 255, 255, 0.09);
+  --line-soft: rgba(255, 255, 255, 0.06);
+
+  --on-accent: #1a0b00;
+  --cta: linear-gradient(180deg, #ffa54d 0%, #f58510 55%, #e5730a 100%);
+  --cta-glow: 0 0 0 1px rgba(255, 190, 120, 0.35) inset, 0 10px 28px -8px rgba(245, 133, 16, 0.6);
+  --card-sheen: linear-gradient(180deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0.012) 100%);
+  --card-edge: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --ambient: radial-gradient(45% 35% at 90% 0%, rgba(245, 133, 16, 0.1) 0%, transparent 70%),
+    radial-gradient(40% 30% at 20% 0%, rgba(99, 102, 241, 0.06) 0%, transparent 70%);
 }
 
 @theme inline {
@@ -144,11 +182,12 @@
   --font-sans: var(--font-geist-sans), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 
-  --radius-card: 0.875rem;
+  --radius-card: 1.125rem;
 }
 
 body {
-  background: var(--surface);
+  background: var(--ambient) fixed, var(--surface);
+  font-variant-numeric: tabular-nums;
   color: var(--ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -164,8 +203,44 @@ body {
 }
 
 ::selection {
-  background: var(--accent);
-  color: #fff;
+  background: rgba(245, 133, 16, 0.35);
+  color: inherit;
+}
+
+/* ---------- 2027 surfaces ----------
+ * Primary buttons are written as `bg-accent ... text-white` in forty places.
+ * Rather than touch every one, the pair is restyled here: a luminous amber
+ * with dark ink and a soft glow. White on the brand orange fails contrast;
+ * dark ink on it passes at 8:1.
+ */
+.bg-accent.text-white {
+  background-image: var(--cta);
+  color: var(--on-accent);
+  font-weight: 600;
+  box-shadow: var(--cta-glow);
+}
+.bg-accent.text-white:hover {
+  filter: brightness(1.06);
+}
+
+/* Raised cards get a faint top-lit sheen and a hairline highlight. */
+.rounded-card.bg-surface-raised,
+.rounded-card.bg-surface-overlay {
+  background-image: var(--card-sheen);
+  box-shadow: var(--card-edge);
+}
+
+/* Every press is acknowledged. In the base layer, so a component's own
+ * transition or transform utilities still win where they are set. */
+@layer base {
+  button {
+    transition: transform 0.12s ease, filter 0.12s ease;
+  }
+  button:not(:disabled):active,
+  a.rounded-lg:active,
+  a.rounded-card:active {
+    transform: scale(0.98);
+  }
 }
 
 /* Keyboard focus ring — visible only for keyboard users, never on mouse click.
