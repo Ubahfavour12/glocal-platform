@@ -18,8 +18,6 @@
  * exactly the day it is needed.
  */
 
-import { createHash } from "node:crypto";
-
 /**
  * Replace the parts of a message that differ between occurrences of the same
  * fault: ids, numbers, quoted values, URLs, hex blobs.
@@ -77,7 +75,37 @@ export function fingerprint(facts: ErrorFacts): string {
   const basis = [normaliseMessage(facts.message), facts.route ?? "", facts.routeType ?? ""].join(
     "|",
   );
-  return createHash("sha256").update(basis).digest("hex").slice(0, 32);
+  return fnv1a128(basis);
+}
+
+/**
+ * A grouping key, NOT a security primitive, and the distinction decides the
+ * implementation.
+ *
+ * This started as sha256 from `node:crypto`, which broke the build: this
+ * module is reached from `instrumentation.ts`, which Next loads in the Edge
+ * runtime as well as Node, and `node:crypto` does not exist there. An error
+ * thrown in the proxy -- edge code -- would have failed inside the error
+ * reporter itself.
+ *
+ * Nothing here needs to resist an attacker. It needs two identical faults to
+ * land on the same key and two different ones not to, over a few thousand
+ * short strings. FNV-1a, run twice with different offsets for 128 bits, is
+ * ample for that and runs anywhere.
+ */
+function fnv1a128(input: string): string {
+  const hash = (offset: number): string => {
+    let h = offset >>> 0;
+    for (let i = 0; i < input.length; i += 1) {
+      h ^= input.charCodeAt(i);
+      // The FNV prime, via shifts: a plain multiply overflows 32-bit maths.
+      h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+    }
+    return h.toString(16).padStart(8, "0");
+  };
+  // Four independent passes, so the key is 32 hex characters as before and a
+  // chance collision needs four simultaneous ones.
+  return [hash(0x811c9dc5), hash(0x01000193), hash(0xdeadbeef), hash(0x9e3779b9)].join("");
 }
 
 /** A stack trimmed to the frames that are ours, which is where the bug is. */

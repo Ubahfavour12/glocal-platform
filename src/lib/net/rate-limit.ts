@@ -43,6 +43,15 @@ export const LIMITS = {
   studioSave: { max: 60, windowSeconds: 3600 },
   /** Opening a checkout. Creates a PSP transaction each time. */
   checkout: { max: 20, windowSeconds: 3600 },
+  /**
+   * Guesses at the founder console's second factor.
+   *
+   * Unlike every other limit here, this one is not protecting a cost -- it is
+   * the thing standing between a guessed six-digit code and every customer's
+   * wallet. Tight on purpose, and the caller treats an UNAVAILABLE limiter as
+   * a refusal rather than letting it fail open like the others.
+   */
+  opsUnlock: { max: 10, windowSeconds: 900 },
 } as const satisfies Record<string, Limit>;
 
 export type LimitName = keyof typeof LIMITS;

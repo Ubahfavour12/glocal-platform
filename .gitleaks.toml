@@ -74,4 +74,12 @@ regexes = [
   '''monnify_test_secret''',
   '''sk_(?:live|test)_(?:fake|dummy|example|stub)''',
   '''placeholder|example\.test''',
+  # The jwt.io sample token, used in errors.test.ts to prove that redaction
+  # strips a JWT. The test now assembles it from parts so no new literal
+  # exists, but it IS in commit 4dbf25a and gitleaks scans history, so the
+  # finding would recur forever. Allowlisted as the exact signature fragment
+  # rather than by muting the jwt rule: a scanner taught to ignore JWTs is
+  # not a scanner, and this repository's worst-case leak -- the Supabase
+  # service_role key -- is itself a JWT.
+  '''dBjftJeZ4CVPmB92K27uhb''',
 ]

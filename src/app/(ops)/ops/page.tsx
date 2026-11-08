@@ -1,8 +1,11 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { microsToUsdMinor } from "@/lib/ai/cost";
-import { configuredFounders, isFounder } from "@/lib/admin/access";
+import { checkOpsGate } from "@/lib/admin/gate";
+import { funnel, walletFloatUsdMinor, worstDrop } from "@/lib/admin/funnel";
+import { subscriptionPriceUsdMinor } from "@/lib/billing/subscribe";
+import { isTierId } from "@/lib/billing/subscription";
 import {
   EXCLUDED_FROM_MARGIN,
   economicsTotals,
@@ -61,12 +64,19 @@ const TONE: Record<string, string> = {
  * useful question is "who is stuck?", and a paying customer with money who is
  * somehow not running ads is the most expensive row on the screen.
  */
-export default async function AdminPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!isFounder(user?.email, configuredFounders())) notFound();
+export default async function OpsPage() {
+  // TWO LOCKS, and the second one is the new part. The magic-link session
+  // proves which email signed in; the authenticator code proves whoever is
+  // here also holds the phone. Until that second lock existed, a compromised
+  // inbox was a compromised customer book.
+  const gate = await checkOpsGate();
+  if (!gate.ok) {
+    // Someone allowlisted who simply has not entered a code yet gets the
+    // prompt. Everybody else gets a 404 and learns nothing -- not that the
+    // page exists, not that they were close.
+    if (gate.reason === "needs_code") redirect("/ops/unlock");
+    notFound();
+  }
 
   const svc = createServiceClient();
 
@@ -82,6 +92,9 @@ export default async function AdminPage() {
     walletIdRes,
     llmRes,
     feeRes,
+    progressRes,
+    adAcctRes,
+    socialRes2,
     errorRes,
   ] =
     await Promise.all([
@@ -118,6 +131,9 @@ export default async function AdminPage() {
     // Unhandled server errors, grouped. Until this existed, a production
     // exception went to stdout and no further -- the first you heard of one
     // was a customer telling you.
+    svc.from("businesses").select("id, category, destination, last_run_at"),
+    svc.from("ad_accounts").select("business_id"),
+    svc.from("social_connections").select("business_id").eq("status", "active"),
     svc
       .from("error_events")
       .select("fingerprint, message, route, route_type, seen_count, first_seen_at, last_seen_at")
@@ -232,16 +248,134 @@ export default async function AdminPage() {
     processingFeeUsdMinor: processingFee.get(r.businessId) ?? 0,
     infraShareUsdMinor: infraEach,
   }));
+  /*
+   * WHERE EVERYONE STOPS.
+   *
+   * The console could answer "who is stuck?" a row at a time and could not
+   * answer "where does everyone get stuck?" at all. Those are different
+   * questions and only the second says what to build next -- 315 plans
+   * written, 544 compliance checks passed, zero ads launched, all stopping at
+   * the same step.
+   */
+  const withAdAccount = new Set(
+    (adAcctRes.data ?? []).map((r) => String(r.business_id)),
+  );
+  const withSocial = new Set((socialRes2.data ?? []).map((r) => String(r.business_id)));
+
+  const fundedEver = new Set<string>();
+  for (const [bizId, amount] of markup) if (amount > 0) fundedEver.add(bizId);
+  for (const r of rows) if ((r.balanceUsdMinor ?? 0) > 0) fundedEver.add(r.businessId);
+  const launchedEver = new Set(
+    (adsRes.data ?? []).map((a) => String((a as { business_id?: string }).business_id ?? "")),
+  );
+  const steps = funnel(
+    (progressRes.data ?? []).map((b) => {
+      const id = String(b.id);
+      return {
+        businessId: id,
+        onboarded: Boolean(b.category) && Boolean(b.destination),
+        connected: withAdAccount.has(id) || withSocial.has(id),
+        funded: fundedEver.has(id),
+        launched: launchedEver.has(id),
+      };
+    }),
+  );
+  const wall = worstDrop(steps);
+
+  // Money being held that is NOT ours. Shown apart from revenue and never
+  // added to it: treating customer float as income is the one accounting
+  // mistake here that would actually hurt.
+  const floatUsdMinor = walletFloatUsdMinor([...balances.values()]);
+
+  // Monthly recurring revenue, from the plans actually active right now.
+  const mrrUsdMinor = [...subs.values()]
+    .filter((x) => x.active && isTierId(x.tier))
+    .reduce((t, x) => t + subscriptionPriceUsdMinor(x.tier as "spark" | "growth" | "scale"), 0);
+
+  // Did the agent actually run last night? Nothing showed this before.
+  const lastRuns = (progressRes.data ?? [])
+    .map((b) => (b.last_run_at ? Date.parse(String(b.last_run_at)) : NaN))
+    .filter((n) => Number.isFinite(n));
+  const newestRun = lastRuns.length > 0 ? new Date(Math.max(...lastRuns)).toISOString() : null;
+  const stalestRun = lastRuns.length > 0 ? new Date(Math.min(...lastRuns)).toISOString() : null;
+
   const margins = rankByMargin(costRows).filter((m) => m.costUsdMinor > 0 || m.revenueUsdMinor > 0);
   const econ = economicsTotals(costRows);
 
   return (
     <div className="mx-auto max-w-6xl">
       <PageHeader
-        label="founder console"
+        label={`founder console · ${gate.email}`}
         title="Everyone, everything"
         subtitle="Every customer, wallet and error in one view. Ordered by who needs attention."
       />
+
+      {/*
+        * FIRST ON THE PAGE, because it is the only question that matters
+        * right now. Everything below describes customers you have; this says
+        * where they stop.
+        */}
+      <div className="mt-6 rounded-card border border-line bg-surface-raised p-5">
+        <div className="datalabel">where customers stop</div>
+        <div className="mt-4 flex flex-col gap-2">
+          {steps.map((step) => {
+            const widest = steps[0].count || 1;
+            const pct = Math.round((step.count / widest) * 100);
+            const isWall = wall?.key === step.key;
+            return (
+              <div key={step.key} className="flex items-center gap-3">
+                <span className="w-44 shrink-0 text-sm text-ink-muted">{step.label}</span>
+                <span className="h-5 flex-1 overflow-hidden rounded bg-surface-overlay">
+                  <span
+                    className={`block h-full rounded ${isWall ? "bg-negative" : "bg-accent"}`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </span>
+                <span className="w-10 shrink-0 text-right font-mono text-sm text-ink">
+                  {step.count}
+                </span>
+                <span className="w-24 shrink-0 text-right text-xs text-ink-faint">
+                  {step.droppedFromPrevious > 0 ? `−${step.droppedFromPrevious} here` : ""}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        {wall && (
+          <p className="mt-3 text-sm text-ink-muted">
+            The biggest loss is at <span className="text-ink">{wall.label.toLowerCase()}</span>
+            {" — "}
+            {wall.droppedFromPrevious} of {steps[0].count} never get past it. That is the thing
+            to fix before anything else on this page.
+          </p>
+        )}
+      </div>
+
+      <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[
+          /*
+           * Float is NOT revenue and is never added to it. Customer wallet
+           * balances are prepaid advertising money, refundable on request,
+           * and treating them as income is the one accounting mistake here
+           * that would genuinely hurt.
+           */
+          { k: "MRR", v: usd(mrrUsdMinor) },
+          { k: "Customer float (not ours)", v: usd(floatUsdMinor) },
+          {
+            k: "Agent last ran",
+            v: newestRun ? when(newestRun) : "never",
+          },
+          {
+            k: "Longest unserved",
+            v: stalestRun ? when(stalestRun) : "never",
+          },
+        ].map((s3) => (
+          <div key={s3.k} className="rounded-card border border-line bg-surface-raised px-4 py-3">
+            <div className="datalabel">{s3.k}</div>
+            <div className="mt-0.5 text-lg font-semibold text-ink">{s3.v}</div>
+          </div>
+        ))}
+      </div>
 
       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
