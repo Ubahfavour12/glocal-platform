@@ -26,23 +26,29 @@ export const ADMIN_COOKIE = "glocal-ops";
 export const ADMIN_SESSION_MS = 8 * 60 * 60 * 1000;
 
 /**
- * The key the cookie is signed with.
+ * The signing key is PASSED IN, not read here.
  *
- * Falls back to nothing, never to a default. A hardcoded development secret
- * is the kind of thing that reaches production and makes every signature
- * forgeable by anyone who has read the repository.
+ * It used to come from process.env inside this file, which quietly made the
+ * module depend on one specific source. Now it comes from
+ * `loadOpsCredentials`, which prefers the database and falls back to the
+ * environment — so the console can be enrolled from a phone instead of
+ * requiring a terminal and the repository.
+ *
+ * An empty key is treated as no key, never as a default. A hardcoded
+ * development secret is the kind of thing that reaches production and makes
+ * every signature forgeable by anyone who has read the repository.
  */
-function signingKey(): string | null {
-  return process.env.ADMIN_SESSION_SECRET?.trim() || null;
-}
-
 function sign(payload: string, key: string): string {
   return createHmac("sha256", key).update(payload).digest("base64url");
 }
 
 /** Mint a cookie value for an email, valid for ADMIN_SESSION_MS. */
-export function issueAdminSession(email: string, nowMs: number = Date.now()): string | null {
-  const key = signingKey();
+export function issueAdminSession(
+  email: string,
+  signingSecret: string | null,
+  nowMs: number = Date.now(),
+): string | null {
+  const key = signingSecret?.trim() || null;
   if (!key) return null;
   const payload = `${Buffer.from(email).toString("base64url")}.${nowMs + ADMIN_SESSION_MS}`;
   return `${payload}.${sign(payload, key)}`;
@@ -57,9 +63,10 @@ export function issueAdminSession(email: string, nowMs: number = Date.now()): st
  */
 export function readAdminSession(
   cookieValue: string | undefined,
+  signingSecret: string | null,
   nowMs: number = Date.now(),
 ): string | null {
-  const key = signingKey();
+  const key = signingSecret?.trim() || null;
   if (!key || !cookieValue) return null;
 
   const parts = cookieValue.split(".");
@@ -83,9 +90,4 @@ export function readAdminSession(
   } catch {
     return null;
   }
-}
-
-/** Is the console able to be opened at all, or is it unconfigured? */
-export function adminSessionConfigured(): boolean {
-  return signingKey() !== null;
 }

@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { configuredFounders, isFounder } from "@/lib/admin/access";
 import { ADMIN_COOKIE, ADMIN_SESSION_MS, issueAdminSession } from "@/lib/admin/session";
-import { totpConfigured, verifyTotp } from "@/lib/admin/totp";
+import { verifyTotp } from "@/lib/admin/totp";
+import { loadOpsCredentials } from "@/lib/admin/credentials";
 import { checkRateLimit } from "@/lib/net/rate-limit";
 
 /**
@@ -20,7 +21,8 @@ import { checkRateLimit } from "@/lib/net/rate-limit";
 const DENIED = NextResponse.json({ error: "that did not work" }, { status: 401 });
 
 export async function POST(req: NextRequest) {
-  if (!totpConfigured()) return DENIED;
+  const creds = await loadOpsCredentials();
+  if (!creds) return DENIED;
 
   const supabase = await createClient();
   const {
@@ -42,11 +44,11 @@ export async function POST(req: NextRequest) {
   }
 
   const body = (await req.json().catch(() => null)) as { code?: string } | null;
-  const ok = verifyTotp(process.env.ADMIN_TOTP_SECRET ?? "", String(body?.code ?? ""));
+  const ok = verifyTotp(creds.totpSecret, String(body?.code ?? ""));
   await record(user.id, user.email, ok ? "ops_unlock_success" : "ops_unlock_failed");
   if (!ok) return DENIED;
 
-  const value = issueAdminSession(user.email);
+  const value = issueAdminSession(user.email, creds.sessionSecret);
   if (!value) return DENIED;
 
   const res = NextResponse.json({ ok: true });

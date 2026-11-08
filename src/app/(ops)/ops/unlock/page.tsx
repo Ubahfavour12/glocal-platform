@@ -1,8 +1,7 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { configuredFounders, isFounder } from "@/lib/admin/access";
-import { totpConfigured } from "@/lib/admin/totp";
-import { adminSessionConfigured } from "@/lib/admin/session";
+import { opsEnrolled } from "@/lib/admin/credentials";
 import { UnlockForm } from "@/components/ops/UnlockForm";
 
 export const dynamic = "force-dynamic";
@@ -16,13 +15,16 @@ export const metadata = { title: "Ops" };
  * gets this far and no further, which is the entire reason it exists.
  */
 export default async function UnlockPage() {
-  if (!totpConfigured() || !adminSessionConfigured()) notFound();
-
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user?.email || !isFounder(user.email, configuredFounders())) notFound();
+
+  // Nothing to type a code against yet. Send them to set one up rather than
+  // showing a box they cannot possibly answer -- the dead end the
+  // environment-variable-only version created the first time it was needed.
+  if (!(await opsEnrolled())) redirect("/ops/enrol");
 
   return (
     <div className="mx-auto max-w-sm pt-16">

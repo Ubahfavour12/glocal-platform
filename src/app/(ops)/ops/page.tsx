@@ -75,6 +75,7 @@ export default async function OpsPage() {
     // prompt. Everybody else gets a 404 and learns nothing -- not that the
     // page exists, not that they were close.
     if (gate.reason === "needs_code") redirect("/ops/unlock");
+    if (gate.reason === "needs_enrolment") redirect("/ops/enrol");
     notFound();
   }
 

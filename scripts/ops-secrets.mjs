@@ -2,6 +2,16 @@
 /**
  * Generate the two secrets the founder console needs.
  *
+ * NO LONGER THE USUAL ROUTE. Enrolment happens in the browser now, at
+ * /ops/enrol, from whatever device is to hand -- this script existed when the
+ * seed could only live in an environment variable, and that turned out to
+ * mean "you can only set up security from one specific laptop", which is how
+ * the console ended up unusable the first time it was wanted.
+ *
+ * Kept for the case it is still good for: pre-seeding the environment
+ * variables deliberately, or re-enrolling after a reset without using the
+ * page.
+ *
  * Run LOCALLY, paste the values into Vercel, and close the terminal. They are
  * printed here and stored nowhere: not in the repo, not in a file, not in any
  * chat. That is the point -- a TOTP secret that has been pasted into a
