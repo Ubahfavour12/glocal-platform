@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { GlocalMark } from "@/components/brand/Logo";
+import { Dot, Empty, Event, Panel, Pill, Stat, type Tone } from "@/components/ops/Console";
 import { createServiceClient } from "@/lib/supabase/server";
 import { microsToUsdMinor } from "@/lib/ai/cost";
 import { checkOpsGate } from "@/lib/admin/gate";
@@ -25,7 +26,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Founder console" };
 
 const usd = (minor: number) =>
-  `$${(minor / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  `${minor < 0 ? "−" : ""}$${(Math.abs(minor) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const when = (iso: string | null) => {
   if (!iso) return "never";
@@ -38,18 +39,16 @@ const when = (iso: string | null) => {
 /** Open far longer than a refund should take. Module scope, like `when`, so it
  *  is not an impure call inside the render body. */
 const STUCK_AFTER_DAYS = 3;
+
+/** Hours since an instant. Module scope for the same reason as isStuck. */
+function hoursSince(iso: string | null): number {
+  return iso ? (Date.now() - Date.parse(iso)) / 3_600_000 : Infinity;
+}
 function isStuck(status: string, requestedAt: string): boolean {
   if (status !== "requested") return false;
   return Date.now() - new Date(requestedAt).getTime() > STUCK_AFTER_DAYS * 86_400_000;
 }
 
-const TONE: Record<string, string> = {
-  spending: "text-positive",
-  ready: "text-accent-bright",
-  empty_wallet: "text-negative",
-  free: "text-ink-faint",
-  onboarding: "text-ink-faint",
-};
 
 /**
  * The founder console — every customer, wallet, plan and error in one view.
@@ -303,305 +302,446 @@ export default async function OpsPage() {
   const margins = rankByMargin(costRows).filter((m) => m.costUsdMinor > 0 || m.revenueUsdMinor > 0);
   const econ = economicsTotals(costRows);
 
+  // ---- read-outs the panels share ----
+  const widest = steps[0]?.count || 1;
+  const errors = errorRes.data ?? [];
+  const stuckWithdrawals = withdrawals.filter((w) => isStuck(String(w.status), w.requested_at as string));
+  const openWithdrawals = withdrawals.filter((w) => String(w.status) === "requested");
+  const runHoursAgo = hoursSince(newestRun);
+  const agentTone: Tone = runHoursAgo <= 26 ? "positive" : runHoursAgo <= 50 ? "accent" : "negative";
+  const allClear = errors.length === 0 && stuckWithdrawals.length === 0 && agentTone === "positive";
+  const costParts = [
+    { k: "Renders", v: econ.renderCostUsdMinor, c: "bg-[#f58510]" },
+    { k: "LLM", v: econ.llmCostUsdMinor, c: "bg-[#a5b4fc]" },
+    { k: "Fees", v: econ.processingFeeUsdMinor, c: "bg-[#fb7185]" },
+    { k: "Infrastructure", v: econ.infraShareUsdMinor, c: "bg-[#80808a]" },
+  ];
+  const costTotal = costParts.reduce((a, b) => a + b.v, 0) || 1;
+  const maxWallet = Math.max(1, ...ranked.map((r) => r.balanceUsdMinor));
+  const HEALTH_TONE: Record<string, Tone> = {
+    spending: "positive",
+    ready: "accent",
+    empty_wallet: "negative",
+    free: "neutral",
+    onboarding: "indigo",
+  };
+
   return (
-    <div className="mx-auto max-w-6xl">
-      <PageHeader
-        label={`founder console · ${gate.email}`}
-        title="Everyone, everything"
-        subtitle="Every customer, wallet and error in one view. Ordered by who needs attention."
-      />
-
-      {/*
-        * FIRST ON THE PAGE, because it is the only question that matters
-        * right now. Everything below describes customers you have; this says
-        * where they stop.
-        */}
-      <div className="mt-6 rounded-card border border-line bg-surface-raised p-5">
-        <div className="datalabel">where customers stop</div>
-        <div className="mt-4 flex flex-col gap-2">
-          {steps.map((step) => {
-            const widest = steps[0].count || 1;
-            const pct = Math.round((step.count / widest) * 100);
-            const isWall = wall?.key === step.key;
-            return (
-              <div key={step.key} className="flex items-center gap-3">
-                <span className="w-44 shrink-0 text-sm text-ink-muted">{step.label}</span>
-                <span className="h-5 flex-1 overflow-hidden rounded bg-surface-overlay">
-                  <span
-                    className={`block h-full rounded ${isWall ? "bg-negative" : "bg-accent"}`}
-                    style={{ width: `${pct}%` }}
-                  />
-                </span>
-                <span className="w-10 shrink-0 text-right font-mono text-sm text-ink">
-                  {step.count}
-                </span>
-                <span className="w-24 shrink-0 text-right text-xs text-ink-faint">
-                  {step.droppedFromPrevious > 0 ? `−${step.droppedFromPrevious} here` : ""}
-                </span>
-              </div>
-            );
-          })}
+    <div className="mx-auto max-w-7xl">
+      {/* ---- command bar ---- */}
+      <div className="gl-glass sticky top-3 z-20 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-2xl border border-line px-4 py-3 shadow-[0_20px_50px_-24px_rgba(0,0,0,0.9)]">
+        <div className="flex items-center gap-2.5">
+          <GlocalMark className="h-6 w-6 shrink-0 text-ink" title="Glocal" />
+          <span className="text-[15px] font-semibold tracking-[-0.02em]">
+            glocal<span className="text-accent-bright">.</span>
+          </span>
+          <span className="rounded-md border border-[var(--lit-edge)] bg-accent-soft px-1.5 py-0.5 font-mono text-[10px] tracking-[0.14em] text-accent-bright">
+            OPS
+          </span>
         </div>
-        {wall && (
-          <p className="mt-3 text-sm text-ink-muted">
-            The biggest loss is at <span className="text-ink">{wall.label.toLowerCase()}</span>
-            {" — "}
-            {wall.droppedFromPrevious} of {steps[0].count} never get past it. That is the thing
-            to fix before anything else on this page.
+        <div className="hidden h-5 w-px bg-line sm:block" />
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 font-mono text-[11px] tracking-[0.04em] text-ink-muted">
+          <span className="inline-flex items-center gap-1.5">
+            <Dot tone={agentTone} pulse={agentTone !== "positive"} />
+            agent {newestRun ? when(newestRun) : "never ran"}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <Dot tone={errors.length ? "negative" : "positive"} pulse={errors.length > 0} />
+            {errors.length} {errors.length === 1 ? "fault" : "faults"}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <Dot tone={stuckWithdrawals.length ? "negative" : openWithdrawals.length ? "accent" : "positive"} />
+            {openWithdrawals.length} refunds open
+          </span>
+        </div>
+        <div className="ml-auto flex items-center gap-2 font-mono text-[11px] text-ink-faint">
+          <span className="gl-orb h-1.5 w-1.5 rounded-full" />
+          <span className="hidden sm:inline">2FA verified ·</span> {gate.email}
+        </div>
+      </div>
+
+      {/* ---- masthead ---- */}
+      <div className="mt-8 flex flex-wrap items-end justify-between gap-6">
+        <div>
+          <div className="ops-label">founder console · live read across every customer</div>
+          <h1 className="gl-title mt-2 text-[34px] font-semibold leading-[1.05] tracking-[-0.045em] sm:text-[44px]">
+            Mission control
+          </h1>
+          <p className="mt-2 max-w-[62ch] text-sm leading-relaxed text-ink-muted">
+            Every customer, wallet and fault in one view, ordered by what needs you first.
           </p>
-        )}
+        </div>
+        <Pill tone={allClear ? "positive" : "accent"}>
+          {allClear ? "ALL SYSTEMS NOMINAL" : "ATTENTION NEEDED"}
+        </Pill>
       </div>
 
+      {/* ---- headline read-outs ---- */}
       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[
-          /*
-           * Float is NOT revenue and is never added to it. Customer wallet
-           * balances are prepaid advertising money, refundable on request,
-           * and treating them as income is the one accounting mistake here
-           * that would genuinely hurt.
-           */
-          { k: "MRR", v: usd(mrrUsdMinor) },
-          { k: "Customer float (not ours)", v: usd(floatUsdMinor) },
-          {
-            k: "Agent last ran",
-            v: newestRun ? when(newestRun) : "never",
-          },
-          {
-            k: "Longest unserved",
-            v: stalestRun ? when(stalestRun) : "never",
-          },
-        ].map((s3) => (
-          <div key={s3.k} className="rounded-card border border-line bg-surface-raised px-4 py-3">
-            <div className="datalabel">{s3.k}</div>
-            <div className="mt-0.5 text-lg font-semibold text-ink">{s3.v}</div>
-          </div>
-        ))}
+        <Stat label="MRR" value={usd(mrrUsdMinor)} note={`${t.paying} paying`} tone="accent" />
+        <Stat
+          label="Customers"
+          value={String(t.customers)}
+          note={`${t.running} running ads`}
+          tone="indigo"
+          bar={t.customers ? t.running / t.customers : 0}
+        />
+        <Stat
+          label="Customer float"
+          value={usd(floatUsdMinor)}
+          note="Held for customers. Not revenue."
+          tone="neutral"
+        />
+        <Stat
+          label="Revenue − costs"
+          value={usd(econ.marginUsdMinor)}
+          note={econ.underwaterCount ? `${econ.underwaterCount} customers underwater` : "nobody underwater"}
+          tone={econ.marginUsdMinor < 0 || econ.underwaterCount ? "negative" : "positive"}
+        />
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[
-          { k: "Customers", v: String(t.customers) },
-          { k: "Paying", v: String(t.paying) },
-          { k: "Running ads", v: String(t.running) },
-          { k: "Customer money held", v: usd(t.walletUsdMinor) },
-        ].map((s) => (
-          <div key={s.k} className="rounded-card border border-line bg-surface-raised p-4">
-            <div className="datalabel">{s.k}</div>
-            <div className="mt-1 text-2xl font-semibold tracking-tight text-ink">{s.v}</div>
-          </div>
-        ))}
-      </div>
-      <p className="mt-2 text-xs text-ink-faint">
-        &ldquo;Customer money held&rdquo; is unspent wallet balance — money owed back, not revenue.
-      </p>
-
-      <div className="mt-6 overflow-x-auto rounded-card border border-line bg-surface-raised">
-        <table className="w-full min-w-[46rem] text-left text-sm">
-          <thead className="border-b border-line text-ink-faint">
-            <tr>
-              {["Business", "State", "Plan", "Wallet", "Budget/day", "Live ads", "Last active"].map(
-                (h) => (
-                  <th key={h} className="px-4 py-3 text-xs font-medium uppercase tracking-wide">
-                    {h}
-                  </th>
-                ),
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {ranked.map((r) => {
-              const h = health(r);
+      {/* ---- funnel + system ---- */}
+      <div className="mt-4 grid gap-4 lg:grid-cols-[1.55fr_1fr]">
+        <Panel
+          label="conversion · where customers stop"
+          title={wall ? `The wall is at ${wall.label.toLowerCase()}` : "Nobody has started yet"}
+          aside={wall ? <Pill tone="negative">−{wall.droppedFromPrevious} lost here</Pill> : undefined}
+        >
+          <div className="flex flex-col gap-3">
+            {steps.map((step, i) => {
+              const pct = Math.round((step.count / widest) * 100);
+              const isWall = wall?.key === step.key;
               return (
-                <tr key={r.businessId} className="border-b border-line/50 last:border-0">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-ink">{r.name}</div>
-                    <div className="text-xs text-ink-faint">{r.ownerEmail ?? "unknown email"}</div>
-                  </td>
-                  <td className={`px-4 py-3 text-xs font-medium ${TONE[h]}`}>{HEALTH_LABEL[h]}</td>
-                  <td className="px-4 py-3 text-ink-muted">{r.plan}</td>
-                  <td className="px-4 py-3 text-ink-muted">{usd(r.balanceUsdMinor)}</td>
-                  <td className="px-4 py-3 text-ink-muted">{usd(r.dailyBudgetUsdMinor)}</td>
-                  <td className="px-4 py-3 text-ink-muted">{r.liveAds}</td>
-                  <td className="px-4 py-3 text-ink-faint">{when(r.lastActivityAt)}</td>
-                </tr>
+                <div key={step.key}>
+                  <div className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="flex items-center gap-2.5 text-ink-muted">
+                      <span className="font-mono text-[11px] text-ink-faint">{String(i + 1).padStart(2, "0")}</span>
+                      <span className={isWall ? "text-ink" : ""}>{step.label}</span>
+                    </span>
+                    <span className="font-mono text-ink">
+                      {step.count}
+                      <span className="ml-2 text-[11px] text-ink-faint">{pct}%</span>
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-surface-overlay">
+                    <div
+                      className={`h-full rounded-full ${
+                        isWall
+                          ? "ops-scan bg-gradient-to-r from-[#e11d48] to-[#fb7185] shadow-[0_0_14px_rgba(251,113,133,0.7)]"
+                          : "bg-gradient-to-r from-[#e5730a] to-[#ffa54d] shadow-[0_0_12px_rgba(245,133,16,0.55)]"
+                      }`}
+                      style={{ width: `${Math.max(pct, step.count ? 2 : 0)}%` }}
+                    />
+                  </div>
+                </div>
               );
             })}
-            {ranked.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-ink-faint">
-                  No businesses yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+          </div>
+          {wall && (
+            <p className="mt-4 text-sm leading-relaxed text-ink-muted">
+              {wall.droppedFromPrevious} of {steps[0].count} never get past{" "}
+              <span className="text-ink">{wall.label.toLowerCase()}</span>. Fix this before anything
+              else on the page.
+            </p>
+          )}
+        </Panel>
+
+        <Panel label="systems" title="Is everything running?">
+          <ul className="flex flex-col divide-y divide-[var(--line-soft)]">
+            {[
+              {
+                k: "Nightly agent",
+                v: newestRun ? `ran ${when(newestRun)}` : "never ran",
+                tone: agentTone,
+              },
+              {
+                k: "Longest unserved",
+                v: stalestRun ? when(stalestRun) : "nobody yet",
+                tone: (stalestRun && hoursSince(stalestRun) > 50
+                  ? "negative"
+                  : "positive") as Tone,
+              },
+              {
+                k: "Server faults",
+                v: errors.length ? `${errors.length} distinct` : "none",
+                tone: (errors.length ? "negative" : "positive") as Tone,
+              },
+              {
+                k: "Refunds",
+                v: stuckWithdrawals.length
+                  ? `${stuckWithdrawals.length} stuck`
+                  : openWithdrawals.length
+                    ? `${openWithdrawals.length} in flight`
+                    : "none open",
+                tone: (stuckWithdrawals.length ? "negative" : openWithdrawals.length ? "accent" : "positive") as Tone,
+              },
+              {
+                k: "Money held",
+                v: usd(t.walletUsdMinor),
+                tone: "neutral" as Tone,
+              },
+            ].map((row) => (
+              <li key={row.k} className="flex items-center justify-between gap-3 py-2.5">
+                <span className="flex items-center gap-2.5 text-sm text-ink-muted">
+                  <Dot tone={row.tone} pulse={row.tone === "negative"} />
+                  {row.k}
+                </span>
+                <span className="font-mono text-sm text-ink">{row.v}</span>
+              </li>
+            ))}
+          </ul>
+        </Panel>
       </div>
 
-      <div className="mt-6 rounded-card border border-line bg-surface-raised p-5">
-        <div className="datalabel">what each customer costs to serve</div>
-        <p className="mt-2 text-sm text-ink-muted">
-          Four cost lines, kept apart because each has a different lever: renders
-          move with the tier cap, LLM with the model, fees with the payment rail,
-          and infrastructure with nothing at all. Worst first.
-        </p>
-        <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3">
-          {[
-            { k: "Revenue", v: usd(econ.revenueUsdMinor) },
-            { k: "Cost to serve", v: usd(econ.costUsdMinor) },
-            /*
-             * NOT "Margin". This figure is revenue minus the four costs below
-             * and nothing else -- it is a contribution line, not profit, and
-             * the label has to stop someone reading it as the latter. The
-             * previous version said "Margin" over a number that counted only
-             * renders.
-             */
-            { k: "Revenue − these costs", v: usd(econ.marginUsdMinor) },
-            { k: "Renders", v: usd(econ.renderCostUsdMinor) },
-            { k: "LLM", v: usd(econ.llmCostUsdMinor) },
-            { k: "Processing fees", v: usd(econ.processingFeeUsdMinor) },
-            { k: "Infrastructure", v: usd(econ.infraShareUsdMinor) },
-            { k: "Underwater", v: String(econ.underwaterCount) },
-          ].map((s2) => (
-            <div key={s2.k}>
-              <div className="datalabel">{s2.k}</div>
-              <div className="mt-0.5 text-lg font-semibold text-ink">{s2.v}</div>
+      {/* ---- customers ---- */}
+      <Panel
+        className="mt-4"
+        label="customers · ordered by who needs you"
+        title={`${t.customers} businesses`}
+        aside={
+          <div className="flex flex-wrap gap-1.5">
+            <Pill tone="positive">{t.running} spending</Pill>
+            <Pill tone="accent">{t.paying} paying</Pill>
+          </div>
+        }
+      >
+        <div className="-mx-5 overflow-x-auto sm:-mx-6">
+          <table className="w-full min-w-[52rem] text-left text-sm">
+            <thead>
+              <tr className="border-y border-line-soft">
+                {["Business", "State", "Plan", "Wallet", "Budget/day", "Live ads", "Last active"].map((h) => (
+                  <th key={h} className="ops-label px-5 py-2.5 font-normal sm:px-6">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {ranked.map((r) => {
+                const h = health(r);
+                return (
+                  <tr
+                    key={r.businessId}
+                    className="border-b border-line-soft transition-colors last:border-0 hover:bg-[rgba(255,255,255,0.025)]"
+                  >
+                    <td className="px-5 py-3 sm:px-6">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface-overlay font-mono text-xs text-ink-muted">
+                          {r.name.slice(0, 1).toUpperCase()}
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate font-medium text-ink">{r.name}</span>
+                          <span className="block truncate font-mono text-[11px] text-ink-faint">
+                            {r.ownerEmail ?? "unknown email"}
+                          </span>
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 sm:px-6">
+                      <Pill tone={HEALTH_TONE[h] ?? "neutral"}>{HEALTH_LABEL[h]}</Pill>
+                    </td>
+                    <td className="px-5 py-3 font-mono text-xs uppercase tracking-[0.08em] text-ink-muted sm:px-6">
+                      {r.plan}
+                    </td>
+                    <td className="px-5 py-3 sm:px-6">
+                      <div className="font-mono text-ink">{usd(r.balanceUsdMinor)}</div>
+                      <div className="mt-1 h-1 w-24 overflow-hidden rounded-full bg-surface-overlay">
+                        <div
+                          className="h-full rounded-full bg-accent"
+                          style={{ width: `${Math.round((r.balanceUsdMinor / maxWallet) * 100)}%` }}
+                        />
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 font-mono text-ink-muted sm:px-6">{usd(r.dailyBudgetUsdMinor)}</td>
+                    <td className="px-5 py-3 font-mono sm:px-6">
+                      <span className={r.liveAds ? "text-positive" : "text-ink-faint"}>{r.liveAds}</span>
+                    </td>
+                    <td className="px-5 py-3 font-mono text-xs text-ink-faint sm:px-6">{when(r.lastActivityAt)}</td>
+                  </tr>
+                );
+              })}
+              {ranked.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-6 py-10 text-center text-ink-faint">
+                    No businesses yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
+      {/* ---- unit economics ---- */}
+      <Panel
+        className="mt-4"
+        label="unit economics · cost to serve"
+        title="What each customer costs, worst first"
+        aside={
+          <div className="text-right">
+            <div className="font-mono text-lg text-ink">{usd(econ.revenueUsdMinor)}</div>
+            <div className="ops-label">revenue</div>
+          </div>
+        }
+      >
+        <div className="flex h-3 overflow-hidden rounded-full bg-surface-overlay">
+          {costParts.map((c) => (
+            <div key={c.k} className={c.c} style={{ width: `${(c.v / costTotal) * 100}%` }} title={`${c.k} ${usd(c.v)}`} />
+          ))}
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
+          {costParts.map((c) => (
+            <div key={c.k} className="flex items-center justify-between gap-2 text-sm">
+              <span className="flex items-center gap-2 text-ink-muted">
+                <span className={`h-2 w-2 rounded-sm ${c.c}`} />
+                {c.k}
+              </span>
+              <span className="font-mono text-ink">{usd(c.v)}</span>
             </div>
           ))}
         </div>
-        <p className="mt-3 text-xs text-ink-faint">
-          Still excluded: {EXCLUDED_FROM_MARGIN.join(", ")}. Infrastructure is an
-          allocation of a fixed monthly bill, not a measurement of what any one
-          customer caused. Render and LLM rates are configured list prices, not
-          invoices.
-        </p>
+        <div className="mt-4 flex flex-wrap gap-x-8 gap-y-2 border-t border-line-soft pt-4">
+          <div>
+            <div className="ops-label">cost to serve</div>
+            <div className="mt-1 font-mono text-lg text-ink">{usd(econ.costUsdMinor)}</div>
+          </div>
+          <div>
+            <div className="ops-label">revenue − these costs</div>
+            <div className={`mt-1 font-mono text-lg ${econ.marginUsdMinor < 0 ? "text-negative" : "text-positive"}`}>
+              {usd(econ.marginUsdMinor)}
+            </div>
+          </div>
+          <div>
+            <div className="ops-label">underwater</div>
+            <div className="mt-1 font-mono text-lg text-ink">{econ.underwaterCount}</div>
+          </div>
+        </div>
         {margins.length === 0 ? (
-          <p className="mt-4 text-sm text-ink-faint">
-            Nothing rendered and nothing charged yet.
-          </p>
+          <div className="mt-4">
+            <Empty>Nothing rendered and nothing charged yet.</Empty>
+          </div>
         ) : (
           <ul className="mt-4 flex flex-col gap-2">
-            {margins.map((m) => (
-              <li key={m.businessId} className="text-sm">
-                <span className="text-ink">{m.name}</span>
-                <span className="mx-2 text-ink-faint">·</span>
-                <span className={m.underwater ? "text-negative" : "text-positive"}>
-                  {m.underwater ? "costs more than they pay" : usd(m.marginUsdMinor)}
-                </span>
-                <span className="mx-2 text-ink-faint">·</span>
-                <span className="text-ink-faint">
-                  {usd(m.costUsdMinor)} to serve · pays {usd(m.revenueUsdMinor)}
-                  {m.biggestCost ? ` · mostly ${m.biggestCost}` : ""}
-                </span>
-                <span className="mx-2 text-ink-faint">·</span>
-                <span className="text-ink-faint">
-                  {m.renderCount} render{m.renderCount === 1 ? "" : "s"} {usd(m.renderCostUsdMinor)}
-                  {m.llmCostUsdMinor > 0 ? ` · llm ${usd(m.llmCostUsdMinor)}` : ""}
-                  {m.processingFeeUsdMinor > 0 ? ` · fees ${usd(m.processingFeeUsdMinor)}` : ""}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <div className="mt-6 rounded-card border border-line bg-surface-raised p-5">
-        <div className="datalabel">errors</div>
-        <p className="mt-2 text-sm text-ink-muted">
-          Unhandled server errors, one row per distinct fault rather than one
-          per occurrence — a bad deploy writes the same line ten thousand times
-          and would bury the rare one that matters. Most recent first.
-        </p>
-        {(errorRes.data ?? []).length === 0 ? (
-          <p className="mt-4 text-sm text-ink-faint">
-            Nothing has thrown. This stays empty until something does.
-          </p>
-        ) : (
-          <ul className="mt-4 flex flex-col gap-3">
-            {(errorRes.data ?? []).map((e) => (
-              <li key={String(e.fingerprint)} className="text-sm">
-                <div className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="text-negative">{String(e.message)}</span>
-                  <span className="text-xs text-ink-faint">
-                    ×{Number(e.seen_count ?? 1)}
-                  </span>
-                </div>
-                <div className="mt-0.5 text-xs text-ink-faint">
-                  {String(e.route ?? "unknown route")}
-                  {e.route_type ? ` · ${String(e.route_type)}` : ""} · last{" "}
-                  {when(e.last_seen_at as string | null)} · first{" "}
-                  {when(e.first_seen_at as string | null)}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <div className="mt-6 rounded-card border border-line bg-surface-raised p-5">
-        <div className="datalabel">withdrawals</div>
-        <p className="mt-2 text-sm text-ink-muted">
-          Money going back to customers. Refunds return to the card that paid in, sent by
-          the daily job; a request closes itself once none are still in flight.
-        </p>
-        {withdrawals.length === 0 ? (
-          <p className="mt-4 text-sm text-ink-faint">Nobody has asked for money back.</p>
-        ) : (
-          <ul className="mt-4 flex flex-col gap-2.5">
-            {withdrawals.map((w) => {
-              const open = String(w.status) === "requested";
-              const stale = isStuck(String(w.status), w.requested_at as string);
+            {margins.map((m) => {
+              const scale = Math.max(m.costUsdMinor, m.revenueUsdMinor, 1);
               return (
-                <li key={w.id as string} className="text-sm leading-relaxed">
-                  <span className="text-ink">{nameOf.get(w.business_id as string) ?? "—"}</span>
-                  <span className="mx-2 text-ink-faint">·</span>
-                  <span className="text-ink-muted">{usd(Number(w.amount_usd_minor ?? 0))}</span>
-                  <span className="mx-2 text-ink-faint">·</span>
-                  <span className={stale ? "text-negative" : open ? "text-accent-bright" : "text-positive"}>
-                    {String(w.status)}
-                    {stale ? ` — stuck, older than ${STUCK_AFTER_DAYS} days` : ""}
-                  </span>
-                  <span className="mx-2 text-ink-faint">·</span>
-                  <span className="text-ink-faint">
-                    asked {when(w.requested_at as string)}
-                  </span>
-                  {w.note ? (
-                    <div className="mt-0.5 text-xs text-ink-muted">{String(w.note)}</div>
-                  ) : null}
+                <li key={m.businessId} className="rounded-xl border border-line-soft px-4 py-3">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="text-sm font-medium text-ink">{m.name}</span>
+                    <span className={`font-mono text-sm ${m.underwater ? "text-negative" : "text-positive"}`}>
+                      {m.underwater ? "costs more than they pay" : usd(m.marginUsdMinor)}
+                    </span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-[4.5rem_1fr] items-center gap-x-3 gap-y-1 font-mono text-[11px] text-ink-faint">
+                    <span>pays</span>
+                    <span className="h-1.5 overflow-hidden rounded-full bg-surface-overlay">
+                      <span className="block h-full rounded-full bg-positive" style={{ width: `${(m.revenueUsdMinor / scale) * 100}%` }} />
+                    </span>
+                    <span>costs</span>
+                    <span className="h-1.5 overflow-hidden rounded-full bg-surface-overlay">
+                      <span className="block h-full rounded-full bg-negative" style={{ width: `${(m.costUsdMinor / scale) * 100}%` }} />
+                    </span>
+                  </div>
+                  <div className="mt-2 font-mono text-[11px] text-ink-faint">
+                    {usd(m.costUsdMinor)} to serve · pays {usd(m.revenueUsdMinor)}
+                    {m.biggestCost ? ` · mostly ${m.biggestCost}` : ""} · {m.renderCount} render
+                    {m.renderCount === 1 ? "" : "s"}
+                    {m.llmCostUsdMinor > 0 ? ` · llm ${usd(m.llmCostUsdMinor)}` : ""}
+                    {m.processingFeeUsdMinor > 0 ? ` · fees ${usd(m.processingFeeUsdMinor)}` : ""}
+                  </div>
                 </li>
               );
             })}
           </ul>
         )}
-      </div>
-
-      <div className="mt-6 rounded-card border border-line bg-surface-raised p-5">
-        <div className="datalabel">recent trouble</div>
-        <p className="mt-2 text-sm text-ink-muted">
-          Journal entries that reported a failure, a skip or a wait. Newest first.
+        <p className="mt-4 text-xs leading-relaxed text-ink-faint">
+          Still excluded: {EXCLUDED_FROM_MARGIN.join(", ")}. Infrastructure is an allocation of a fixed
+          monthly bill, not a measurement. Render and LLM rates are list prices, not invoices.
         </p>
-        {problems.length === 0 ? (
-          <p className="mt-4 text-sm text-ink-faint">Nothing has gone wrong recently.</p>
-        ) : (
-          <ul className="mt-4 flex flex-col gap-2.5">
-            {problems.map((p, i) => (
-              <li key={i} className="text-sm leading-relaxed">
-                <span className="text-ink">{nameOf.get(p.business_id as string) ?? "—"}</span>
-                <span className="mx-2 text-ink-faint">·</span>
-                <span className="text-negative">{String(p.entry_type)}</span>
-                <span className="mx-2 text-ink-faint">·</span>
-                <span className="text-ink-faint">{when(p.created_at as string)}</span>
-                <div className="mt-0.5 break-words text-xs text-ink-muted">
-                  {JSON.stringify(p.content).slice(0, 220)}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+      </Panel>
+
+      {/* ---- event streams ---- */}
+      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+        <Panel
+          label="faults"
+          title="Server errors"
+          aside={<Pill tone={errors.length ? "negative" : "positive"}>{errors.length || "clear"}</Pill>}
+        >
+          {errors.length === 0 ? (
+            <Empty>Nothing has thrown.</Empty>
+          ) : (
+            <ul className="flex flex-col gap-3.5">
+              {errors.map((e) => (
+                <Event
+                  key={String(e.fingerprint)}
+                  tone="negative"
+                  who=""
+                  what={`${String(e.message)} ×${Number(e.seen_count ?? 1)}`}
+                  when={when(e.last_seen_at as string | null)}
+                  detail={`${String(e.route ?? "unknown route")}${e.route_type ? ` · ${String(e.route_type)}` : ""} · first ${when(e.first_seen_at as string | null)}`}
+                />
+              ))}
+            </ul>
+          )}
+        </Panel>
+
+        <Panel
+          label="money out"
+          title="Withdrawals"
+          aside={
+            <Pill tone={stuckWithdrawals.length ? "negative" : openWithdrawals.length ? "accent" : "positive"}>
+              {stuckWithdrawals.length ? `${stuckWithdrawals.length} stuck` : `${openWithdrawals.length} open`}
+            </Pill>
+          }
+        >
+          {withdrawals.length === 0 ? (
+            <Empty>Nobody has asked for money back.</Empty>
+          ) : (
+            <ul className="flex flex-col gap-3.5">
+              {withdrawals.map((w) => {
+                const open = String(w.status) === "requested";
+                const stale = isStuck(String(w.status), w.requested_at as string);
+                return (
+                  <Event
+                    key={w.id as string}
+                    tone={stale ? "negative" : open ? "accent" : "positive"}
+                    who={`${nameOf.get(w.business_id as string) ?? "—"} · ${usd(Number(w.amount_usd_minor ?? 0))}`}
+                    what={`${String(w.status)}${stale ? ` — stuck over ${STUCK_AFTER_DAYS} days` : ""}`}
+                    when={when(w.requested_at as string)}
+                    detail={w.note ? String(w.note) : undefined}
+                  />
+                );
+              })}
+            </ul>
+          )}
+        </Panel>
+
+        <Panel
+          label="journal"
+          title="Recent trouble"
+          aside={<Pill tone={problems.length ? "accent" : "positive"}>{problems.length || "clear"}</Pill>}
+        >
+          {problems.length === 0 ? (
+            <Empty>Nothing has gone wrong recently.</Empty>
+          ) : (
+            <ul className="flex max-h-[28rem] flex-col gap-3.5 overflow-y-auto pr-1">
+              {problems.map((p, i) => (
+                <Event
+                  key={i}
+                  tone="accent"
+                  who={nameOf.get(p.business_id as string) ?? "—"}
+                  what={String(p.entry_type)}
+                  when={when(p.created_at as string)}
+                  detail={JSON.stringify(p.content).slice(0, 180)}
+                />
+              ))}
+            </ul>
+          )}
+        </Panel>
       </div>
 
-      <p className="mt-6 text-center text-xs text-ink-faint">
-        This page reads across every customer. It is visible only to the addresses in
-        <code className="mx-1 text-ink-muted">FOUNDER_EMAILS</code>.
+      <p className="mt-8 pb-4 text-center font-mono text-[11px] tracking-[0.04em] text-ink-faint">
+        Reads across every customer · visible only to the addresses in FOUNDER_EMAILS, behind a second factor
       </p>
     </div>
   );
