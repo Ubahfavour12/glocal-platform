@@ -62,7 +62,16 @@ export function UnlockForm() {
       >
         {busy ? "Checking…" : "Unlock"}
       </button>
-      {error && <p className="text-sm text-negative">{error}</p>}
+      {/*
+        leading-relaxed because this is no longer always three words: a clock
+        that is out now gets a sentence explaining itself, and set solid it
+        reads like a wall.
+      */}
+      {error && (
+        <p className="text-sm leading-relaxed text-negative" role="alert">
+          {error}
+        </p>
+      )}
       <p className="text-xs leading-relaxed text-ink-faint">
         The code changes every 30 seconds. Attempts are rate limited and every
         one is recorded, successful or not.
