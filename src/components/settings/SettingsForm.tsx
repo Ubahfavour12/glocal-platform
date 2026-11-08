@@ -119,7 +119,7 @@ export function SettingsForm({
           step={5}
           value={budgetUsd}
           onChange={(e) => setBudgetUsd(Number(e.target.value))}
-          className="mt-3 w-full accent-[#b45309]"
+          className="mt-3 w-full accent-[var(--accent)]"
         />
         <p className={`mt-2 text-xs ${runwayColor}`}>
           {balanceUsdMinor > 0
