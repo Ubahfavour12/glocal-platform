@@ -133,7 +133,7 @@ export function AskAgent({ suggestions = SUGGESTED }: { suggestions?: string[] }
               ) : (
                 <div
                   key={i}
-                  className="max-w-[92%] self-start whitespace-pre-wrap rounded-card border-l-2 border-accent bg-accent-soft px-3.5 py-2.5 text-sm leading-relaxed text-ink"
+                  className="max-w-[92%] self-start whitespace-pre-wrap gl-lit rounded-card px-3.5 py-2.5 text-sm leading-relaxed text-ink"
                 >
                   {t.text}
                 </div>
@@ -173,7 +173,7 @@ export function AskAgent({ suggestions = SUGGESTED }: { suggestions?: string[] }
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask about budget, angles, timing…"
               maxLength={500}
-              className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+              className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint gl-field"
             />
             <button
               type="submit"

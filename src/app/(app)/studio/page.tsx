@@ -76,7 +76,7 @@ export default async function StudioPage() {
           add what is true today.
         </div>
       ) : (
-        <div className="mt-6 rounded-card border border-accent/40 bg-accent-soft p-5">
+        <div className="mt-6 gl-lit rounded-card p-5">
           <div className="datalabel text-accent-bright">growth &amp; scale</div>
           <p className="mt-2 text-sm text-ink">
             The Strategy Studio is part of the Growth and Scale plans. Have a look around, this is the

@@ -53,7 +53,7 @@ export function UnlockForm() {
         onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
         placeholder="123456"
         aria-label="Authenticator code"
-        className="rounded-lg border border-line bg-surface-raised px-4 py-3 text-center text-lg tracking-[0.4em] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+        className="rounded-lg border border-line bg-surface-raised px-4 py-3 text-center text-lg tracking-[0.4em] text-ink placeholder:text-ink-faint gl-field"
       />
       <button
         type="submit"

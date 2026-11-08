@@ -86,7 +86,7 @@ export function StudioForm() {
               onChange={(e) => setText(q.id, e.target.value)}
               placeholder={q.placeholder}
               rows={2}
-              className="mt-3 w-full resize-y rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+              className="mt-3 w-full resize-y rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-faint gl-field"
             />
           )}
 

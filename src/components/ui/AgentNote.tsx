@@ -4,9 +4,9 @@
  */
 export function AgentNote({ children, time }: { children: React.ReactNode; time?: string }) {
   return (
-    <div className="rounded-card border-l-2 border-accent bg-accent-soft px-4 py-3">
+    <div className="gl-lit rounded-card px-4 py-3.5">
       <div className="flex items-center gap-2">
-        <span className="h-1.5 w-1.5 rounded-full bg-accent-bright" />
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent-bright" />
         <span className="datalabel text-accent-bright">agent</span>
         {time && <span className="datalabel">{time}</span>}
       </div>

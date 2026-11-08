@@ -19,8 +19,8 @@ export function PageHeader({
     <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
       <div className="min-w-0">
         <div className="datalabel">{label}</div>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">{title}</h1>
-        {subtitle && <p className="mt-1 text-sm text-ink-muted">{subtitle}</p>}
+        <h1 className="gl-title mt-1.5 text-[28px] font-semibold leading-tight tracking-[-0.035em]">{title}</h1>
+        {subtitle && <p className="mt-1.5 max-w-[64ch] text-sm leading-relaxed text-ink-muted">{subtitle}</p>}
       </div>
       {stat && (
         <div className="shrink-0 text-right">

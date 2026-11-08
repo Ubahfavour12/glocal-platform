@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { NAV } from "./nav";
-import { BoltIcon, CheckIcon, MenuIcon, TrophyIcon, WalletIcon } from "@/components/ui/icons";
+import { MenuIcon } from "@/components/ui/icons";
+import { navIcon } from "./navIcons";
 
 /**
  * Phone-width bottom tab bar, Glocal Mobile.dc.html. Five slots: the four
@@ -12,12 +13,6 @@ import { BoltIcon, CheckIcon, MenuIcon, TrophyIcon, WalletIcon } from "@/compone
  * bar never crowds below a 44px tap target.
  */
 const PRIMARY_HREFS = ["/today", "/approve", "/duel", "/wallet"];
-const TAB_ICON: Record<string, typeof BoltIcon> = {
-  "/today": BoltIcon,
-  "/approve": CheckIcon,
-  "/duel": TrophyIcon,
-  "/wallet": WalletIcon,
-};
 
 export function TabBar({ awaitingApproval = false }: { awaitingApproval?: boolean }) {
   const pathname = usePathname();
@@ -55,25 +50,28 @@ export function TabBar({ awaitingApproval = false }: { awaitingApproval?: boolea
 
   return (
     <>
+      {/* Floats above the content as a frosted pill, Glocal Web App.dc.html. */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line-soft bg-surface/95 backdrop-blur md:hidden"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        aria-label="Main"
+        className="gl-glass fixed inset-x-2.5 z-30 grid grid-cols-5 gap-1 rounded-[22px] border border-line p-1.5 shadow-[0_18px_40px_-12px_rgba(0,0,0,0.6)] md:hidden"
+        style={{ bottom: "calc(env(safe-area-inset-bottom) + 10px)" }}
       >
         {primary.map((item) => {
-          const Icon = TAB_ICON[item.href];
+          const Icon = navIcon(item.href);
           const active = pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`relative flex flex-col items-center gap-1 py-2 text-[10px] font-medium transition-colors ${
-                active ? "text-ink" : "text-ink-muted"
+              aria-current={active ? "page" : undefined}
+              className={`relative flex min-h-[48px] flex-col items-center justify-center gap-1 rounded-2xl py-1.5 text-[10px] font-medium transition-colors ${
+                active ? "bg-accent-soft text-ink shadow-[inset_0_0_0_1px_var(--lit-edge)]" : "text-ink-muted"
               }`}
             >
-              <Icon className="h-[21px] w-[21px]" />
+              <Icon className={`h-[20px] w-[20px] ${active ? "text-accent-bright" : ""}`} />
               <span>{item.label === "The Duel" ? "Duel" : item.label}</span>
               {item.href === "/approve" && awaitingApproval && (
-                <span className="absolute right-[26%] top-1.5 h-1.5 w-1.5 rounded-full bg-accent-bright" />
+                <span className="absolute right-[28%] top-1.5 h-1.5 w-1.5 rounded-full bg-accent-bright shadow-[0_0_8px_rgba(245,133,16,0.9)]" />
               )}
             </Link>
           );
@@ -82,11 +80,11 @@ export function TabBar({ awaitingApproval = false }: { awaitingApproval?: boolea
           type="button"
           onClick={() => setMoreOpen(true)}
           aria-label="Everything else"
-          className={`flex flex-col items-center gap-1 py-2 text-[10px] font-medium transition-colors ${
-            moreOpen || onOverflowRoute ? "text-ink" : "text-ink-muted"
+          className={`flex min-h-[48px] flex-col items-center justify-center gap-1 rounded-2xl py-1.5 text-[10px] font-medium transition-colors ${
+            moreOpen || onOverflowRoute ? "bg-accent-soft text-ink shadow-[inset_0_0_0_1px_var(--lit-edge)]" : "text-ink-muted"
           }`}
         >
-          <MenuIcon className="h-[21px] w-[21px]" />
+          <MenuIcon className={`h-[20px] w-[20px] ${moreOpen || onOverflowRoute ? "text-accent-bright" : ""}`} />
           <span>More</span>
         </button>
       </nav>
@@ -97,24 +95,32 @@ export function TabBar({ awaitingApproval = false }: { awaitingApproval?: boolea
             type="button"
             aria-label="Close menu"
             onClick={() => setMoreOpen(false)}
-            className="absolute inset-0 bg-black/60"
+            className="absolute inset-0 bg-black/55 backdrop-blur-[2px]"
           />
           <div
-            className="absolute inset-x-0 bottom-0 rounded-t-2xl border-t border-line bg-surface p-4"
+            className="gl-glass gl-sheet absolute inset-x-0 bottom-0 rounded-t-[26px] border-t border-line p-4"
             style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 16px)" }}
           >
-            <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-line" />
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" />
+            <div className="mb-3 px-1 text-base font-semibold text-ink">Everything else</div>
             <div className="grid grid-cols-2 gap-2">
-              {overflow.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setMoreOpen(false)}
-                  className="rounded-xl border border-line bg-surface-raised px-4 py-3 text-sm font-medium text-ink transition-colors hover:border-ink-faint"
-                >
-                  {item.label}
-                </Link>
-              ))}
+              {overflow.map((item) => {
+                const Icon = navIcon(item.href);
+                const active = pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setMoreOpen(false)}
+                    className={`flex flex-col gap-2 rounded-2xl border px-4 py-3.5 text-sm font-medium text-ink transition-colors [background-image:var(--card-sheen)] ${
+                      active ? "border-[var(--lit-edge)] bg-accent-soft" : "border-line bg-surface-raised hover:border-ink-faint"
+                    }`}
+                  >
+                    <Icon className="h-[18px] w-[18px] text-accent-bright" />
+                    {item.label}
+                  </Link>
+                );
+              })}
             </div>
           </div>
         </div>

@@ -75,7 +75,7 @@ export function AddFundsButton({
             step={5}
             value={usd}
             onChange={(e) => setUsd(Math.max(10, Number(e.target.value)))}
-            className="mt-1 w-28 rounded-lg border border-line bg-surface px-3 py-2 font-mono text-sm focus:border-accent focus:outline-none"
+            className="mt-1 w-28 rounded-lg border border-line bg-surface px-3 py-2 font-mono text-sm gl-field"
           />
         </div>
         <button

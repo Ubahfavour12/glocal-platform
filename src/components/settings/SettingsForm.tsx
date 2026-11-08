@@ -119,7 +119,7 @@ export function SettingsForm({
           step={5}
           value={budgetUsd}
           onChange={(e) => setBudgetUsd(Number(e.target.value))}
-          className="mt-3 w-full accent-[#b45309]"
+          className="mt-3 w-full accent-[var(--accent)]"
         />
         <p className={`mt-2 text-xs ${runwayColor}`}>
           {balanceUsdMinor > 0
@@ -137,7 +137,7 @@ export function SettingsForm({
               key={g.id}
               onClick={() => setGoal(g.id)}
               className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
-                goal === g.id ? "border-accent bg-accent-soft text-ink" : "border-line bg-surface text-ink-muted hover:border-ink-faint"
+                goal === g.id ? "border-accent bg-accent-soft text-ink shadow-[0_0_24px_-10px_rgba(245,133,16,0.7)]" : "border-line bg-surface text-ink-muted hover:border-ink-faint"
               }`}
             >
               {g.label}
@@ -159,7 +159,7 @@ export function SettingsForm({
               onClick={() => setAdLanguage(l.id)}
               className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
                 adLanguage === l.id
-                  ? "border-accent bg-accent-soft text-ink"
+                  ? "border-accent bg-accent-soft text-ink shadow-[0_0_24px_-10px_rgba(245,133,16,0.7)]"
                   : "border-line bg-surface text-ink-muted hover:border-ink-faint"
               }`}
             >
@@ -178,7 +178,7 @@ export function SettingsForm({
               key={p.id}
               onClick={() => setPersona(p.id)}
               className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${
-                persona === p.id ? "border-accent bg-accent-soft" : "border-line bg-surface hover:border-ink-faint"
+                persona === p.id ? "border-accent bg-accent-soft shadow-[0_0_24px_-10px_rgba(245,133,16,0.7)]" : "border-line bg-surface hover:border-ink-faint"
               }`}
             >
               <div className="text-sm font-medium text-ink">{p.label}</div>
@@ -206,7 +206,7 @@ export function SettingsForm({
               onClick={() => setLaunchHour(h)}
               className={`rounded-full border px-4 py-2 text-sm transition-colors ${
                 launchHour === h
-                  ? "border-accent bg-accent-soft text-ink"
+                  ? "border-accent bg-accent-soft text-ink shadow-[0_0_24px_-10px_rgba(245,133,16,0.7)]"
                   : "border-line text-ink-muted hover:border-ink-faint"
               }`}
             >
@@ -230,7 +230,7 @@ export function SettingsForm({
         </div>
         <button
           onClick={() => setFullAuto((v) => !v)}
-          className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${fullAuto ? "bg-accent" : "bg-surface-overlay"}`}
+          className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${fullAuto ? "bg-accent shadow-[0_0_10px_rgba(245,133,16,0.6)]" : "bg-surface-overlay"}`}
           aria-pressed={fullAuto}
         >
           <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${fullAuto ? "left-[22px]" : "left-0.5"}`} />

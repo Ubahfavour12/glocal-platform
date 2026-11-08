@@ -64,7 +64,7 @@ export function ContextFeed({ disabled }: { disabled?: boolean }) {
         onChange={(e) => setText(e.target.value)}
         disabled={disabled || state === "saving"}
         placeholder="We&rsquo;ve just opened a second shop in Surulere, so ads should mention both locations."
-        className="rounded-lg border border-line bg-surface px-4 py-3 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none disabled:opacity-50"
+        className="rounded-lg border border-line bg-surface px-4 py-3 text-sm text-ink placeholder:text-ink-faint gl-field disabled:opacity-50"
       />
       <div className="flex items-center gap-3">
         <button

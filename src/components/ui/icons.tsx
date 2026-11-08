@@ -181,3 +181,65 @@ export const MenuIcon = (p: IconProps) => (
     <line x1="4" y1="17" x2="20" y2="17" />
   </Svg>
 );
+
+/* ---- navigation set: one glyph per destination, same weight as the rest ---- */
+
+export const PulseIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 12h4l3-8 4 16 3-8h4" />
+  </Svg>
+);
+
+export const LayersIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 6h16M4 12h11M4 18h7" />
+  </Svg>
+);
+
+export const UsersIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+  </Svg>
+);
+
+export const LeafIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" />
+    <path d="M2 21c0-3 1.85-5.36 5.08-6" />
+  </Svg>
+);
+
+export const DocIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+    <path d="M14 3v6h6M8 13h8M8 17h5" />
+  </Svg>
+);
+
+export const SparkleIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
+    <path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z" />
+  </Svg>
+);
+
+export const ClockIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  </Svg>
+);
+
+export const SlidersIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />
+  </Svg>
+);
+
+export const RocketIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M13 2 4 14h7l-1 8 9-12h-7z" />
+  </Svg>
+);
