@@ -106,11 +106,12 @@ export async function settleVerifiedCharge(
     // A subscription charge costs us a processor fee exactly as a top-up does.
     await recordFee();
     if (opts.sendReceipts) {
-      await sendReceiptForBusiness(supabase, businessId, {
+      const sent = await sendReceiptForBusiness(supabase, businessId, {
         type: "subscription",
         tier: charge.tier,
         amountUsdMinor: expectedUsdMinor,
       });
+      await noteUnsentReceipt(supabase, businessId, sent, psp, txn.id);
     }
     return { kind: "subscribed", tier: charge.tier };
   }
@@ -130,10 +131,43 @@ export async function settleVerifiedCharge(
   await recordFee();
 
   if (opts.sendReceipts) {
-    await sendReceiptForBusiness(supabase, businessId, {
+    const sent = await sendReceiptForBusiness(supabase, businessId, {
       type: "topup",
       amountUsdMinor: paidUsdMinor,
     });
+    await noteUnsentReceipt(supabase, businessId, sent, psp, txn.id);
   }
   return { kind: "credited", usdMinor: paidUsdMinor };
+}
+
+/**
+ * Write down a receipt that did not go out.
+ *
+ * `sendReceiptForBusiness` never throws -- it returns { sent: false, reason }
+ * -- and both call sites used to discard that. So the one piece of evidence a
+ * customer gets that their money arrived could fail silently, for every
+ * payment, and nothing anywhere would say so. The most likely cause is the
+ * most invisible one: RESEND_API_KEY unset makes sending a no-op.
+ *
+ * Recorded, not thrown. The money has already moved correctly and a missing
+ * email must not make the PSP retry a settled charge.
+ */
+async function noteUnsentReceipt(
+  supabase: SupabaseClient,
+  businessId: string,
+  result: { sent: boolean; reason?: string },
+  psp: PspId,
+  txnId: number | string,
+): Promise<void> {
+  if (result.sent) return;
+  try {
+    await supabase.from("audit_log").insert({
+      business_id: businessId,
+      actor: `webhook:${psp}`,
+      action: "receipt_not_sent",
+      detail: { reason: result.reason ?? "unknown", txnId: String(txnId) },
+    });
+  } catch {
+    // Bookkeeping about bookkeeping. Never worth failing a settled charge.
+  }
 }

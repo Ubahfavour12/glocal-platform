@@ -82,6 +82,7 @@ export default async function AdminPage() {
     walletIdRes,
     llmRes,
     feeRes,
+    errorRes,
   ] =
     await Promise.all([
     svc
@@ -114,6 +115,14 @@ export default async function AdminPage() {
     // page computed margin as revenue minus RENDERS and called it the margin.
     svc.from("llm_usage").select("business_id, cost_usd_micros"),
     svc.from("payment_fees").select("business_id, fee_usd_minor"),
+    // Unhandled server errors, grouped. Until this existed, a production
+    // exception went to stdout and no further -- the first you heard of one
+    // was a customer telling you.
+    svc
+      .from("error_events")
+      .select("fingerprint, message, route, route_type, seen_count, first_seen_at, last_seen_at")
+      .order("last_seen_at", { ascending: false })
+      .limit(12),
   ]);
 
   const businesses = bizRes.data ?? [];
@@ -354,6 +363,39 @@ export default async function AdminPage() {
                   {m.llmCostUsdMinor > 0 ? ` · llm ${usd(m.llmCostUsdMinor)}` : ""}
                   {m.processingFeeUsdMinor > 0 ? ` · fees ${usd(m.processingFeeUsdMinor)}` : ""}
                 </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="mt-6 rounded-card border border-line bg-surface-raised p-5">
+        <div className="datalabel">errors</div>
+        <p className="mt-2 text-sm text-ink-muted">
+          Unhandled server errors, one row per distinct fault rather than one
+          per occurrence — a bad deploy writes the same line ten thousand times
+          and would bury the rare one that matters. Most recent first.
+        </p>
+        {(errorRes.data ?? []).length === 0 ? (
+          <p className="mt-4 text-sm text-ink-faint">
+            Nothing has thrown. This stays empty until something does.
+          </p>
+        ) : (
+          <ul className="mt-4 flex flex-col gap-3">
+            {(errorRes.data ?? []).map((e) => (
+              <li key={String(e.fingerprint)} className="text-sm">
+                <div className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="text-negative">{String(e.message)}</span>
+                  <span className="text-xs text-ink-faint">
+                    ×{Number(e.seen_count ?? 1)}
+                  </span>
+                </div>
+                <div className="mt-0.5 text-xs text-ink-faint">
+                  {String(e.route ?? "unknown route")}
+                  {e.route_type ? ` · ${String(e.route_type)}` : ""} · last{" "}
+                  {when(e.last_seen_at as string | null)} · first{" "}
+                  {when(e.first_seen_at as string | null)}
+                </div>
               </li>
             ))}
           </ul>
