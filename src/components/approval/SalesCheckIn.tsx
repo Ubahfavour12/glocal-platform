@@ -86,7 +86,7 @@ export function SalesCheckIn({
   const pickBtn = (selected: boolean) =>
     `flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
       selected
-        ? "border-accent bg-accent-soft text-ink"
+        ? "border-accent bg-accent-soft text-ink shadow-[0_0_24px_-10px_rgba(245,133,16,0.7)]"
         : "border-line text-ink-muted hover:border-ink-faint hover:text-ink"
     }`;
 

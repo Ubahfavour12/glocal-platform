@@ -239,7 +239,7 @@ function Spinner({ className = "h-4 w-4" }: { className?: string }) {
 /** The agent speaking in its own voice, never as a system warning. */
 function AgentNote({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-card border-l-2 border-accent bg-accent-soft p-4">
+    <div className="gl-lit rounded-card p-4">
       <div className="flex items-center gap-2">
         <span className="h-1.5 w-1.5 rounded-full bg-accent" />
         <span className="datalabel text-accent">agent</span>
@@ -267,8 +267,20 @@ function StepRail({
 }) {
   return (
     <div className="flex h-full flex-col">
+      <div className="mb-8 flex items-center gap-2.5">
+        <GlocalMark className="h-7 w-7 shrink-0 text-ink" title="Glocal" />
+        <span className="text-[17px] font-semibold tracking-[-0.03em] text-ink">
+          glocal<span className="text-accent-bright">.</span>
+        </span>
+      </div>
       <div className="datalabel">
         step {Math.min(idx + 1, COUNTED)} of {COUNTED}
+      </div>
+      <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-surface-overlay">
+        <div
+          className="h-full rounded-full bg-accent shadow-[0_0_10px_rgba(245,133,16,0.7)] transition-[width] duration-500"
+          style={{ width: `${(Math.min(idx + 1, COUNTED) / COUNTED) * 100}%` }}
+        />
       </div>
       <nav className="mt-3 flex flex-col gap-0.5">
         {FLOW.slice(0, COUNTED).map((p, i) => {
@@ -887,7 +899,7 @@ export default function OnboardingPage() {
     return (
       <main className="mx-auto flex min-h-screen w-full max-w-xl flex-col px-6 py-12 md:max-w-2xl md:py-20">
         <GlocalMark className="h-9 w-9 text-ink" title="Glocal" />
-        <h1 className="mt-6 text-2xl font-semibold leading-tight tracking-tight">
+        <h1 className="mt-6 gl-title text-[28px] font-semibold leading-tight tracking-[-0.035em]">
           You stopped at {d.phase === "budget" ? "the budget" : "step " + Math.min(stopped + 1, COUNTED)}.
         </h1>
         <p className="mt-2.5 text-sm leading-relaxed text-ink-muted">
@@ -905,7 +917,7 @@ export default function OnboardingPage() {
             {Array.from({ length: COUNTED }).map((_, i) => (
               <span
                 key={i}
-                className={`h-1 flex-1 rounded-full ${i < stopped ? "bg-accent" : "bg-surface-overlay"}`}
+                className={`h-1 flex-1 rounded-full ${i < stopped ? "bg-accent shadow-[0_0_10px_rgba(245,133,16,0.6)]" : "bg-surface-overlay"}`}
               />
             ))}
           </div>
@@ -983,7 +995,7 @@ export default function OnboardingPage() {
                 <span
                   key={i}
                   className={`h-1 flex-1 rounded-full transition-colors ${
-                    i <= Math.min(idx, COUNTED - 1) ? "bg-accent" : "bg-surface-overlay"
+                    i <= Math.min(idx, COUNTED - 1) ? "bg-accent shadow-[0_0_10px_rgba(245,133,16,0.6)]" : "bg-surface-overlay"
                   }`}
                 />
               ))}
@@ -996,7 +1008,7 @@ export default function OnboardingPage() {
         {/* ---------------------------------------------------- 1 business */}
         {phase === "business" && (
           <section>
-            <h1 className="text-2xl font-semibold leading-tight tracking-tight">
+            <h1 className="gl-title text-[28px] font-semibold leading-tight tracking-[-0.035em]">
               First, what should I call you?
             </h1>
             <p className="mt-2.5 text-sm leading-relaxed text-ink-muted">
@@ -1011,7 +1023,7 @@ export default function OnboardingPage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Marlango Wines"
-              className="mt-2 w-full rounded-lg border border-line bg-surface-raised px-4 py-3.5 text-base text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+              className="mt-2 w-full rounded-xl border border-line bg-surface-raised px-4 py-3.5 text-base text-ink placeholder:text-ink-faint gl-field"
             />
 
             <div className="datalabel mt-6">what you sell</div>
@@ -1025,7 +1037,7 @@ export default function OnboardingPage() {
                   onClick={() => setTrade(t)}
                   className={`rounded-full border px-4 py-2.5 text-sm transition-colors ${
                     trade === t
-                      ? "border-accent bg-accent-soft text-ink"
+                      ? "border-accent bg-accent-soft text-ink shadow-[0_0_24px_-10px_rgba(245,133,16,0.7)]"
                       : "border-line text-ink-muted hover:border-ink-faint"
                   }`}
                 >
@@ -1038,7 +1050,7 @@ export default function OnboardingPage() {
                 value={otherTrade}
                 onChange={(e) => setOtherTrade(e.target.value)}
                 placeholder="What do you sell?"
-                className="mt-2.5 w-full rounded-lg border border-line bg-surface-raised px-4 py-3.5 text-base text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+                className="mt-2.5 w-full rounded-xl border border-line bg-surface-raised px-4 py-3.5 text-base text-ink placeholder:text-ink-faint gl-field"
               />
             )}
             <label className="datalabel mt-6 block" htmlFor="biz-founded">
@@ -1055,7 +1067,7 @@ export default function OnboardingPage() {
               value={foundedYear}
               onChange={(e) => setFoundedYear(e.target.value.replace(/\D/g, "").slice(0, 4))}
               placeholder={String(new Date().getFullYear() - 3)}
-              className="mt-2 w-32 rounded-lg border border-line bg-surface-raised px-4 py-3.5 text-base text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+              className="mt-2 w-32 rounded-xl border border-line bg-surface-raised px-4 py-3.5 text-base text-ink placeholder:text-ink-faint gl-field"
             />
             {foundedYear.length === 4 && !isValidFoundedYear(Number(foundedYear)) && (
               <p className="mt-2 text-xs text-ink-faint">
@@ -1084,7 +1096,7 @@ export default function OnboardingPage() {
                   onClick={() => setOwnerRole(r.id)}
                   className={`flex items-center justify-between gap-3 rounded-card border px-4 py-3.5 text-left transition-colors ${
                     ownerRole === r.id
-                      ? "border-accent bg-accent-soft"
+                      ? "border-accent bg-accent-soft shadow-[0_0_24px_-10px_rgba(245,133,16,0.7)]"
                       : "border-line bg-surface-raised hover:border-ink-faint"
                   }`}
                 >
@@ -1106,7 +1118,7 @@ export default function OnboardingPage() {
               <select
                 value={country}
                 onChange={(e) => setCountry(e.target.value)}
-                className="mt-2 w-full rounded-lg border border-line bg-surface-raised px-4 py-3.5 text-base text-ink focus:border-accent focus:outline-none"
+                className="mt-2 w-full rounded-xl border border-line bg-surface-raised px-4 py-3.5 text-base text-ink gl-field"
               >
                 {listCountries().map((c) => (
                   <option key={c.country} value={c.country}>
@@ -1115,7 +1127,7 @@ export default function OnboardingPage() {
                 ))}
               </select>
             ) : (
-              <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-line bg-surface-raised px-4 py-3.5">
+              <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-line bg-surface-raised px-4 py-3.5">
                 <span className="text-base text-ink">{local.countryName}</span>
                 <button
                   onClick={() => setCountryTouched(true)}
@@ -1135,7 +1147,7 @@ export default function OnboardingPage() {
         {/* -------------------------------------------------------- 2 door */}
         {phase === "door" && (
           <section>
-            <h1 className="text-2xl font-semibold leading-tight tracking-tight">
+            <h1 className="gl-title text-[28px] font-semibold leading-tight tracking-[-0.035em]">
               Where should the ads send people?
             </h1>
             <p className="mt-2.5 text-sm leading-relaxed text-ink-muted">
@@ -1149,7 +1161,7 @@ export default function OnboardingPage() {
                   <div
                     key={d.id}
                     className={`rounded-card border p-4 transition-colors ${
-                      on ? "border-accent bg-accent-soft" : "border-line bg-surface-raised"
+                      on ? "border-accent bg-accent-soft shadow-[0_0_24px_-10px_rgba(245,133,16,0.7)]" : "border-line bg-surface-raised"
                     }`}
                   >
                     <button
@@ -1249,7 +1261,7 @@ export default function OnboardingPage() {
         {/* -------------------------------------------------------- 3 goal */}
         {phase === "goal" && (
           <section>
-            <h1 className="text-2xl font-semibold leading-tight tracking-tight">
+            <h1 className="gl-title text-[28px] font-semibold leading-tight tracking-[-0.035em]">
               What counts as working?
             </h1>
             <p className="mt-2.5 text-sm leading-relaxed text-ink-muted">
@@ -1270,7 +1282,7 @@ export default function OnboardingPage() {
                       closed
                         ? "cursor-not-allowed border-line-soft bg-surface opacity-70"
                         : on
-                          ? "border-accent bg-accent-soft"
+                          ? "border-accent bg-accent-soft shadow-[0_0_24px_-10px_rgba(245,133,16,0.7)]"
                           : "border-line bg-surface-raised hover:border-ink-faint"
                     }`}
                   >
@@ -1325,7 +1337,7 @@ export default function OnboardingPage() {
         {/* ------------------------------------------------------- 4 money */}
         {phase === "money" && (
           <section>
-            <h1 className="text-2xl font-semibold leading-tight tracking-tight">
+            <h1 className="gl-title text-[28px] font-semibold leading-tight tracking-[-0.035em]">
               What happens to your money
             </h1>
             <div className="mt-4 grid grid-cols-1 gap-2 md:mt-6 md:grid-cols-2 md:gap-2.5">
@@ -1356,7 +1368,7 @@ export default function OnboardingPage() {
         {/* ------------------------------------------------------ 5 budget */}
         {phase === "budget" && (
           <section>
-            <h1 className="text-2xl font-semibold leading-tight tracking-tight">
+            <h1 className="gl-title text-[28px] font-semibold leading-tight tracking-[-0.035em]">
               How much a day?
             </h1>
             <p className="mt-2.5 text-sm leading-relaxed text-ink-muted">
@@ -1414,7 +1426,7 @@ export default function OnboardingPage() {
         {/* ------------------------------------------------------- 6 photo */}
         {phase === "photo" && (
           <section>
-            <h1 className="text-2xl font-semibold leading-tight tracking-tight">
+            <h1 className="gl-title text-[28px] font-semibold leading-tight tracking-[-0.035em]">
               Now show me what you sell.
             </h1>
             <p className="mt-2.5 text-sm leading-relaxed text-ink-muted">
@@ -1525,7 +1537,7 @@ export default function OnboardingPage() {
         {phase === "next" && (
           <section>
             <div className="datalabel">nothing is live yet</div>
-            <h1 className="mt-2 text-2xl font-semibold leading-tight tracking-tight">
+            <h1 className="mt-2 gl-title text-[28px] font-semibold leading-tight tracking-[-0.035em]">
               Here is what I do next, and when.
             </h1>
             <ol className="ml-3 mt-6 flex flex-col border-l border-surface-overlay">

@@ -124,7 +124,7 @@ export function ApprovalCard({
   return (
     <div className="mx-auto max-w-lg md:max-w-3xl">
       <div className="datalabel">tomorrow&apos;s plan · {plan.planDate}</div>
-      <h1 className="mt-1 text-2xl font-semibold tracking-tight">Ready for your approval</h1>
+      <h1 className="gl-title mt-1.5 text-[28px] font-semibold leading-tight tracking-[-0.035em]">Ready for your approval</h1>
 
       {unfunded && (
         <section className="mt-5 rounded-card border border-line bg-surface-raised p-5">
@@ -243,7 +243,7 @@ export function ApprovalCard({
               onClick={() => setWhen(key)}
               className={`flex items-start justify-between gap-3 rounded-card border p-4 text-left transition-colors ${
                 when === key
-                  ? "border-accent bg-accent-soft"
+                  ? "border-accent bg-accent-soft shadow-[0_0_24px_-10px_rgba(245,133,16,0.7)]"
                   : "border-line bg-surface-raised hover:border-ink-faint"
               }`}
             >
@@ -275,7 +275,7 @@ export function ApprovalCard({
             value={customAt}
             onChange={(e) => setCustomAt(e.target.value)}
             aria-label="Launch date and time"
-            className="mt-2 w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-sm text-ink focus:border-accent focus:outline-none"
+            className="mt-2 w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-sm text-ink gl-field"
           />
         )}
       </section>

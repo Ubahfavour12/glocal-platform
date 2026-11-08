@@ -29,7 +29,7 @@ export default async function TodayPage() {
     return (
       <div className="mx-auto max-w-lg">
         <div className="datalabel">today</div>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Let&apos;s set you up</h1>
+        <h1 className="gl-title mt-1.5 text-[28px] font-semibold leading-tight tracking-[-0.035em]">Let&apos;s set you up</h1>
         <p className="mt-4 text-sm text-ink-muted">
           Finish onboarding and the agent starts building your ads tonight.
         </p>
@@ -169,7 +169,7 @@ export default async function TodayPage() {
       <header className="flex flex-wrap items-end justify-between gap-3 sm:gap-4">
         <div>
           <div className="datalabel">today · {business.name}</div>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">
+          <h1 className="gl-title mt-1.5 text-[28px] font-semibold leading-tight tracking-[-0.035em]">
             Good evening<span className="text-accent-bright">.</span>
           </h1>
         </div>
@@ -228,7 +228,7 @@ export default async function TodayPage() {
 
       {queued && (
         <section>
-          <div className="rounded-card border border-accent/40 bg-accent-soft p-4">
+          <div className="gl-lit rounded-card p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="datalabel text-accent">going live {describeLaunchAt(

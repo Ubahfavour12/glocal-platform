@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AuthFrame } from "./AuthFrame";
 import { useState } from "react";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
@@ -205,15 +206,15 @@ export function MagicLinkForm({ mode, linkError }: { mode: Mode; linkError?: Lin
   }
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center px-6 py-24">
-      <div className="w-full max-w-sm">
+    <AuthFrame mode={mode}>
+      <div>
         <div className="datalabel">{c.label}</div>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">{c.title}</h1>
+        <h1 className="gl-title mt-1.5 text-3xl font-semibold tracking-[-0.035em]">{c.title}</h1>
 
         {failure && state === "idle" && (
           <div
             role="status"
-            className="mt-5 rounded-card border border-line bg-surface-raised p-4"
+            className="gl-lit mt-5 rounded-card p-4"
           >
             <div className="datalabel text-accent-bright">{failure.title}</div>
             <p className="mt-1.5 text-sm leading-relaxed text-ink-muted">{failure.body}</p>
@@ -221,7 +222,7 @@ export function MagicLinkForm({ mode, linkError }: { mode: Mode; linkError?: Lin
         )}
 
         {!supabaseConfigured ? (
-          <div className="mt-8 rounded-card border border-line bg-surface-raised p-5">
+          <div className="mt-6 rounded-card border border-line bg-surface p-5">
             <div className="datalabel">setup pending</div>
             <p className="mt-2 text-sm text-ink-muted">
               Authentication activates once the Supabase project is connected. Until
@@ -235,7 +236,7 @@ export function MagicLinkForm({ mode, linkError }: { mode: Mode; linkError?: Lin
             </Link>
           </div>
         ) : state === "sent" || state === "verifying" || (state === "error" && code) ? (
-          <div className="mt-8 rounded-card border border-line bg-surface-raised p-5">
+          <div className="mt-6 rounded-card border border-line bg-surface p-5">
             <div className="datalabel">{c.sentTitle}</div>
             <p className="mt-2 text-sm text-ink-muted">{c.sentBody(email)}</p>
             <form onSubmit={verify} className="mt-4 flex flex-col gap-3">
@@ -252,12 +253,12 @@ export function MagicLinkForm({ mode, linkError }: { mode: Mode; linkError?: Lin
                 value={code}
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
                 placeholder="12345678"
-                className="rounded-lg border border-line bg-surface px-4 py-3 text-center text-lg tracking-[0.4em] text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+                className="gl-field rounded-xl border border-line bg-surface px-4 py-3.5 text-center font-mono text-xl tracking-[0.4em] text-ink placeholder:text-ink-faint"
               />
               <button
                 type="submit"
                 disabled={state === "verifying" || code.length < OTP_MIN_LENGTH}
-                className="rounded-lg bg-accent px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-accent-bright disabled:opacity-50"
+                className="rounded-xl bg-accent px-4 py-3.5 text-[15px] font-medium text-white transition-colors hover:bg-accent-bright disabled:opacity-50"
               >
                 {state === "verifying" ? "Signing you in…" : "Sign in with code"}
               </button>
@@ -275,7 +276,7 @@ export function MagicLinkForm({ mode, linkError }: { mode: Mode; linkError?: Lin
             </form>
           </div>
         ) : (
-          <form onSubmit={send} className="mt-4 flex flex-col gap-3">
+          <form onSubmit={send} className="mt-5 flex flex-col gap-3.5">
             <p className="text-sm text-ink-muted">{c.subtitle}</p>
             <input
               type="email"
@@ -283,7 +284,7 @@ export function MagicLinkForm({ mode, linkError }: { mode: Mode; linkError?: Lin
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@business.com"
-              className="mt-1 rounded-lg border border-line bg-surface-raised px-4 py-3 text-sm text-ink placeholder:text-ink-faint focus:border-accent focus:outline-none"
+              className="gl-field mt-1 rounded-xl border border-line bg-surface px-4 py-3.5 text-[15px] text-ink placeholder:text-ink-faint"
             />
             <label className="flex items-start gap-2.5 text-sm text-ink-muted">
               <input
@@ -324,20 +325,14 @@ export function MagicLinkForm({ mode, linkError }: { mode: Mode; linkError?: Lin
             <button
               type="submit"
               disabled={state === "sending"}
-              className="rounded-lg bg-accent px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-accent-bright disabled:opacity-50"
+              className="rounded-xl bg-accent px-4 py-3.5 text-[15px] font-medium text-white transition-colors hover:bg-accent-bright disabled:opacity-50"
             >
               {state === "sending" ? c.sending : c.button}
             </button>
             {state === "error" && <p className="text-sm text-negative">{message}</p>}
-            <p className="mt-2 text-center text-xs text-ink-faint">
-              {c.altText}{" "}
-              <Link href={c.altHref} className="text-ink-muted underline hover:text-ink">
-                {c.altLink}
-              </Link>
-            </p>
           </form>
         )}
       </div>
-    </div>
+    </AuthFrame>
   );
 }

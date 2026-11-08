@@ -120,8 +120,8 @@ export default async function ApprovePage() {
     return (
       <div className="mx-auto max-w-lg">
         <div className="datalabel">approve</div>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">You have full autonomy on</h1>
-        <div className="mt-8 rounded-card border border-accent/40 bg-accent-soft p-6">
+        <h1 className="gl-title mt-1.5 text-[28px] font-semibold leading-tight tracking-[-0.035em]">You have full autonomy on</h1>
+        <div className="mt-8 gl-lit rounded-card p-6">
           <p className="text-sm text-ink">
             I launch each day&apos;s ads myself, without asking. Nothing waits here for a tap.
           </p>
@@ -152,7 +152,7 @@ export default async function ApprovePage() {
     return (
       <div className="mx-auto max-w-lg">
         <div className="datalabel">approve</div>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Nothing to approve yet</h1>
+        <h1 className="gl-title mt-1.5 text-[28px] font-semibold leading-tight tracking-[-0.035em]">Nothing to approve yet</h1>
         <div className="mt-8 rounded-card border border-line bg-surface-raised p-8 text-center">
           <p className="text-sm text-ink-muted">
             Each evening, once your campaigns are running, tomorrow&apos;s plan
