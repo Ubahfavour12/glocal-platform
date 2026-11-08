@@ -14,6 +14,15 @@ export const metadata = {
   robots: { index: false, follow: false },
 };
 
+/**
+ * Always dark (see .ops-console in globals.css): a control room is read at a
+ * glance, and its status colours are tuned for a dark ground.
+ */
 export default function OpsLayout({ children }: { children: React.ReactNode }) {
-  return <div className="min-h-screen bg-surface px-4 py-8 sm:px-6 lg:px-10">{children}</div>;
+  return (
+    <div className="ops-console relative min-h-screen">
+      <div aria-hidden="true" className="ops-grid pointer-events-none absolute inset-x-0 top-0 h-[520px]" />
+      <div className="relative px-4 py-6 sm:px-6 lg:px-10">{children}</div>
+    </div>
+  );
 }
