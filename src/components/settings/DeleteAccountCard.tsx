@@ -141,7 +141,7 @@ export function DeleteAccountCard() {
               type="button"
               onClick={erase}
               disabled={typed !== PHRASE || busy}
-              className="rounded-lg bg-negative px-4 py-2 text-sm font-medium text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-lg bg-negative px-4 py-2 text-sm font-medium text-[var(--on-negative)] transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
             >
               {busy ? "Deleting…" : "Delete my account permanently"}
             </button>

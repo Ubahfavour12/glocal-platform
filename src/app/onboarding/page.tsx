@@ -294,7 +294,7 @@ function StepRail({
                 }`}
               >
                 {done ? (
-                  <Icon name="check" className="h-2.5 w-2.5 text-white" />
+                  <Icon name="check" className="h-2.5 w-2.5 text-[var(--on-accent)]" />
                 ) : (
                   <span className="font-mono text-[10px] text-ink-faint">{i + 1}</span>
                 )}
@@ -1383,7 +1383,7 @@ export default function OnboardingPage() {
                 value={dailyUsd}
                 onChange={(e) => setDailyUsd(Number(e.target.value))}
                 aria-label="Daily budget in US dollars"
-                className="mt-5 w-full accent-[#b45309]"
+                className="mt-5 w-full accent-[var(--accent)]"
               />
               <div className="datalabel mt-1 flex justify-between">
                 <span>$10 min</span>
@@ -1574,7 +1574,7 @@ export default function OnboardingPage() {
                     }`}
                   >
                     <span
-                      className={`h-1.5 w-1.5 rounded-full ${s.live ? "bg-white" : "bg-accent"}`}
+                      className={`h-1.5 w-1.5 rounded-full ${s.live ? "bg-[var(--on-accent)]" : "bg-accent"}`}
                     />
                   </span>
                   <div className="flex items-start justify-between gap-3">
