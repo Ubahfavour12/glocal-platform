@@ -7,7 +7,8 @@ import { PipelineFilter } from "@/components/pipeline/PipelineFilter";
 import type { PipelineConcept } from "@/lib/pipeline/filter";
 import type { ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
 import { currentBusiness } from "@/lib/business/current";
-import { asAdLanguage } from "@/lib/copy/language";
+import { asAdLanguage, languageLabel } from "@/lib/copy/language";
+import { BuildPoolButton } from "@/components/pipeline/BuildPoolButton";
 
 /** Slots the duel runs when the plan does not say otherwise. */
 const DEFAULT_CHALLENGER_SLOTS = 2;
@@ -37,6 +38,9 @@ export default async function PipelinePage() {
     supabase,
     "id, plan, ad_language",
   );
+  const adLanguage = asAdLanguage(
+    (business?.ad_language as string | null | undefined) ?? null,
+  );
 
   // Whether a video is affordable today, worked out here rather than guessed
   // in the browser, so the option is disabled with a reason instead of failing
@@ -65,10 +69,28 @@ export default async function PipelinePage() {
           .from("concepts")
           .select("id, rank, hook, storyboard, copy_angle, cta, source_pattern, rendered")
           .eq("business_id", business.id)
-          .eq("language", asAdLanguage(business.ad_language as string | null))
+          .eq("language", adLanguage)
           .order("rank", { ascending: true })).data ?? []
       ) as ConceptRow[]
     : [];
+
+  /**
+   * How many drafts this business holds in languages it is no longer writing.
+   *
+   * Only asked when the active pool is empty, and it is the difference
+   * between "the agent has not written anything yet" and "it has written
+   * fifty, in a language you have since changed". Those read identically on
+   * a blank page and need completely different things from the reader.
+   */
+  let keptInOtherLanguages = 0;
+  if (business && concepts.length === 0) {
+    const { count } = await supabase
+      .from("concepts")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", business.id)
+      .neq("language", adLanguage);
+    keptInOtherLanguages = count ?? 0;
+  }
 
   /**
    * Which concepts are actually in the next plan.
@@ -151,11 +173,34 @@ export default async function PipelinePage() {
 
       {concepts.length === 0 ? (
         <div className="mt-8 rounded-card border border-line bg-surface-raised p-8 text-center">
-          <p className="mx-auto max-w-md text-sm text-ink-muted">
-            Your concept library builds here right after onboarding. The research agent studies the
-            most viral ads in your niche and turns them into 50 ranked, scripted ideas. Only the two
-            entering each day&apos;s test get rendered, so you always see what&apos;s coming next.
-          </p>
+          {keptInOtherLanguages > 0 ? (
+            <>
+              {/*
+                The case that produced a blank page with no explanation: the
+                language changed, so the drafts written before it no longer
+                belong to this pool. Say that, say the old ones are safe, and
+                offer the way out — an empty screen that explains nothing is
+                indistinguishable from a broken one.
+              */}
+              <p className="mx-auto max-w-md text-sm text-ink-muted">
+                Your ads are written in{" "}
+                <span className="text-ink">{languageLabel(adLanguage)}</span> now, and the
+                agent has not written any {languageLabel(adLanguage)} drafts yet.
+              </p>
+              <p className="mx-auto mt-3 max-w-md text-sm text-ink-muted">
+                The {keptInOtherLanguages} you already had are kept, not deleted — switch the
+                language back in settings and they return exactly as they were.
+              </p>
+              <BuildPoolButton label={languageLabel(adLanguage)} />
+            </>
+          ) : (
+            <p className="mx-auto max-w-md text-sm text-ink-muted">
+              Your concept library builds here right after onboarding. The research agent studies
+              the most viral ads in your niche and turns them into 50 ranked, scripted ideas. Only
+              the two entering each day&apos;s test get rendered, so you always see what&apos;s
+              coming next.
+            </p>
+          )}
         </div>
       ) : (
         <PipelineFilter

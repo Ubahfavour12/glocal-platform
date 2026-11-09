@@ -9,7 +9,7 @@ import { fetchUsdRate } from "@/lib/money/rates";
 import { currencyForCountry } from "@/lib/money/currency";
 import { fmtDual, fmtRoas, fmtUsd } from "@/lib/money/format";
 import { currentBusiness } from "@/lib/business/current";
-import { asAdLanguage } from "@/lib/copy/language";
+import { asAdLanguage, languageLabel } from "@/lib/copy/language";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Today" };
@@ -95,6 +95,20 @@ export default async function TodayPage() {
   ]);
 
   const pipelineCount = conceptsRes.count ?? 0;
+
+  // Only asked when the pool reads empty, and only to tell two very different
+  // situations apart: an agent that has written nothing yet, and one that has
+  // written fifty in a language this account no longer uses. On a dashboard
+  // they look identical -- a zero -- and they are not the same news.
+  let keptInOtherLanguages = 0;
+  if (pipelineCount === 0) {
+    const { count } = await supabase
+      .from("concepts")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", bizId)
+      .neq("language", adLanguage);
+    keptInOtherLanguages = count ?? 0;
+  }
   const salesTodayUsdMinor = (salesRes.data ?? []).reduce((s, r) => s + Number(r.value_usd_minor ?? 0), 0);
   const customersToday = (salesRes.data ?? []).length;
   const spendTodayUsdMinor = Math.abs((spendRes.data ?? []).reduce((s, r) => s + Number(r.amount_usd_minor ?? 0), 0));
@@ -142,7 +156,9 @@ export default async function TodayPage() {
     ? `Tomorrow's plan is ready, review the two new ads and approve when you're happy.`
     : pipelineCount > 0
       ? `Your pipeline has ${pipelineCount} concepts. Fund your wallet and I'll launch the first duel this evening.`
-      : `I'm ready when you are. Fund your wallet and upload a product photo, I'll study the top ads in your niche and have tomorrow's first two waiting for approval.`;
+      : keptInOtherLanguages > 0
+        ? `Your ads are set to ${languageLabel(adLanguage)} now, so I'm starting a fresh set — your ${keptInOtherLanguages} earlier drafts are kept. Open the pipeline to have me write them now, or they arrive with tonight's run.`
+        : `I'm ready when you are. Fund your wallet and upload a product photo, I'll study the top ads in your niche and have tomorrow's first two waiting for approval.`;
 
   // The only question a shop owner actually has: does money in bring back more
   // than it costs? Spend, clicks and revenue each answer a piece of it and none
@@ -364,7 +380,9 @@ export default async function TodayPage() {
         </div>
         <p className="mt-3 text-sm text-ink-muted">
           {pipelineCount === 0
-            ? "After onboarding, the research agent reverse-engineers the most viral ads in your niche into 50 ranked, scripted concepts."
+            ? keptInOtherLanguages > 0
+              ? `No ${languageLabel(adLanguage)} drafts yet. The ${keptInOtherLanguages} written before you changed the language are kept, and come back if you change it again.`
+              : "After onboarding, the research agent reverse-engineers the most viral ads in your niche into 50 ranked, scripted concepts."
             : `${pipelineCount} scripted concepts ready. Only the two entering each day's duel are rendered, so you always see what's coming next.`}
         </p>
       </Link>
