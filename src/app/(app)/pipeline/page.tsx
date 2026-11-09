@@ -7,6 +7,7 @@ import { PipelineFilter } from "@/components/pipeline/PipelineFilter";
 import type { PipelineConcept } from "@/lib/pipeline/filter";
 import type { ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
 import { currentBusiness } from "@/lib/business/current";
+import { asAdLanguage } from "@/lib/copy/language";
 
 /** Slots the duel runs when the plan does not say otherwise. */
 const DEFAULT_CHALLENGER_SLOTS = 2;
@@ -34,7 +35,7 @@ export default async function PipelinePage() {
   const supabase = await createClient();
   const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
     supabase,
-    "id, plan",
+    "id, plan, ad_language",
   );
 
   // Whether a video is affordable today, worked out here rather than guessed
@@ -54,12 +55,17 @@ export default async function PipelinePage() {
       canRenderKind({ usedToday, dailyLimit }, "video");
   }
 
+  // The pool for the language this account writes in. Showing every language
+  // at once would list drafts the agent will never launch beside ones it
+  // will, with nothing on screen to tell them apart -- and the first thing
+  // anyone would do is pick one that cannot run.
   const concepts: ConceptRow[] = business
     ? (
         (await supabase
           .from("concepts")
           .select("id, rank, hook, storyboard, copy_angle, cta, source_pattern, rendered")
           .eq("business_id", business.id)
+          .eq("language", asAdLanguage(business.ad_language as string | null))
           .order("rank", { ascending: true })).data ?? []
       ) as ConceptRow[]
     : [];

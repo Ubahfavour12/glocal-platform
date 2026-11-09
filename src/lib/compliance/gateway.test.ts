@@ -147,3 +147,62 @@ describe("full gateway composition", () => {
     expect(result.layer).toBe("rules");
   });
 });
+
+describe("non-English copy cannot pass unread", () => {
+  const base: CreativeInput = {
+    copy: "Buy our fabric today, honest price, come market",
+    category: "Fashion Boutique",
+    destinationKind: "whatsapp",
+  };
+
+  it("passes English copy with no LLM scanner, as it always did", async () => {
+    const res = await runGateway(base);
+    expect(res.verdict).toBe("pass");
+    expect(res.layer).toBe("rules");
+  });
+
+  it("BLOCKS non-English copy when no scanner can read it", async () => {
+    // The rules layer is English regexes. A clean pass here would be
+    // reporting a check that never happened on the one path where it is the
+    // entire check.
+    const res = await runGateway({ ...base, language: "pidgin" });
+    expect(res.verdict).toBe("block");
+    expect(res.issues.map((i) => i.code)).toContain("unscanned_language");
+    expect(res.issues.find((i) => i.code === "unscanned_language")?.detail).toContain(
+      "Nigerian Pidgin",
+    );
+  });
+
+  it("passes the same copy once a scanner is supplied", async () => {
+    const res = await runGateway({ ...base, language: "pidgin" }, async () => ({
+      verdict: "pass",
+      riskScore: 5,
+      issues: [],
+      layer: "rules",
+    }));
+    expect(res.verdict).toBe("pass");
+    expect(res.layer).toBe("rules+llm");
+  });
+
+  it("hands the language to the scanner, so it judges in the right register", async () => {
+    let seen: string | undefined = "unset";
+    await runGateway({ ...base, language: "yoruba" }, async (input) => {
+      seen = input.language;
+      return { verdict: "pass", riskScore: 0, issues: [], layer: "rules" };
+    });
+    expect(seen).toBe("yoruba");
+  });
+
+  it("keeps a rules-layer block as a rules block, whatever the language", async () => {
+    const res = await runGateway({
+      ...base,
+      copy: "Guaranteed results in one week, we cure diabetes",
+      language: "igbo",
+    });
+    expect(res.verdict).toBe("block");
+    // The real reason, not the generic one: an unreadable-language note on a
+    // creative that was caught red-handed would bury the actual finding.
+    expect(res.issues.map((i) => i.code)).not.toContain("unscanned_language");
+    expect(res.issues.length).toBeGreaterThan(0);
+  });
+});

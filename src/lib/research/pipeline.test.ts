@@ -165,3 +165,89 @@ describe("pipelineTargetFor", () => {
     expect(pipelineTargetFor(undefined)).toBe(pipelineTargetFor("free"));
   });
 });
+
+describe("the pool is counted per language", () => {
+  // The regression that made the Ad Language setting look broken: the
+  // account had fifty ENGLISH concepts, the pool reported itself full, and
+  // the generator was never asked for a single Pidgin one.
+  it("builds for Pidgin even when the English shelf is already full", async () => {
+    const asked: { language: string; businessId: string }[] = [];
+    const { deps, inserted } = fakeDeps({
+      getBusiness: async () => ({
+        businessName: "Ada's Fashion",
+        category: "Fashion Boutique",
+        goal: "whatsapp",
+        adLanguage: "pidgin",
+      }),
+      countConcepts: async (businessId, language) => {
+        asked.push({ businessId, language });
+        // Full in English, empty in Pidgin -- exactly production's shape.
+        return language === "english" ? PIPELINE_TARGET : 0;
+      },
+    });
+
+    const res = await buildPipelineBatch(deps, "biz");
+
+    expect(asked).toEqual([{ businessId: "biz", language: "pidgin" }]);
+    expect(res.status).toBe("built");
+    expect(res.added).toBe(BATCH_SIZE);
+    expect((inserted[0] as { language: string }[])[0].language).toBe("pidgin");
+  });
+
+  it("still reports full when THAT language's shelf is full", async () => {
+    const { deps } = fakeDeps({
+      getBusiness: async () => ({
+        businessName: "Ada's Fashion",
+        category: "Fashion Boutique",
+        goal: "whatsapp",
+        adLanguage: "pidgin",
+      }),
+      countConcepts: async () => PIPELINE_TARGET,
+    });
+    expect(await buildPipelineBatch(deps, "biz")).toMatchObject({
+      status: "full",
+      added: 0,
+    });
+  });
+
+  it("only avoids hooks written in the same language", async () => {
+    const hookCalls: string[] = [];
+    const { deps, generateCalls } = fakeDeps({
+      getBusiness: async () => ({
+        businessName: "Ada's Fashion",
+        category: "Fashion Boutique",
+        goal: "whatsapp",
+        adLanguage: "hausa",
+      }),
+      countConcepts: async () => 5,
+      listExistingHooks: async (_id, language) => {
+        hookCalls.push(language);
+        return ["Hausa hook"];
+      },
+    });
+
+    await buildPipelineBatch(deps, "biz");
+
+    expect(hookCalls).toEqual(["hausa"]);
+    expect(generateCalls[0].avoid).toEqual(["Hausa hook"]);
+  });
+
+  it("treats a business with no language set as English", async () => {
+    const asked: string[] = [];
+    const { deps, inserted } = fakeDeps({
+      countConcepts: async (_id, language) => {
+        asked.push(language);
+        return 0;
+      },
+    });
+    await buildPipelineBatch(deps, "biz");
+    expect(asked).toEqual(["english"]);
+    expect((inserted[0] as { language: string }[])[0].language).toBe("english");
+  });
+
+  it("stamps the language on every row, with ranks continuing per language", () => {
+    const rows = conceptRowsFrom("biz", [concept(1), concept(2)], 7, "yoruba");
+    expect(rows.map((r) => r.rank)).toEqual([8, 9]);
+    expect(rows.every((r) => r.language === "yoruba")).toBe(true);
+  });
+});

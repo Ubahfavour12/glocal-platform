@@ -13,6 +13,7 @@
  */
 
 import { screenCategory, type CategoryScreen } from "./categories";
+import { DEFAULT_AD_LANGUAGE, type AdLanguage, languageLabel } from "@/lib/copy/language";
 
 export interface CreativeInput {
   /** Ad copy / primary text */
@@ -21,6 +22,15 @@ export interface CreativeInput {
   transcript?: string;
   /** Business category from onboarding */
   category: string;
+  /**
+   * The language the copy is written in.
+   *
+   * It matters because the rules layer below is a set of ENGLISH regexes. A
+   * guaranteed-cure claim in Hausa matches none of them, so without this the
+   * deterministic half of the gateway waves non-English copy straight
+   * through while reporting a clean pass. Absent means English.
+   */
+  language?: AdLanguage;
   /** Destination kind for the smart link */
   destinationKind: "whatsapp" | "call" | "url";
 }
@@ -166,13 +176,43 @@ export function runRulesLayer(input: CreativeInput): GatewayResult {
 /**
  * Full gateway: rules layer, then (when configured) the LLM layer.
  * The LLM can only make the result STRICTER — a rules-layer block is final.
+ *
+ * ONE ASYMMETRY, AND IT IS DELIBERATE. For English copy the LLM layer is an
+ * improvement: the regexes below already catch the blatant cases, so a
+ * missing API key degrades the scan rather than removing it. For copy in any
+ * other language the regexes catch NOTHING -- they are English patterns --
+ * so the LLM layer is not an improvement, it is the only reader. Letting a
+ * Pidgin or Hausa creative past with "rules: pass" would be reporting a
+ * check that did not happen, on the one path where it is the whole check.
+ *
+ * So non-English copy with no scanner is blocked. In practice this strands
+ * nobody: the concepts themselves are written by the same API key that runs
+ * the scan, so copy cannot exist in a world where the scanner does not.
  */
 export async function runGateway(
   input: CreativeInput,
   llmScan?: (input: CreativeInput) => Promise<GatewayResult>,
 ): Promise<GatewayResult> {
   const rules = runRulesLayer(input);
-  if (rules.verdict === "block" || !llmScan) return rules;
+  if (rules.verdict === "block") return rules;
+
+  const language = input.language ?? DEFAULT_AD_LANGUAGE;
+  if (!llmScan) {
+    if (language === DEFAULT_AD_LANGUAGE) return rules;
+    return {
+      verdict: "block",
+      riskScore: Math.max(rules.riskScore, 60),
+      issues: [
+        ...rules.issues,
+        {
+          code: "unscanned_language",
+          severity: "block",
+          detail: `Copy is in ${languageLabel(language)} and the policy rules only read English, so nothing checked this creative. Configure the LLM scan before running non-English ads.`,
+        },
+      ],
+      layer: "rules",
+    };
+  }
 
   const llm = await llmScan(input);
   return {

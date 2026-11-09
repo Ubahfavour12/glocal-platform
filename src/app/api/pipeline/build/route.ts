@@ -72,7 +72,9 @@ async function buildFirstPlanIfNone(supabase: Supa, businessId: string): Promise
 
     const { data: biz } = await supabase
       .from("businesses")
-      .select("id, name, category, goal, persona, full_auto, daily_budget_usd_minor, category_blocked")
+      .select(
+        "id, name, category, goal, persona, full_auto, daily_budget_usd_minor, category_blocked, ad_language",
+      )
       .eq("id", businessId)
       .maybeSingle();
     if (!biz || biz.category_blocked) return "skipped";

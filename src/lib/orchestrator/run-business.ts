@@ -31,6 +31,7 @@ import { higgsfieldConfigProblem, resolveCredentials } from "@/lib/higgsfield/cl
 import { scheduleOrganicForBusiness } from "@/lib/organic/posting-live";
 import type { ApprovalPlanPayload } from "@/lib/orchestrator/plan-payload";
 import type { PersonaMode } from "@/lib/guardrails/budget";
+import { asAdLanguage } from "@/lib/copy/language";
 
 type Supa = ReturnType<typeof createServiceClient>;
 
@@ -48,6 +49,11 @@ export interface BizRow {
    * which is the cheap direction to be wrong in.
    */
   plan?: string | null;
+  /**
+   * The language this account's ads are written in. Absent is English, which
+   * is what every concept written before the setting existed actually is.
+   */
+  ad_language?: string | null;
 }
 
 export interface RunOptions {
@@ -164,6 +170,9 @@ export async function runForBusiness(
   // One tier value for the whole run: the concept pool, the engine routing and
   // the sequential branch must not disagree about which tier this is.
   const tier = asTier(biz.plan);
+  // One language value for the whole run, for the same reason: the pool draw
+  // and the compliance routing must not disagree about what is being written.
+  const adLanguage = asAdLanguage(biz.ad_language);
   const liveSince = tier === "spark" ? await sparkLiveSince(supabase, biz.id) : null;
   const adCount = tier === "spark" ? await sparkAdCount(supabase, biz.id) : 0;
 
@@ -172,6 +181,7 @@ export async function runForBusiness(
     name: biz.name,
     category: biz.category,
     goal: biz.goal,
+    adLanguage,
     persona: biz.persona,
     fullAuto: biz.full_auto,
     dailyBudgetUsdMinor: biz.daily_budget_usd_minor,
@@ -201,10 +211,14 @@ export async function runForBusiness(
           await deps.fetchInsights(sequentialSinceIso(now), sequentialUntilIso(now)),
         ),
       getNextConcepts: async (businessId, count) => {
+        // Only this account's current language. Without it, switching to
+        // Pidgin kept launching the English concepts already on the shelf --
+        // the setting changed the prompt and nothing ever read the result.
         const { data } = await supabase
           .from("concepts")
           .select("id, rank, hook, copy_angle, cta, kind")
           .eq("business_id", businessId)
+          .eq("language", adLanguage)
           .eq("rendered", false)
           .order("rank", { ascending: true })
           // Over-fetch: rejected concepts are filtered out below, and hand-picks

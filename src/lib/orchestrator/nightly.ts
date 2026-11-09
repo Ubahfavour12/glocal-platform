@@ -34,6 +34,7 @@ import {
 import type { RenderTier } from "@/lib/billing/plan";
 import { computeWalletHealth } from "@/lib/money/wallet-health";
 import { runGateway, type CreativeInput, type GatewayResult } from "@/lib/compliance/gateway";
+import type { AdLanguage } from "@/lib/copy/language";
 
 // ---------- domain types ----------
 
@@ -62,6 +63,14 @@ export interface BusinessContext {
   sparkLiveSince?: Date | null;
   /** Completed sequential runs available to compare. */
   sparkCompletedBlocks?: number;
+  /**
+   * The language the ads are written in.
+   *
+   * The orchestrator needs it for one reason: the compliance rules layer is
+   * a set of English regexes, so copy in another language has to be routed
+   * to the layer that can actually read it.
+   */
+  adLanguage?: AdLanguage;
 }
 
 export interface Concept {
@@ -309,6 +318,7 @@ export async function runNightly(
             {
               copy: concept.copy,
               category: ctx.category,
+              language: ctx.adLanguage,
               destinationKind: ctx.goal === "whatsapp" ? "whatsapp" : "url",
             },
             adapters.llmGatewayScan,
@@ -330,6 +340,7 @@ export async function runNightly(
         {
           copy: creative?.copy ?? concept.copy,
           category: ctx.category,
+          language: ctx.adLanguage,
           destinationKind: ctx.goal === "whatsapp" ? "whatsapp" : "url",
         },
         adapters.llmGatewayScan,

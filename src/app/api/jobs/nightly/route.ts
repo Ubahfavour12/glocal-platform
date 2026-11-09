@@ -54,7 +54,9 @@ export async function GET(req: NextRequest) {
   // least.
   const { data: businesses, error } = await supabase
     .from("businesses")
-    .select("id, name, category, goal, persona, full_auto, daily_budget_usd_minor, category_blocked, plan, last_run_at")
+    .select(
+      "id, name, category, goal, persona, full_auto, daily_budget_usd_minor, category_blocked, plan, last_run_at, ad_language",
+    )
     .order("last_run_at", { ascending: true, nullsFirst: true });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

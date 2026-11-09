@@ -8,13 +8,16 @@
  */
 
 import { callClaudeJson, MODELS, type ClaudeUsageSink } from "@/lib/ai/anthropic";
+import { DEFAULT_AD_LANGUAGE, languageLabel } from "@/lib/copy/language";
 import type { CreativeInput, GatewayResult } from "./gateway";
 
 const SYSTEM = `You are an ad-policy compliance reviewer for Meta, TikTok and Google Ads. You judge whether an ad creative is likely to be REJECTED by these networks' automated and human review.
 
 Focus on: unrealistic/deceptive claims, implied personal attributes (health, finances), before/after or guaranteed-outcome framing, restricted verticals (alcohol, health, finance) and their special rules, and misleading urgency.
 
-Be strict but fair: ordinary honest ads for real products must PASS. Output STRICT JSON only.`;
+Be strict but fair: ordinary honest ads for real products must PASS. Output STRICT JSON only.
+
+Copy may be in Nigerian Pidgin, Hausa, Yoruba or Igbo. Judge it by what it CLAIMS, exactly as you would in English -- a guaranteed cure is a guaranteed cure in any language. Do not treat a language you read less often as suspicious in itself, and do not flag ordinary market register, code-switching or informal spelling as a policy problem: that would block honest advertising for the crime of not being in English.`;
 
 interface LlmVerdict {
   verdict: "pass" | "block";
@@ -29,6 +32,7 @@ export async function llmGatewayScan(
 ): Promise<GatewayResult> {
   const user = `AD CREATIVE
 Category: ${input.category}
+Language: ${languageLabel(input.language ?? DEFAULT_AD_LANGUAGE)}
 Copy: ${input.copy}
 ${input.transcript ? `Video transcript: ${input.transcript}` : ""}
 Destination: ${input.destinationKind}

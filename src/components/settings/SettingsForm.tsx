@@ -167,6 +167,18 @@ export function SettingsForm({
             </button>
           ))}
         </div>
+        {/*
+          Said plainly because the honest answer is "not instantly". Drafts
+          already written stay in their own language, and the agent writes
+          the new language into the pool on its next run. Without this line
+          the only visible effect of changing it is nothing happening, which
+          reads as a broken switch.
+        */}
+        <p className="mt-2 text-xs leading-relaxed text-ink-faint">
+          Drafts already written stay as they are. The agent starts writing in
+          the new language on its next run, and your existing ones are kept in
+          case you switch back.
+        </p>
       </div>
 
       {/* persona */}

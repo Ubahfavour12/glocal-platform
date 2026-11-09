@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
   const { data: business } = await supabase
     .from("businesses")
     .select(
-      "id, name, category, goal, persona, full_auto, daily_budget_usd_minor, category_blocked, plan",
+      "id, name, category, goal, persona, full_auto, daily_budget_usd_minor, category_blocked, plan, ad_language",
     )
     .eq("id", body.business_id)
     .maybeSingle();

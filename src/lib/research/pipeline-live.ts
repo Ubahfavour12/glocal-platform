@@ -35,19 +35,25 @@ export function livePipelineDeps(supabase: SupabaseClient): PipelineDeps {
       } as ProductBrief;
     },
 
-    async countConcepts(businessId) {
+    async countConcepts(businessId, language) {
       const { count } = await supabase
         .from("concepts")
         .select("id", { count: "exact", head: true })
-        .eq("business_id", businessId);
+        .eq("business_id", businessId)
+        .eq("language", language);
       return count ?? 0;
     },
 
-    async listExistingHooks(businessId) {
+    async listExistingHooks(businessId, language) {
+      // Same language only. Telling a model writing Pidgin to avoid fifty
+      // English hooks spends prompt on nothing: it is not at risk of
+      // repeating them, and the hooks it IS at risk of repeating would not
+      // be in the list.
       const { data } = await supabase
         .from("concepts")
         .select("hook")
         .eq("business_id", businessId)
+        .eq("language", language)
         .order("rank", { ascending: true })
         .limit(50);
       return (data ?? []).map((r) => r.hook as string);

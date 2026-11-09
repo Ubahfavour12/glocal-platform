@@ -14,6 +14,7 @@
 import type { ViralVideo } from "./youtube";
 import type { AdConcept, ProductBrief } from "./concepts";
 import type { RenderTier } from "@/lib/billing/plan";
+import { type AdLanguage, DEFAULT_AD_LANGUAGE, asAdLanguage } from "@/lib/copy/language";
 
 /**
  * The pool a Scale account carries. Kept as the name other modules import.
@@ -76,13 +77,29 @@ export interface ConceptRow {
   copy_angle: string;
   cta: string;
   source_pattern: string | null;
+  /**
+   * The language this concept is written in.
+   *
+   * Stamped at birth rather than inferred later. Guessing the language of
+   * existing copy is both unreliable and unnecessary: the prompt that wrote
+   * it knew, so the row records it.
+   */
+  language: AdLanguage;
 }
 
-/** Map generated concepts to DB rows, ranks continuing after what exists. */
+/**
+ * Map generated concepts to DB rows, ranks continuing after what exists.
+ *
+ * Ranks run per language, so an account can hold rank 1 in English and rank 1
+ * in Pidgin at once. Nothing reads rank without also filtering by language,
+ * and there is no unique constraint on it, so the two sequences cannot
+ * collide -- they are two shelves, not one.
+ */
 export function conceptRowsFrom(
   businessId: string,
   concepts: AdConcept[],
   rankOffset = 0,
+  language: AdLanguage = DEFAULT_AD_LANGUAGE,
 ): ConceptRow[] {
   return concepts.map((c, i) => ({
     business_id: businessId,
@@ -92,6 +109,7 @@ export function conceptRowsFrom(
     copy_angle: c.copyAngle,
     cta: c.cta,
     source_pattern: c.sourcePattern ?? null,
+    language,
   }));
 }
 
@@ -99,8 +117,17 @@ export function conceptRowsFrom(
 
 export interface PipelineDeps {
   getBusiness(businessId: string): Promise<ProductBrief | null>;
-  countConcepts(businessId: string): Promise<number>;
-  listExistingHooks(businessId: string): Promise<string[]>;
+  /**
+   * How many concepts this business holds IN THIS LANGUAGE.
+   *
+   * The language argument is the whole fix. Counting the whole table meant a
+   * shelf of fifty English concepts reported the Pidgin pool as full, so the
+   * generator was never asked for a Pidgin concept and the setting appeared
+   * to do nothing.
+   */
+  countConcepts(businessId: string, language: AdLanguage): Promise<number>;
+  /** Hooks to avoid repeating -- only in the language being written now. */
+  listExistingHooks(businessId: string, language: AdLanguage): Promise<string[]>;
   scrape(keywords: string[]): Promise<ViralVideo[]>;
   /**
    * `businessId` is here only so the live implementation can bill the LLM
@@ -132,14 +159,19 @@ export async function buildPipelineBatch(
   tier: RenderTier = "scale",
 ): Promise<PipelineResult> {
   const target = pipelineTargetFor(tier);
-  const existing = await deps.countConcepts(businessId);
-  if (existing >= target) {
-    return { status: "full", added: 0, total: existing };
-  }
 
+  // The brief comes FIRST now, because the count depends on it: "is the pool
+  // full?" has no answer until you know which language's pool is being asked
+  // about. Reversing these two lines is the entire bug this fixed.
   const brief = await deps.getBusiness(businessId);
   if (!brief) {
-    return { status: "error", added: 0, total: existing, detail: "business not found" };
+    return { status: "error", added: 0, total: 0, detail: "business not found" };
+  }
+
+  const language = asAdLanguage(brief.adLanguage);
+  const existing = await deps.countConcepts(businessId, language);
+  if (existing >= target) {
+    return { status: "full", added: 0, total: existing };
   }
 
   // Research is best-effort: quota exhaustion or a missing key must never
@@ -152,7 +184,7 @@ export async function buildPipelineBatch(
     researchNote = `without research (${(e as Error).message.slice(0, 120)})`;
   }
 
-  const avoid = existing > 0 ? await deps.listExistingHooks(businessId) : [];
+  const avoid = existing > 0 ? await deps.listExistingHooks(businessId, language) : [];
   const want = Math.min(BATCH_SIZE, target - existing);
 
   try {
@@ -160,12 +192,13 @@ export async function buildPipelineBatch(
     if (concepts.length === 0) {
       return { status: "error", added: 0, total: existing, detail: "no concepts generated" };
     }
-    await deps.insertConcepts(conceptRowsFrom(businessId, concepts, existing));
+    await deps.insertConcepts(conceptRowsFrom(businessId, concepts, existing, language));
     const total = existing + concepts.length;
     await deps.audit(businessId, "pipeline_batch", {
       added: concepts.length,
       total,
       target,
+      language,
       research: researchNote,
       viralPatterns: viral.length,
     });
