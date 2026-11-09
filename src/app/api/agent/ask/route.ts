@@ -7,6 +7,7 @@ import { AGENT_SYSTEM, factsToBrief, type AgentFacts } from "@/lib/agent/context
 import { asPlan } from "@/lib/billing/plan";
 import { describeActivity, type RawEntry } from "@/lib/dashboard/activity";
 import { currentBusiness } from "@/lib/business/current";
+import { asAdLanguage } from "@/lib/copy/language";
 
 export const maxDuration = 60;
 
@@ -63,13 +64,17 @@ export async function POST(req: NextRequest) {
 
   const business = await currentBusiness<{ id: string } & Record<string, unknown>>(
     supabase,
-    "id, name, category, goal, persona, plan, daily_budget_usd_minor",
+    "id, name, category, goal, persona, plan, daily_budget_usd_minor, ad_language",
   );
   if (!business) {
     return NextResponse.json({ error: "finish onboarding first" }, { status: 404 });
   }
 
   const bizId = business.id as string;
+  // Same language scoping as the dashboard: the assistant must not tell a
+  // customer they have fifty concepts waiting when none are in the language
+  // their ads are now written in.
+  const adLanguage = asAdLanguage(business.ad_language as string | null);
   const todayStart = new Date();
   todayStart.setUTCHours(0, 0, 0, 0);
   const todayIso = todayStart.toISOString();
@@ -101,11 +106,16 @@ export async function POST(req: NextRequest) {
         .select("id, smart_links!inner(business_id)", { count: "exact", head: true })
         .eq("smart_links.business_id", bizId)
         .gte("created_at", todayIso),
-      supabase.from("concepts").select("id", { count: "exact", head: true }).eq("business_id", bizId),
       supabase
         .from("concepts")
         .select("id", { count: "exact", head: true })
         .eq("business_id", bizId)
+        .eq("language", adLanguage),
+      supabase
+        .from("concepts")
+        .select("id", { count: "exact", head: true })
+        .eq("business_id", bizId)
+        .eq("language", adLanguage)
         .eq("rendered", true),
       supabase
         .from("ab_tests")

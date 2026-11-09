@@ -9,6 +9,7 @@ import { fetchUsdRate } from "@/lib/money/rates";
 import { currencyForCountry } from "@/lib/money/currency";
 import { fmtDual, fmtRoas, fmtUsd } from "@/lib/money/format";
 import { currentBusiness } from "@/lib/business/current";
+import { asAdLanguage } from "@/lib/copy/language";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Today" };
@@ -23,7 +24,8 @@ export default async function TodayPage() {
     daily_budget_usd_minor: number;
     country: string | null;
     currency: string;
-  }>(supabase, "id, name, daily_budget_usd_minor, country, currency");
+    ad_language: string | null;
+  }>(supabase, "id, name, daily_budget_usd_minor, country, currency, ad_language");
 
   if (!business) {
     return (
@@ -44,6 +46,10 @@ export default async function TodayPage() {
   }
 
   const bizId = business.id as string;
+  // The pool the agent can actually launch from. Counting every language
+  // would promise "50 concepts ready" to an account that just switched to
+  // Pidgin and has none yet -- the same false reassurance the pool bug gave.
+  const adLanguage = asAdLanguage(business.ad_language);
   const todayStart = new Date();
   todayStart.setUTCHours(0, 0, 0, 0);
   const todayIso = todayStart.toISOString();
@@ -58,7 +64,11 @@ export default async function TodayPage() {
 
   const [conceptsRes, salesRes, spendRes, clicksRes, approvalRes, socialsRes, queuedRes, testRes] =
     await Promise.all([
-    supabase.from("concepts").select("id", { count: "exact", head: true }).eq("business_id", bizId),
+    supabase
+      .from("concepts")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", bizId)
+      .eq("language", adLanguage),
     supabase.from("conversions").select("value_usd_minor").eq("business_id", bizId).gte("created_at", todayIso),
     walletId
       ? supabase.from("ledger_entries").select("amount_usd_minor").eq("wallet_id", walletId).eq("kind", "ad_spend").gte("created_at", todayIso)
