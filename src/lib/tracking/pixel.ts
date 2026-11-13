@@ -77,6 +77,22 @@ export interface LeadBeaconParams {
 }
 
 /**
+ * The shape of every id these beacons carry.
+ *
+ * Both the business code and the click id are UUIDs we minted ourselves. A
+ * public endpoint should refuse anything else at the door rather than hand it
+ * to the database to reject: the refusal is cheaper, and a malformed value
+ * reaching a query is the start of most bad afternoons.
+ */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A click id that could not have come from our redirect is treated as absent. */
+function readClickId(params: URLSearchParams): string | null {
+  const cid = params.get("cid")?.trim() ?? "";
+  return UUID.test(cid) ? cid : null;
+}
+
+/**
  * Pure: parse the lead beacon.
  *
  * The name is reduced HERE rather than trusted, because the site calling this
@@ -88,27 +104,45 @@ export interface LeadBeaconParams {
 export function parseLeadBeacon(params: URLSearchParams): LeadBeaconParams | { error: string } {
   const businessCode = params.get("b")?.trim() ?? "";
   if (!businessCode) return { error: "missing business code" };
+  if (!UUID.test(businessCode)) return { error: "invalid business code" };
 
   const raw = (params.get("name") ?? "").trim();
   const first = raw.split(/\s+/)[0] ?? "";
   const looksLikeContact = first.includes("@") || /\d{4,}/.test(first);
   const label = looksLikeContact || first === "" ? "Website enquiry" : first.slice(0, 24);
 
-  return { businessCode, cid: params.get("cid")?.trim() || null, label };
+  return { businessCode, cid: readClickId(params), label };
 }
+
+/**
+ * The largest single order a beacon may report, in USD minor units.
+ *
+ * $100,000. No local business sells that through a thank-you page, and the
+ * number exists for the other case: this endpoint is public, the value is
+ * whatever the caller typed, and without a ceiling one request could write a
+ * billion-dollar sale into the figures the agent steers by. Anything above it
+ * is dropped rather than clamped -- a clamped lie is still a lie in the data.
+ */
+export const MAX_BEACON_SALE_USD_MINOR = 10_000_000;
 
 /** Pure: parse + validate the purchase beacon's query params. */
 export function parsePurchaseParams(params: URLSearchParams): PurchaseParams | { error: string } {
   const businessCode = params.get("b")?.trim() ?? "";
   if (!businessCode) return { error: "missing business code" };
+  if (!UUID.test(businessCode)) return { error: "invalid business code" };
 
   const rawValue = Number(params.get("value"));
   if (!Number.isFinite(rawValue) || rawValue <= 0) return { error: "invalid value" };
   const amountMinor = Math.round(rawValue * 100);
+  if (!Number.isSafeInteger(amountMinor)) return { error: "invalid value" };
 
-  const currency = (params.get("currency") || "USD").toUpperCase().slice(0, 3);
-  const cid = params.get("cid")?.trim() || null;
-  const orderRef = params.get("order")?.trim() || null;
+  const currency = (params.get("currency") || "USD").trim().toUpperCase();
+  // Three letters or nothing. It becomes a lookup key into the rate table, and
+  // a currency we cannot value must fail here rather than be guessed at.
+  if (!/^[A-Z]{3}$/.test(currency)) return { error: "invalid currency" };
 
-  return { businessCode, cid, amountMinor, currency, orderRef };
+  // Capped, because it becomes part of a unique key and is stored verbatim.
+  const orderRef = params.get("order")?.trim().slice(0, 120) || null;
+
+  return { businessCode, cid: readClickId(params), amountMinor, currency, orderRef };
 }

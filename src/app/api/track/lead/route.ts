@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { parseLeadBeacon } from "@/lib/tracking/pixel";
 import { log } from "@/lib/log";
+import { checkRateLimit, clientAddress } from "@/lib/net/rate-limit";
 
 /**
  * Website enquiry beacon — an attributed lead with no human step.
@@ -24,8 +25,15 @@ import { log } from "@/lib/log";
  *     cost-per-won — the exact number this whole feature exists to protect.
  *   - One lead per click, enforced by the unique index, so a form submitted
  *     twice or a page refreshed does not become two customers.
+ *   - A per-visitor and a per-business rate limit, so a loop is a minute of
+ *     refused requests rather than a morning of database lookups.
+ *
+ * BOTH VERBS. The pixel calls `navigator.sendBeacon`, which sends a POST, and
+ * this route only exported GET -- so every enquiry from a modern browser was
+ * answered with a 405 and the image fallback never ran, because sendBeacon
+ * had not thrown. GET stays for that fallback.
  */
-export async function GET(req: NextRequest) {
+async function record(req: NextRequest): Promise<NextResponse> {
   const parsed = parseLeadBeacon(req.nextUrl.searchParams);
   if ("error" in parsed) {
     return NextResponse.json({ ok: false, error: parsed.error }, { status: 400 });
@@ -33,6 +41,18 @@ export async function GET(req: NextRequest) {
 
   // No click, no lead. See above: this endpoint is anonymous.
   if (!parsed.cid) return NextResponse.json({ ok: true, recorded: false });
+
+  const [visitor, business] = await Promise.all([
+    checkRateLimit(
+      "beaconPerVisitor",
+      `${parsed.businessCode}:${clientAddress(req.headers)}`,
+    ),
+    checkRateLimit("beaconPerBusiness", parsed.businessCode),
+  ]);
+  // 200 either way: this lands inside a customer's enquiry form.
+  if (!visitor.allowed || !business.allowed) {
+    return NextResponse.json({ ok: true, recorded: false });
+  }
 
   try {
     const supabase = createServiceClient();
@@ -84,3 +104,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, recorded: false });
   }
 }
+
+export const GET = record;
+export const POST = record;

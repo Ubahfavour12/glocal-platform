@@ -79,20 +79,58 @@ export async function deleteProductMedia(
   if (error) throw new Error(error.message);
 }
 
-/** The render source: the most recent image the business uploaded, if any. */
+/**
+ * Pure: is this a path inside the business's own folder, and nothing else?
+ *
+ * `media_assets` rows are written by the customer's own browser session, so
+ * every column in them is the customer's say-so. This is the check that makes
+ * a stored path safe to turn into a URL: it must sit directly inside the
+ * folder named after the business, be a single file name of the shape upload
+ * produces, and carry an extension we accept. No slashes beyond the one, no
+ * dot-dot, no query string -- nothing that could make the derived URL point
+ * anywhere but one object in one folder of our own bucket.
+ */
+export function ownedStoragePath(businessId: string, path: string | null | undefined): string | null {
+  if (!path) return null;
+  const prefix = `${businessId}/`;
+  if (!path.startsWith(prefix)) return null;
+  const file = path.slice(prefix.length);
+  if (!/^[A-Za-z0-9_-]{1,80}\.[A-Za-z0-9]{2,5}$/.test(file)) return null;
+  if (!ALLOWED[extensionOf(file)]) return null;
+  return path;
+}
+
+/**
+ * The render source: the most recent image the business uploaded, if any.
+ *
+ * DERIVED FROM THE PATH, NOT READ FROM `public_url`. That column is filled in
+ * by the customer's browser at upload time, which means it holds whatever the
+ * browser sent -- and this value is handed to the render engine as "fetch this
+ * image". Trusting it let a customer point our render pipeline at any URL on
+ * the internet: somebody else's image, a tracking endpoint, an address the
+ * vendor's servers can reach and the public cannot. The path is checked to be
+ * inside the business's own folder and the URL is rebuilt from it, so the only
+ * thing this can ever return is an object in our own bucket.
+ */
 export async function getSourceImageUrl(
   supabase: SupabaseClient,
   businessId: string,
 ): Promise<string | null> {
+  // A few rows rather than one: if the newest row is malformed, the business
+  // should still render from its most recent GOOD upload, not from nothing.
   const { data } = await supabase
     .from("media_assets")
-    .select("public_url")
+    .select("storage_path")
     .eq("business_id", businessId)
     .eq("kind", "image")
     .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  return (data?.public_url as string) ?? null;
+    .limit(5);
+  for (const row of data ?? []) {
+    const path = ownedStoragePath(businessId, row.storage_path as string | null);
+    if (!path) continue;
+    return supabase.storage.from(MEDIA_BUCKET).getPublicUrl(path).data.publicUrl;
+  }
+  return null;
 }
 
 /** Count renders already produced for a business today (quota accounting). */

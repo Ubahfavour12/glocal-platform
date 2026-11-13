@@ -73,6 +73,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Shopify retries and makes no exactly-once promise, so the same order can
+    // arrive twice. The unique index on (business, source, order_ref) makes
+    // the second insert a no-op error, which is ignored here on purpose: the
+    // order is recorded, once, and that is the only outcome that matters.
     await supabase.from("conversions").insert({
       business_id: conn.business_id,
       kind: "verified_order",

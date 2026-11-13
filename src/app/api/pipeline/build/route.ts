@@ -5,6 +5,7 @@ import { buildPipelineBatch } from "@/lib/research/pipeline";
 import { livePipelineDeps } from "@/lib/research/pipeline-live";
 import { runForBusiness, type BizRow } from "@/lib/orchestrator/run-business";
 import { currentBusiness } from "@/lib/business/current";
+import { checkRateLimit, retryAfterSeconds } from "@/lib/net/rate-limit";
 
 export const maxDuration = 300;
 
@@ -25,6 +26,18 @@ export async function POST() {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) {
     return NextResponse.json({ error: "sign in first" }, { status: 401 });
+  }
+
+  // This used to be reachable only once, from onboarding. The pipeline page
+  // now has a button that calls it, and a button is a thing people hold down:
+  // two builds racing each other both see a half-empty pool and both pay
+  // Anthropic to fill it.
+  const limit = await checkRateLimit("pipelineBuild", userData.user.id);
+  if (!limit.allowed) {
+    return NextResponse.json(
+      { error: "The agent is already writing. Give it a minute, then reload." },
+      { status: 429, headers: { "Retry-After": String(retryAfterSeconds("pipelineBuild")) } },
+    );
   }
 
   // Ownership via the user-scoped client (RLS), work via the service client.

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LIMITS, checkRateLimit, retryAfterSeconds } from "./rate-limit";
+import { LIMITS, checkRateLimit, retryAfterSeconds, clientAddress } from "./rate-limit";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 afterEach(() => vi.restoreAllMocks());
@@ -82,5 +82,28 @@ describe("the policy itself", () => {
       expect(l.max, name).toBeGreaterThan(0);
       expect(l.windowSeconds, name).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("clientAddress", () => {
+  const h = (init: Record<string, string>) => new Headers(init);
+
+  it("prefers the address the platform reports directly", () => {
+    expect(clientAddress(h({ "x-real-ip": "203.0.113.7", "x-forwarded-for": "198.51.100.1" }))).toBe(
+      "203.0.113.7",
+    );
+  });
+
+  it("takes the FIRST hop of a forwarded chain, which is the client", () => {
+    expect(clientAddress(h({ "x-forwarded-for": "203.0.113.7, 10.0.0.1, 10.0.0.2" }))).toBe(
+      "203.0.113.7",
+    );
+  });
+
+  it("shares one bucket when there is no address, rather than giving each request its own", () => {
+    // Falling back to something unique per request would make the limit
+    // unlimited for exactly the requests that look least like a browser.
+    expect(clientAddress(h({}))).toBe("unknown");
+    expect(clientAddress(h({ "x-forwarded-for": "  " }))).toBe("unknown");
   });
 });

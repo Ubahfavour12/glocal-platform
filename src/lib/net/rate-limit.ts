@@ -52,6 +52,38 @@ export const LIMITS = {
    * a refusal rather than letting it fail open like the others.
    */
   opsUnlock: { max: 10, windowSeconds: 900 },
+  /**
+   * Writing a fresh batch of concepts on demand. Anthropic on every call.
+   *
+   * The pool itself is bounded -- it stops at its target per language -- so
+   * this is not protecting against an unbounded bill. It is protecting
+   * against the same button being held down: two builds racing each other
+   * both see a half-empty pool and both fill it.
+   */
+  pipelineBuild: { max: 6, windowSeconds: 3600 },
+  /**
+   * Website beacons, per visitor.
+   *
+   * THE ONE PLACE A CALLER-INFLUENCED SUBJECT IS ALLOWED, and the reasoning
+   * matters because the rule below says never to. These endpoints run in a
+   * stranger's browser, so there is no user id to key on. The bucket is the
+   * business plus the address the PLATFORM saw the request arrive from --
+   * `clientAddress` below, which the caller does not get to choose. Naming a
+   * different business does not escape the limit; it moves the caller into
+   * that business's bucket, where the same address is limited just the same.
+   *
+   * Thirty an hour is far above any real shopper and far below a loop.
+   */
+  beaconPerVisitor: { max: 30, windowSeconds: 3600 },
+  /**
+   * Website beacons, per business, whoever sends them.
+   *
+   * The ceiling for the case the per-visitor limit cannot see: many addresses
+   * at once. It caps how much noise anyone can write into one business's
+   * figures in an hour. Generous, because the cost of setting it too low is
+   * a busy shop's real sales going unrecorded.
+   */
+  beaconPerBusiness: { max: 600, windowSeconds: 3600 },
 } as const satisfies Record<string, Limit>;
 
 export type LimitName = keyof typeof LIMITS;
@@ -94,6 +126,22 @@ export async function checkRateLimit(
     log.error("ratelimit.unavailable", { name, subject, error: e });
     return { allowed: true, count: null };
   }
+}
+
+/**
+ * The address a request arrived from, as the platform reports it.
+ *
+ * Read from the headers Vercel sets itself and overwrites on the way in, so a
+ * caller cannot pick their own by sending one. `x-forwarded-for` can carry a
+ * chain; the first entry is the client. Falls back to a constant rather than
+ * to nothing, so a request with no address shares one bucket with every other
+ * such request instead of each getting a private, unlimited one.
+ */
+export function clientAddress(headers: Headers): string {
+  const real = headers.get("x-real-ip")?.trim();
+  if (real) return real;
+  const forwarded = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return forwarded || "unknown";
 }
 
 /** Seconds until this window resets, for a Retry-After header. */
